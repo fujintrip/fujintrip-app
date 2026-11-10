@@ -1,0 +1,46 @@
+# DigitalOcean App Platform spec for FujinTrip.
+# App name in the dashboard: fujintrip (already created, NYC1, Basic 512MB / 1 vCPU).
+# To deploy: connect this repo to the existing app in the dashboard — do not
+# create a second app from this spec unless the placeholder app is deleted.
+name: fujintrip
+region: nyc1
+services:
+  - name: fujintrip
+    github:
+      repo: REPLACE_WITH_YOUR_GITHUB_REPO
+      branch: main
+      deploy_on_push: true
+    build_command: npm run build
+    run_command: npm start
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    http_port: 3000
+    health_check:
+      http_path: /
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: SPACES_ENDPOINT
+        scope: RUN_TIME
+        value: https://nyc3.digitaloceanspaces.com
+      - key: SPACES_BUCKET
+        scope: RUN_TIME
+        value: fujintrip-images
+      - key: SPACES_REGION
+        scope: RUN_TIME
+        value: nyc3
+      - key: SPACES_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SPACES_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: DUFFEL_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+databases:
+  - name: fujintrip-db
+    engine: PG
+    version: "18"
+    production: false
