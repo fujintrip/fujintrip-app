@@ -155,8 +155,44 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
-  const live = Boolean(process.env.MODEL_API_KEY);
+export async function GET(req: NextRequest) {
+  const apiKey = process.env.MODEL_API_KEY;
+  const live = Boolean(apiKey);
+
+  // Diagnostic: GET /api/fujin?diag=models lists the model IDs this key
+  // can use (Meta's GET /v1/models). Returns model IDs only — never the
+  // key. Settles whether a model_not_found is the key or the model name.
+  if (req.nextUrl.searchParams.get('diag') === 'models') {
+    if (!apiKey) return NextResponse.json({ live: false, models: [], error: 'MODEL_API_KEY not set' });
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      let res: Response;
+      try {
+        res = await fetch('https://api.meta.ai/v1/models', {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      const json = (await res.json().catch(() => ({}))) as {
+        data?: Array<{ id?: string }>;
+        error?: { code?: string; message?: string };
+      };
+      if (!res.ok) {
+        const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || 'no details from Model API';
+        return NextResponse.json({ live: false, models: [], error: `${res.status}: ${detail}` });
+      }
+      return NextResponse.json({
+        live: true,
+        models: (json.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string'),
+      });
+    } catch (err) {
+      return NextResponse.json({ live: false, models: [], error: err instanceof Error ? err.message : 'request failed' });
+    }
+  }
+
   return NextResponse.json({
     live,
     label: live
