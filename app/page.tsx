@@ -80,7 +80,7 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
       try {
         const r = await fetch('/api/duffel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: from || 'JFK', destination: to || 'LHR', date, travelers: 2 }) });
         const j = await r.json();
-        setResult(`${j.label} — from $${j.offers?.[0]?.price ?? '—'} (estimate). Saved to My Trips.`);
+        setResult(`${j.label} — from $${j.offers?.[0]?.price ?? '—'} ${j.offers?.[0] ? `(${j.live ? 'live fare' : 'estimate'})` : ''} Saved to My Trips.`);
       } catch { setResult('Saved to My Trips as a request.'); }
     } else {
       setResult('Saved to My Trips as a request — we’ll match it to live suppliers once connected.');
