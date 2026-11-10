@@ -16,6 +16,34 @@ visitor's location, and featured hidden gems: St. George (Utah), Tacoma
   Duffel server route (`app/api/duffel/route.ts`) returns labeled estimates
   when no `DUFFEL_API_KEY` is set, and never exposes a key to the browser.
 
+## Fujin AI (live model)
+
+- The chat calls the server route `app/api/fujin/route.ts` first. When
+  `MODEL_API_KEY` is set, the route calls the Meta Model API
+  (`https://api.meta.ai/v1/chat/completions`, model `muse-spark-1.3`,
+  OpenAI-compatible) server-side and returns the model's understanding
+  as strict JSON: destination, travelers, reply, missing questions.
+  The key never reaches the browser.
+- When no key is set, or the API call fails, times out, or returns
+  invalid JSON, the route falls back to the built-in planner in
+  `lib/planner.ts` (`askFujin`) and returns `live: false`, clearly
+  labeled. The chat keeps working with no key at all.
+- The structured plan (Cheapest / Best value / Premium, day by day)
+  still comes from `buildPlan` in `lib/planner.ts` — the AI does the
+  understanding and reply; prices stay planning estimates until live
+  suppliers are connected, and the AI never invents live fares.
+- Travel-only: Fujin AI answers only about travel and trip planning
+  (destinations, flights, hotels, cars, buses, taxis, cruises,
+  sightseeing, plans, prices, booking help). Off-topic messages get a
+  one-sentence polite decline and a redirect back to travel — never an
+  answer, never an argument about the limit. The rule is enforced in
+  the live system prompt and in the built-in fallback (`askFujin` in
+  `lib/planner.ts`), so it holds with or without a key.
+- To switch live AI on: get a key at dev.meta.ai (Model API dashboard
+  → API keys → Create API key), set `MODEL_API_KEY` in the DigitalOcean
+  dashboard (Settings → App-Level Environment Variables), redeploy.
+  Pay-as-you-go, roughly $10-$30 per 1,000 trip plans.
+
 ## Local dev
 
 ```bash
@@ -52,7 +80,9 @@ The DigitalOcean side is already created (Nov 9, 2026, $25.15/mo total):
    `DATABASE_URL` (bind the fujintrip-db database or paste the connection
    string), `SPACES_ENDPOINT`, `SPACES_BUCKET=fujintrip-images`,
    `SPACES_REGION=nyc3`, `SPACES_KEY`, `SPACES_SECRET`, `DUFFEL_API_KEY`
-   (server-side only; leave empty until you want live Duffel fares).
+   (server-side only; leave empty until you want live Duffel fares),
+   `MODEL_API_KEY` (server-side only; leave empty and the chat uses the
+   built-in planner — see "Fujin AI (live model)" above).
 4. Redeploy. Verify the live URL serves the real FujinTrip homepage, not the
    starter template.
 5. Add fujintrip.com as a custom domain: Apps → fujintrip → Settings →
@@ -97,3 +127,4 @@ as a paid stock scan.
 - Env vars set in the DigitalOcean dashboard (see above)
 - fujintrip.com added as the app's custom domain
 - Duffel test/live key (server-side only) and, later, Expedia Rapid for hotels
+- Muse API key (`MODEL_API_KEY`, server-side only) to switch on live Fujin AI

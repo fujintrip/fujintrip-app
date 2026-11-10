@@ -30,7 +30,34 @@ export function buildPlan(destination: string, travelers: number, days = 3): Pla
   };
 }
 
+// Travel-only guardrail (same limit as the live AI system prompt).
+// Fujin AI answers only about travel and trip planning. Anything with no
+// travel signal gets a short decline and a redirect, never a plan.
+const TRAVEL_WORDS = [
+  'travel', 'trip', 'flight', 'fly', 'hotel', 'stay', 'holiday', 'vacation',
+  'tour', 'cruise', 'car', 'rental', 'bus', 'taxi', 'transfer', 'sightsee',
+  'beach', 'island', 'mountain', 'hike', 'surf', 'culture', 'visit', 'plan',
+  'book', 'booking', 'destination', 'airport', 'passport', 'visa', 'itinerary',
+  'resort', 'getaway', 'honeymoon', 'adventure', 'relax', 'explore', 'food',
+  'traveler', 'travelers', 'traveller', 'travellers', 'adult', 'adults',
+  'person', 'people', 'family', 'weekend', 'road trip', 'staycation',
+];
+
+function isTravel(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (Object.keys(BASE).some((d) => lower.includes(d.toLowerCase()))) return true;
+  return TRAVEL_WORDS.some((w) => lower.includes(w));
+}
+
 export function askFujin(text: string): { destination: string; travelers: number; reply: string; missing: string[] } {
+  if (!isTravel(text)) {
+    return {
+      destination: '',
+      travelers: 2,
+      reply: 'I only help with travel and trip planning — where would you like to go?',
+      missing: ['Destination'],
+    };
+  }
   const lower = text.toLowerCase();
   const dest = Object.keys(BASE).find((d) => lower.includes(d.toLowerCase())) ?? 'Kyoto';
   const m = lower.match(/(\d+)\s*(people|travelers|traveler|adults|person)/);

@@ -12,15 +12,36 @@ function Chat() {
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const send = () => {
-    if (!input.trim()) return;
-    const parsed = askFujin(input);
-    setMsgs((m) => [...m, { who: 'user', text: input }, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.') }]);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number } | null>(null);
+  const [aiLive, setAiLive] = useState<boolean | null>(null);
+  const send = async () => {
+    const text = input.trim();
+    if (!text) return;
     setInput('');
+    // Live AI first (server route); any failure falls back to the built-in planner.
+    let parsed: { destination: string; travelers: number; reply: string; missing: string[] };
+    let live = false;
+    try {
+      const r = await fetch('/api/fujin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+      const j = await r.json();
+      if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
+        parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [] };
+        live = j.live === true;
+      } else {
+        parsed = askFujin(text);
+      }
+    } catch {
+      parsed = askFujin(text);
+    }
+    setAiLive(live);
+    // Empty destination means an off-topic decline — keep any earlier plan destination.
+    if (parsed.destination) setLastParsed({ destination: parsed.destination, travelers: parsed.travelers });
+    setMsgs((m) => [...m, { who: 'user', text }, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.') }]);
   };
   const build = () => {
-    const dest = msgs.length ? 'Kyoto' : 'Kyoto';
-    setPlan(buildPlan(dest, 2, 3));
+    const dest = lastParsed?.destination ?? 'Kyoto';
+    const people = lastParsed?.travelers ?? 2;
+    setPlan(buildPlan(dest, people, 3));
   };
   return (
     <div>
@@ -32,6 +53,7 @@ function Chat() {
         <button className="primary" onClick={send}>Send</button>
       </div>
       <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
+      {aiLive !== null && <p style={{ fontSize: 12, color: '#6b655a' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
       <p style={{ marginTop: 16 }}><button className="primary" onClick={build}>Build my plan</button></p>
       {plan && (
         <div style={{ marginTop: 20 }}>
