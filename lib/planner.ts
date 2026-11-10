@@ -4,6 +4,10 @@ export type Plan = { destination: string; travelers: number; options: PlanOption
 
 const BASE: Record<string, number> = { Kyoto: 1950, Bali: 1250, Santorini: 2100, 'St. George': 780, Tacoma: 920, Hilo: 1450 };
 
+// Destinations the planner has real tier totals for (used by the live AI
+// route to build its price table — single source of truth, no invented prices).
+export const KNOWN_DESTINATIONS = Object.keys(BASE);
+
 export function buildPlan(destination: string, travelers: number, days = 3): Plan {
   const base = BASE[destination] ?? 1500;
   const per = (f: number) => Math.round(base * f * travelers);

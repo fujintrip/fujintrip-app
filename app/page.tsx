@@ -8,7 +8,7 @@ type Trip = { id: string; label: string; status: string; date: string };
 const FUJIN_IMG = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Wind_God_by_Ogata_Korin.jpg/640px-Wind_God_by_Ogata_Korin.jpg';
 
 function Chat() {
-  const [msgs, setMsgs] = useState<{ who: string; text: string }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
+  const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
@@ -19,13 +19,13 @@ function Chat() {
     if (!text) return;
     setInput('');
     // Live AI first (server route); any failure falls back to the built-in planner.
-    let parsed: { destination: string; travelers: number; reply: string; missing: string[] };
+    let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
     let live = false;
     try {
       const r = await fetch('/api/fujin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
       const j = await r.json();
       if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
-        parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [] };
+        parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [], tips: Array.isArray(j.tips) ? j.tips.filter((t: unknown): t is string => typeof t === 'string').slice(0, 3) : [] };
         live = j.live === true;
       } else {
         parsed = askFujin(text);
@@ -36,7 +36,7 @@ function Chat() {
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
     if (parsed.destination) setLastParsed({ destination: parsed.destination, travelers: parsed.travelers });
-    setMsgs((m) => [...m, { who: 'user', text }, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.') }]);
+    setMsgs((m) => [...m, { who: 'user', text }, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
   };
   const build = () => {
     const dest = lastParsed?.destination ?? 'Kyoto';
@@ -46,7 +46,16 @@ function Chat() {
   return (
     <div>
       <div className="chat">
-        {msgs.map((m, i) => (<div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}><span className="bubble">{m.text}</span></div>))}
+        {msgs.map((m, i) => (
+          <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
+            <span className="bubble">{m.text}</span>
+            {m.who === 'ai' && m.tips && m.tips.length > 0 && (
+              <ul style={{ fontSize: 13, color: '#6b655a', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
+                {m.tips.map((t) => <li key={t}>{t}</li>)}
+              </ul>
+            )}
+          </div>
+        ))}
       </div>
       <div className="row">
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Try: Bali, 2 travelers, surf and food, next spring, $2,000" aria-label="Ask Fujin AI" />
