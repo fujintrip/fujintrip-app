@@ -71,6 +71,26 @@ Ogata Korin, Wind God, c.1700 — public domain (artist died 1716), credited
 in the footer. The portrait is loaded from Wikimedia Commons, not bundled
 as a paid stock scan.
 
+## Advertising (Google AdSense — dormant)
+
+- Ad slots are ready but **off**: `components/AdSlot.tsx` renders nothing at
+  all unless `NEXT_PUBLIC_ADSENSE_ID` is set *and* a slot ID is passed in,
+  and the AdSense script is never loaded while dormant. No ad unit is
+  requested without both. Slot IDs are in `.env.example` (empty placeholders
+  only): `NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS`,
+  `NEXT_PUBLIC_ADSENSE_SLOT_ABOVE_FOOTER`.
+- Placement, by design: only in content areas below the fold — one between
+  the Hidden gems and the price-comparison sections, one above the footer.
+  Never in the hero, search panel, Fujin AI chat/planner, My Trips, or any
+  checkout flow, so ads never clutter the booking experience.
+- Before applying to AdSense, the real site must be live with substantive
+  content, and the Privacy Policy page (`app/privacy/page.tsx`, linked in
+  the footer) must stay accurate: it says advertising is currently off,
+  explains Google AdSense cookies and opt-outs, and covers searches, My
+  Trips (browser local storage only), location, and supplier bookings.
+- To switch ads on later: get AdSense approval, set the three env vars in
+  the DigitalOcean dashboard, redeploy. No code change needed.
+
 ## What is still needed
 
 - GitHub account + repo, connected to the existing App Platform app

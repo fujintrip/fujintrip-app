@@ -48,5 +48,6 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:6px 0;border-bottom:1px solid #f0ead6}
 td:last-child{text-align:right;font-weight:600}
 footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px;background:#fff}
+.adslot{margin:32px 0;text-align:center}
 .mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f0ead6;font-size:14px}
 @media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:16px}.hero{padding:40px 0 20px}}

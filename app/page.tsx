@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, type Plan } from '../lib/planner';
+import AdSlot from '../components/AdSlot';
 
 type Trip = { id: string; label: string; status: string; date: string };
 const FUJIN_IMG = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Wind_God_by_Ogata_Korin.jpg/640px-Wind_God_by_Ogata_Korin.jpg';
@@ -179,6 +180,9 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Ad slot: below the fold, content area only. Dormant until AdSense is configured. */}
+        <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
+
         <section>
           <h2>How much do you actually save?</h2>
           <p className="sub">An example Kyoto trip — the same trip, booked two ways.</p>
@@ -200,12 +204,16 @@ export default function Home() {
             </ul>
           )}
         </section>
+
+        {/* Ad slot: above the footer, content area only. Dormant until AdSense is configured. */}
+        <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_ABOVE_FOOTER ?? ''} />
       </main>
       <footer>
         <div className="wrap">
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Named for Fujin, Japan’s wind god.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>
           <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
+          <p><a href="/privacy">Privacy Policy</a></p>
         </div>
       </footer>
     </div>
