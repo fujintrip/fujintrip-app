@@ -8,7 +8,7 @@ import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS } from '../../..
  * to answer off-topic questions, whichever provider is active.
  *
  * Providers (OpenAI-compatible; switching is an env-var change only):
- *  - Qwen (active): QWEN_API_KEY, qwen-turbo via Alibaba Model Studio
+ *  - Qwen (active): QWEN_API_KEY, qwen3.7-flash via Alibaba Model Studio
  *    international endpoint. Uses response_format json_object.
  *  - Muse (fallback): MODEL_API_KEY, muse-spark-1.3 via Meta Model API.
  *    Uses response_format json_schema.
@@ -35,7 +35,7 @@ function getProvider(): Provider | null {
     return {
       name: 'Qwen',
       baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-      model: 'qwen-turbo',
+      model: 'qwen3.7-flash',
       apiKey: qwenKey,
       useJsonSchema: false,
     };
