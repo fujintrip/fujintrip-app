@@ -2,20 +2,56 @@ import { NextRequest, NextResponse } from 'next/server';
 import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS } from '../../../lib/planner';
 
 /**
- * Fujin AI — live Muse model, server-side only.
- * If MODEL_API_KEY is set, calls the Meta Model API (OpenAI-compatible)
- * at https://api.meta.ai/v1/chat/completions with model muse-spark-1.3
- * and returns the model's understanding as strict JSON (json_schema).
+ * Fujin AI — live model, server-side only. TRAVEL-ONLY scope: the system
+ * prompt (and the built-in fallback) answer only travel / tourism / trip
+ * planning and politely decline everything else — the model never gets
+ * to answer off-topic questions, whichever provider is active.
+ *
+ * Providers (OpenAI-compatible; switching is an env-var change only):
+ *  - Qwen (active): QWEN_API_KEY, qwen-turbo via Alibaba Model Studio
+ *    international endpoint. Uses response_format json_object.
+ *  - Muse (fallback): MODEL_API_KEY, muse-spark-1.3 via Meta Model API.
+ *    Uses response_format json_schema.
  * If no key is set, or the API call fails / times out / returns invalid
  * JSON, falls back to the built-in askFujin() demo logic and returns
  * live: false, clearly labeled. The chat never errors either way.
- * The key is never sent to the browser and never logged. Model API
- * errors are surfaced in the fallback label AND logged server-side so a
- * failed call can be diagnosed (status alone hides the cause).
+ * Keys are never sent to the browser and never logged. API errors are
+ * surfaced in the fallback label AND logged server-side so a failed call
+ * can be diagnosed (status alone hides the cause).
  */
 
-const MODEL_API = 'https://api.meta.ai/v1/chat/completions';
-const MODEL = 'muse-spark-1.3';
+type Provider = {
+  name: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  useJsonSchema: boolean;
+};
+
+// Qwen first when its key is set; Muse when only its key is set.
+function getProvider(): Provider | null {
+  const qwenKey = process.env.QWEN_API_KEY;
+  if (qwenKey) {
+    return {
+      name: 'Qwen',
+      baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+      model: 'qwen-turbo',
+      apiKey: qwenKey,
+      useJsonSchema: false,
+    };
+  }
+  const metaKey = process.env.MODEL_API_KEY;
+  if (metaKey) {
+    return {
+      name: 'Muse',
+      baseUrl: 'https://api.meta.ai/v1',
+      model: 'muse-spark-1.3',
+      apiKey: metaKey,
+      useJsonSchema: true,
+    };
+  }
+  return null;
+}
 
 // Price table built from the planner's comparison helper (2 travelers;
 // scaled proportionally for other party sizes). Same numbers as the
@@ -92,36 +128,42 @@ export async function POST(req: NextRequest) {
   const raw = body as Record<string, unknown>;
   const message = typeof raw.message === 'string' ? raw.message : '';
 
-  const apiKey = process.env.MODEL_API_KEY;
-  if (!apiKey) {
+  const provider = getProvider();
+  if (!provider) {
     return fallback(
       message,
-      'Fujin AI is offline — using the built-in planner. Connect the Muse API (MODEL_API_KEY) to switch on live AI.'
+      'Fujin AI is offline — using the built-in planner. Connect an AI provider (QWEN_API_KEY or MODEL_API_KEY) to switch on live AI.'
     );
   }
+  const apiKey = provider.apiKey;
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     let res: Response;
     try {
-      res = await fetch(MODEL_API, {
+      res = await fetch(`${provider.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: provider.model,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: message },
           ],
           temperature: 0.3,
-          response_format: {
-            type: 'json_schema',
-            json_schema: { name: 'fujin_trip', strict: false, schema: FUJIN_SCHEMA },
-          },
+          // Muse uses strict JSON Schema; Qwen uses plain JSON mode —
+          // the system prompt still demands the same JSON shape, and
+          // parseModelJson extracts it either way.
+          response_format: provider.useJsonSchema
+            ? {
+                type: 'json_schema',
+                json_schema: { name: 'fujin_trip', strict: false, schema: FUJIN_SCHEMA },
+              }
+            : { type: 'json_object' },
         }),
         signal: controller.signal,
       });
@@ -136,9 +178,9 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       // Surface the API's own error message — a bare status code hides the cause.
-      const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || 'no details from Model API';
-      console.error('[fujin] Model API error', res.status, detail);
-      return fallback(message, `Model API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`);
+      const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
+      console.error(`[fujin] ${provider.name} API error`, res.status, detail);
+      return fallback(message, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
@@ -148,7 +190,7 @@ export async function POST(req: NextRequest) {
       return fallback(message, 'Fujin AI gave an unclear answer — using the built-in planner.');
     }
 
-    return NextResponse.json({ live: true, label: 'Live Fujin AI (Muse).', ...parsed });
+    return NextResponse.json({ live: true, label: `Live Fujin AI (${provider.name}).`, ...parsed });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
     return fallback(message, 'Could not reach Fujin AI right now — using the built-in planner.');
@@ -156,21 +198,20 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const apiKey = process.env.MODEL_API_KEY;
-  const live = Boolean(apiKey);
+  const provider = getProvider();
+  const live = Boolean(provider);
 
-  // Diagnostic: GET /api/fujin?diag=models lists the model IDs this key
-  // can use (Meta's GET /v1/models). Returns model IDs only — never the
-  // key. Settles whether a model_not_found is the key or the model name.
+  // Diagnostic: GET /api/fujin?diag=models lists the model IDs the active
+  // provider key can use. Returns model IDs only — never the key.
   if (req.nextUrl.searchParams.get('diag') === 'models') {
-    if (!apiKey) return NextResponse.json({ live: false, models: [], error: 'MODEL_API_KEY not set' });
+    if (!provider) return NextResponse.json({ live: false, models: [], error: 'No AI provider key set' });
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
       let res: Response;
       try {
-        res = await fetch('https://api.meta.ai/v1/models', {
-          headers: { Authorization: `Bearer ${apiKey}` },
+        res = await fetch(`${provider.baseUrl}/models`, {
+          headers: { Authorization: `Bearer ${provider.apiKey}` },
           signal: controller.signal,
         });
       } finally {
@@ -181,11 +222,12 @@ export async function GET(req: NextRequest) {
         error?: { code?: string; message?: string };
       };
       if (!res.ok) {
-        const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || 'no details from Model API';
+        const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
         return NextResponse.json({ live: false, models: [], error: `${res.status}: ${detail}` });
       }
       return NextResponse.json({
         live: true,
+        provider: provider.name,
         models: (json.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string'),
       });
     } catch (err) {
@@ -195,8 +237,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     live,
-    label: live
-      ? 'Fujin AI route ready. POST a message; live Muse replies when MODEL_API_KEY is set.'
-      : 'Fujin AI route ready. POST a message; returns the built-in planner until MODEL_API_KEY is set.',
+    label: provider
+      ? `Fujin AI route ready. POST a message; live ${provider.name} replies when ${provider.name === 'Qwen' ? 'QWEN_API_KEY' : 'MODEL_API_KEY'} is set.`
+      : 'Fujin AI route ready. POST a message; returns the built-in planner until QWEN_API_KEY or MODEL_API_KEY is set.',
   });
 }
