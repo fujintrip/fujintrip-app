@@ -7,7 +7,7 @@ region: nyc1
 services:
   - name: fujintrip
     github:
-      repo: REPLACE_WITH_YOUR_GITHUB_REPO
+      repo: FujinTrip/fujintrip-app
       branch: main
       deploy_on_push: true
     build_command: npm run build
