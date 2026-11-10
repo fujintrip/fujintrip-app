@@ -5,7 +5,7 @@ h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;line-height:1.2;ma
 a{color:var(--jade)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
 header{border-bottom:1px solid var(--line);background:#fff}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 0}
 .logo{font-family:'Fraunces',Georgia,serif;font-size:28px;color:var(--jade-dark);letter-spacing:.5px}
 .logo span{color:var(--gold)}
 .tag{font-size:13px;color:var(--muted);letter-spacing:.4px}
@@ -23,16 +23,24 @@ header{border-bottom:1px solid var(--line);background:#fff}
 .msg.user{text-align:right}
 .msg .bubble{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;text-align:left;max-width:85%}
 .msg.user .bubble{background:var(--jade);color:#fff;border-color:var(--jade)}
-.row{display:flex;gap:8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
 input,select,button{font-family:inherit;font-size:15px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+img{max-width:100%}
 input,select{flex:1;border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:#fff;min-width:0}
 button.primary{background:var(--jade);color:#fff;border:none;border-radius:10px;padding:12px 20px;cursor:pointer;font-weight:600}
 button.ghost{background:#fff;border:1px solid var(--jade);color:var(--jade);border-radius:10px;padding:10px 16px;cursor:pointer}
 .selling{font-size:14px;color:var(--muted);text-align:center;margin:8px 0 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
-.card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
 .card img{width:100%;height:180px;object-fit:cover;display:block}
-.card .body{padding:16px}
+.card .body{padding:16px;flex:1;display:flex;flex-direction:column}
+.card .body .ghost{margin-top:auto;align-self:flex-start}
+/* Graceful image fallback: gold/jade gradient with the destination name
+   instead of a broken-image icon. */
+.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--gold-soft),#e3ecdd 55%,#cfddd4);color:var(--jade-dark);font-family:'Fraunces',Georgia,serif;font-size:22px;text-align:center;padding:16px}
+.card .img-fallback{height:180px;width:100%}
+.img-fallback.fujin-portrait{width:92px;height:92px;border-radius:50%;border:3px solid var(--gold-soft);margin:0 auto 16px;font-size:30px}
 .card .body h3{font-size:20px}
 .card .body p{font-size:14px;color:var(--muted)}
 .price{font-weight:700;color:var(--jade-dark)}
@@ -50,4 +58,4 @@ td:last-child{text-align:right;font-weight:600}
 footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px;background:#fff}
 .adslot{margin:32px 0;text-align:center}
 .mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f0ead6;font-size:14px}
-@media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:16px}.hero{padding:40px 0 20px}}
+@media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:16px}.hero{padding:40px 0 20px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}}

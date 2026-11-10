@@ -8,6 +8,19 @@ const BASE: Record<string, number> = { Kyoto: 1950, Bali: 1250, Santorini: 2100,
 // route to build its price table — single source of truth, no invented prices).
 export const KNOWN_DESTINATIONS = Object.keys(BASE);
 
+// Each option's legs are rounded independently, so their sum can drift a
+// few dollars from the total. Nudge the largest leg so legs always add up
+// exactly — the plan cards, the comparison section and the AI price table
+// must never disagree.
+function fixLegs(o: PlanOption): PlanOption {
+  const sum = o.flight + o.hotel + o.car + o.activities;
+  const diff = o.total - sum;
+  if (diff === 0) return o;
+  const keys: Array<'flight' | 'hotel' | 'car' | 'activities'> = ['flight', 'hotel', 'car', 'activities'];
+  keys.sort((a, b) => o[b] - o[a]);
+  return { ...o, [keys[0]]: o[keys[0]] + diff };
+}
+
 export function buildPlan(destination: string, travelers: number, days = 3): Plan {
   const base = BASE[destination] ?? 1500;
   const per = (f: number) => Math.round(base * f * travelers);
@@ -15,7 +28,7 @@ export function buildPlan(destination: string, travelers: number, days = 3): Pla
     { name: 'Cheapest', total: per(0.64), flight: per(0.28), hotel: per(0.22), car: per(0.05), activities: per(0.09), note: 'Budget stays, off-peak flights, free activities first.' },
     { name: 'Best value', total: per(1), flight: per(0.42), hotel: per(0.33), car: per(0.08), activities: per(0.17), note: 'Our pick — comfort where it matters, savings where it doesn’t.' },
     { name: 'Premium', total: per(1.64), flight: per(0.6), hotel: per(0.62), car: per(0.14), activities: per(0.28), note: 'Top stays, direct flights, private guides.' },
-  ];
+  ].map(fixLegs);
   const dayTitles = ['Arrive & settle in', 'The big day', 'Slow morning, local flavour'];
   const planDays: DayPlan[] = Array.from({ length: days }, (_, i) => ({
     day: i + 1,
@@ -31,6 +44,54 @@ export function buildPlan(destination: string, travelers: number, days = 3): Pla
     tips: ['Book the flight + hotel together — that’s where most of the saving comes from.', 'Travel midweek when you can; weekend flights cost more for the same seat.', 'Check the hotel’s own website before booking — sometimes it’s cheaper, and we link it.'],
     liked: ['One plan, not seven tabs', 'Clear Cheapest / Best value / Premium choices', 'Links to reviews and hotel websites to verify'],
     notLiked: ['Live prices need a connected supplier — these are planning estimates for now'],
+  };
+}
+
+export type TripComparison = {
+  destination: string;
+  travelers: number;
+  best: PlanOption;
+  separate: { total: number; flight: number; hotel: number; car: number; activities: number };
+  save: number;
+  savePercent: number;
+};
+
+// Price comparison from the planner — single source of truth for the
+// homepage section, the plan cards and the live AI price table.
+// "Booking each leg separately" costs about 13% more than the FujinTrip
+// Best value plan: each separate leg is the Best value leg / 0.87,
+// rounded, then adjusted so the legs sum exactly to the separate total.
+// No numbers are invented — everything derives from buildPlan().
+// Kyoto, 2 travelers: Best value $3,900 vs separately $4,483, save $583 (~13%).
+export function comparisonFor(destination: string, travelers: number): TripComparison {
+  const best = buildPlan(destination, travelers, 3).options[1];
+  const separateTotal = Math.round(best.total / 0.87);
+  const legs = [
+    { key: 'flight' as const, value: Math.round(best.flight / 0.87) },
+    { key: 'hotel' as const, value: Math.round(best.hotel / 0.87) },
+    { key: 'car' as const, value: Math.round(best.car / 0.87) },
+    { key: 'activities' as const, value: Math.round(best.activities / 0.87) },
+  ];
+  const diff = separateTotal - legs.reduce((s, l) => s + l.value, 0);
+  if (diff !== 0) {
+    const biggest = legs.reduce((a, b) => (b.value > a.value ? b : a));
+    biggest.value += diff;
+  }
+  const separate = {
+    total: separateTotal,
+    flight: legs[0].value,
+    hotel: legs[1].value,
+    car: legs[2].value,
+    activities: legs[3].value,
+  };
+  const save = separateTotal - best.total;
+  return {
+    destination,
+    travelers,
+    best,
+    separate,
+    save,
+    savePercent: Math.round((save / separateTotal) * 100),
   };
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, KNOWN_DESTINATIONS } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS } from '../../../lib/planner';
 
 /**
  * Fujin AI — live Muse model, server-side only.
@@ -17,13 +17,15 @@ import { askFujin, buildPlan, KNOWN_DESTINATIONS } from '../../../lib/planner';
 const MODEL_API = 'https://api.meta.ai/v1/chat/completions';
 const MODEL = 'muse-spark-1.3';
 
-// Price table built from the planner's own tier totals (2 travelers;
-// scaled proportionally for other party sizes). Single source of truth —
-// the model quotes only these numbers, never invented prices.
+// Price table built from the planner's comparison helper (2 travelers;
+// scaled proportionally for other party sizes). Same numbers as the
+// homepage comparison section and the plan cards — single source of
+// truth, the model quotes only these numbers, never invented prices.
 const PRICE_TABLE = [...KNOWN_DESTINATIONS, 'Other destinations']
   .map((d) => {
     const opts = buildPlan(d, 2, 3).options;
-    return `${d}: Cheapest $${opts[0].total.toLocaleString()} / Best value $${opts[1].total.toLocaleString()} / Premium $${opts[2].total.toLocaleString()}`;
+    const c = comparisonFor(d, 2);
+    return `${d}: Cheapest $${opts[0].total.toLocaleString()} / Best value $${opts[1].total.toLocaleString()} (booking the same parts separately about $${c.separate.total.toLocaleString()}, save $${c.save.toLocaleString()}, ~${c.savePercent}%) / Premium $${opts[2].total.toLocaleString()}`;
   })
   .join('\n');
 
@@ -35,7 +37,7 @@ const SYSTEM_PROMPT = [
   'Understand the traveller’s request in their own language and reply in that same language.',
   'Extract: destination, traveler count, dates, budget and travel pace.',
   'List anything missing as short questions in the missing array.',
-  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates, per trip for 2 travelers; scale proportionally for other party sizes). Never invent any other price or fare. Always show the Best value total for the matched destination and compare it with booking the same parts separately: in our published Kyoto example, booking separately costs about 13% more than the FujinTrip Best value plan. For other destinations, state the saving as about 13% vs booking separately — do not invent a separate-booking total. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
+  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates, per trip for 2 travelers; scale proportionally for other party sizes). Never invent any other price or fare. Always show the Best value total for the matched destination and compare it with booking the same parts separately, using the separate total and saving from the table below (about 13% more when booking separately). Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
   'FujinTrip plan prices (2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
   'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[]}.',

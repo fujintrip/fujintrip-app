@@ -1,13 +1,31 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, type Plan } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, type Plan } from '../lib/planner';
 import AdSlot from '../components/AdSlot';
 
 type Trip = { id: string; label: string; status: string; date: string };
-const FUJIN_IMG = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Wind_God_by_Ogata_Korin.jpg/640px-Wind_God_by_Ogata_Korin.jpg';
+// Local copy of the Ogata Korin Wind God (public domain) — the Wikimedia
+// Commons URL this used to point at 404s (the file is not on Commons under
+// that name), so the portrait never loaded. Served locally now; credit stays
+// in the footer.
+const FUJIN_IMG = '/images/fujin-wind-god.jpg';
 
-function Chat() {
+// Image with a graceful fallback: a failed image never shows a broken
+// icon — it becomes a gold/jade placeholder with the destination name.
+function SafeImg({ src, alt, label, className }: { src: string; alt: string; label: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className={`img-fallback ${className ?? ''}`} role="img" aria-label={alt}>
+        <span>{label}</span>
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
+}
+
+function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: number }) => void }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -35,7 +53,11 @@ function Chat() {
     }
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
-    if (parsed.destination) setLastParsed({ destination: parsed.destination, travelers: parsed.travelers });
+    if (parsed.destination) {
+      setLastParsed({ destination: parsed.destination, travelers: parsed.travelers });
+      // The price-comparison section below follows the AI's trip.
+      onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
+    }
     setMsgs((m) => [...m, { who: 'user', text }, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
   };
   const build = () => {
@@ -136,6 +158,10 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
 export default function Home() {
   const [tab, setTab] = useState<Tab>('Fujin AI');
   const [trips, setTrips] = useState<Trip[]>([]);
+  // The trip Fujin AI most recently understood — the price-comparison
+  // section below follows it. Null until the user chats: Kyoto example.
+  const [aiTrip, setAiTrip] = useState<{ destination: string; travelers: number } | null>(null);
+  const cmp = useMemo(() => comparisonFor(aiTrip?.destination ?? 'Kyoto', aiTrip?.travelers ?? 2), [aiTrip]);
   const [loc, setLoc] = useState('default');
   const [locName, setLocName] = useState('');
   const [geoStatus, setGeoStatus] = useState('Use your location, or pick a city below — we only use it to show nearby trips.');
@@ -162,7 +188,7 @@ export default function Home() {
       <header><div className="wrap topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
       <main className="wrap">
         <section className="hero">
-          <img className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" />
+          <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
           <h1>One complete plan. Cheapest, Best value, or Premium.</h1>
           <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, with links to reviews and hotel websites.</p>
         </section>
@@ -171,7 +197,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel">
-          {tab === 'Fujin AI' ? <Chat /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 
         <section>
@@ -180,7 +206,7 @@ export default function Home() {
           <div className="grid">
             {GLOBAL_DESTINATIONS.map((d) => (
               <article className="card" key={d.name}>
-                <img src={d.image} alt={d.name} loading="lazy" />
+                <SafeImg src={d.image} alt={d.name} label={d.name} />
                 <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p className="price">{d.priceFrom}</p><button className="ghost" onClick={() => saveTrip(`${d.name} package — request saved`)}>Add to My Trips</button></div>
               </article>
             ))}
@@ -204,7 +230,7 @@ export default function Home() {
           <div className="grid">
             {HIDDEN_GEMS.map((d) => (
               <article className="card" key={d.name}>
-                <img src={d.image} alt={d.name} loading="lazy" />
+                <SafeImg src={d.image} alt={d.name} label={d.name} />
                 <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p><p className="price">{d.priceFrom}</p><ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul><button className="ghost" onClick={() => saveTrip(`${d.name} hidden gem — request saved`)}>Plan this trip</button></div>
               </article>
             ))}
@@ -216,12 +242,18 @@ export default function Home() {
 
         <section>
           <h2>How much do you actually save?</h2>
-          <p className="sub">An example Kyoto trip — the same trip, booked two ways.</p>
+          <p className="sub">{aiTrip ? `Your ${cmp.destination} trip for ${cmp.travelers} traveler${cmp.travelers > 1 ? 's' : ''} — the same trip, booked two ways.` : 'An example Kyoto trip — the same trip, booked two ways.'}</p>
+          {aiTrip && (
+            <p style={{ fontSize: 13, color: '#6b655a', margin: '0 0 16px' }}>
+              Updated from your Fujin AI chat.{' '}
+              <button className="ghost" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => setAiTrip(null)}>Back to the Kyoto example</button>
+            </p>
+          )}
           <div className="compare">
-            <div className="box best"><strong>FujinTrip — Best value</strong><p style={{ fontSize: 30, margin: '8px 0' }}>$2,460</p><table><tbody><tr><td>Flights</td><td>$1,040</td></tr><tr><td>Hotel</td><td>$820</td></tr><tr><td>Car</td><td>$260</td></tr><tr><td>Sightseeing</td><td>$340</td></tr></tbody></table></div>
-            <div className="box"><strong>Booking each leg separately</strong><p style={{ fontSize: 30, margin: '8px 0' }}>$2,840</p><table><tbody><tr><td>Flights</td><td>$1,180</td></tr><tr><td>Hotel</td><td>$960</td></tr><tr><td>Car</td><td>$310</td></tr><tr><td>Sightseeing</td><td>$390</td></tr></tbody></table></div>
+            <div className="box best"><strong>FujinTrip — Best value</strong><p style={{ fontSize: 30, margin: '8px 0' }}>${cmp.best.total.toLocaleString()}</p><table><tbody><tr><td>Flights</td><td>${cmp.best.flight.toLocaleString()}</td></tr><tr><td>Hotel</td><td>${cmp.best.hotel.toLocaleString()}</td></tr><tr><td>Car</td><td>${cmp.best.car.toLocaleString()}</td></tr><tr><td>Sightseeing</td><td>${cmp.best.activities.toLocaleString()}</td></tr></tbody></table></div>
+            <div className="box"><strong>Booking each leg separately</strong><p style={{ fontSize: 30, margin: '8px 0' }}>${cmp.separate.total.toLocaleString()}</p><table><tbody><tr><td>Flights</td><td>${cmp.separate.flight.toLocaleString()}</td></tr><tr><td>Hotel</td><td>${cmp.separate.hotel.toLocaleString()}</td></tr><tr><td>Car</td><td>${cmp.separate.car.toLocaleString()}</td></tr><tr><td>Sightseeing</td><td>${cmp.separate.activities.toLocaleString()}</td></tr></tbody></table></div>
           </div>
-          <p><strong>You save $380 — about 13%.</strong></p>
+          <p><strong>You save ${cmp.save.toLocaleString()} — about {cmp.savePercent}%.</strong></p>
           <p className="notice">Illustrative planning estimates — not a live quote. Live prices come from suppliers once connected.</p>
         </section>
 
