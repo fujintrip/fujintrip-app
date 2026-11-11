@@ -278,7 +278,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
         <button className="primary" onClick={send}>Send</button>
       </div>
       <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
-      <p className="selling">No margin on top, no hidden fees — FujinTrip earns commission from suppliers, never by marking up your price.</p>
+      <p className="selling">No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
       {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: '#6b655a' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
       <p className="no-print" style={{ marginTop: 16 }}>
         <button className="primary" onClick={build}>Build my plan</button>{' '}
@@ -525,7 +525,7 @@ export default function Home() {
             <div className="box"><strong>Booking each leg separately</strong><p style={{ fontSize: 30, margin: '8px 0' }}>${cmp.separate.total.toLocaleString()}</p><table><tbody><tr><td>Flights</td><td>${cmp.separate.flight.toLocaleString()}</td></tr><tr><td>Hotel</td><td>${cmp.separate.hotel.toLocaleString()}</td></tr><tr><td>Car</td><td>${cmp.separate.car.toLocaleString()}</td></tr><tr><td>Sightseeing</td><td>${cmp.separate.activities.toLocaleString()}</td></tr></tbody></table></div>
           </div>
           <p><strong>You save ${cmp.save.toLocaleString()} — about {cmp.savePercent}%.</strong></p>
-          <p style={{ fontSize: 14, color: '#1f5c4d' }}>No margin on top, no hidden fees — FujinTrip earns commission from suppliers, never by marking up your price.</p>
+          <p style={{ fontSize: 14, color: '#1f5c4d' }}>No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
           <p className="notice">Illustrative planning estimates — not a live quote. Live prices come from suppliers once connected.</p>
         </section>
 
@@ -547,7 +547,7 @@ export default function Home() {
       <footer>
         <div className="wrap">
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Travel globally, act locally. Named for Fujin, Japan’s wind god.</p>
-          <p>No margin on top, no hidden fees — FujinTrip earns commission from suppliers, never by marking up your price.</p>
+          <p>No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>
           <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
           <p><a href="/privacy">Privacy Policy</a></p>
