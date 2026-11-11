@@ -1,9 +1,15 @@
 'use client';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, findOrigin, optionsLine, type Plan } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, routeKeyForDestination, type Plan } from '../lib/planner';
+import { buildTripCard, cardComparison, CITY_INFO, type TripCard } from '../lib/tripCard';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
+
+// Trip map (Leaflet) is client-only — it needs window, so it loads
+// without server rendering.
+const TripMap = dynamic(() => import('../components/TripMap'), { ssr: false });
 
 type Trip = { id: string; label: string; status: string; date: string; destination?: string };
 type Voices = { destination: string; text: string; source: string } | null;
@@ -94,7 +100,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string } | null>(null);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
@@ -117,9 +123,16 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     try {
       const t = localStorage.getItem('fujintrip-current-trip');
       if (t) {
-        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown };
+        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown };
         if (typeof p.destination === 'string' && typeof p.travelers === 'number') {
-          setLastParsed({ destination: p.destination, travelers: p.travelers });
+          setLastParsed({
+            destination: p.destination,
+            travelers: p.travelers,
+            ...(typeof p.origin === 'string' && p.origin ? { origin: p.origin } : {}),
+            ...(typeof p.month === 'number' ? { month: p.month } : {}),
+            ...(typeof p.durationDays === 'number' ? { durationDays: p.durationDays } : {}),
+            ...(typeof p.routeKey === 'string' && p.routeKey ? { routeKey: p.routeKey } : {}),
+          });
           onParsed?.({ destination: p.destination, travelers: p.travelers });
         }
       }
@@ -153,8 +166,10 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   }, [hydrated, plan, choice]);
   // Built-in planner replies carry the 3 tier prices too (same as the
   // server fallback) — the reply must have real value before the plan.
-  const withOptions = (p: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] }) =>
-    p.destination ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers)}` } : p;
+  // But NOT while the conversation is still gathering details (guided
+  // flow): a reply that asks one question must not also dump three prices.
+  const withOptions = (p: { destination: string; travelers: number; reply: string; missing: string[]; needsMore?: boolean; tips?: string[] }) =>
+    p.destination && !p.needsMore ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers)}` } : p;
   const send = async () => {
     const text = input.trim();
     if (!text) return;
@@ -166,8 +181,13 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     // the server can't be reached — same memory the server gets.
     const contextText = [...msgs.filter((m) => m.who === 'user').map((m) => m.text), text].join(' ');
     // The departure city, from everything the traveler said so far — it
-    // rides along in tripState so the server never has to ask twice.
-    const origin = findOrigin(contextText) || lastParsed?.origin || '';
+    // rides along in tripState so the server never has to ask twice. A
+    // bare-city answer ("yes new york") counts too, from this message only.
+    const origin = findOrigin(contextText) || findOriginAnswer(text) || lastParsed?.origin || '';
+    // The trip-card slots, from everything said so far (month, length) —
+    // carried forward like the origin so they survive follow-ups.
+    const month = findMonth(contextText) || lastParsed?.month || 0;
+    const durationDays = parseDuration(contextText) || lastParsed?.durationDays || 0;
     // Live AI first (server route); any failure falls back to the built-in planner.
     let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
     let live = false;
@@ -199,10 +219,10 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
         }
       } else {
-        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text));
+        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin));
       }
     } catch {
-      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text));
+      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin));
     }
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
@@ -210,7 +230,14 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
       // A new destination means a new trip: the old plan no longer applies
       // — clear it so the traveler builds a fresh one for this trip.
       if (lastParsed && parsed.destination !== lastParsed.destination) setPlan(null);
-      setLastParsed({ destination: parsed.destination, travelers: parsed.travelers, ...(origin ? { origin } : {}) });
+      setLastParsed({
+        destination: parsed.destination,
+        travelers: parsed.travelers,
+        ...(origin ? { origin } : {}),
+        ...(month ? { month } : {}),
+        ...(durationDays ? { durationDays } : {}),
+        ...(routeKeyForDestination(parsed.destination) ? { routeKey: routeKeyForDestination(parsed.destination) } : {}),
+      });
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
     }
@@ -219,7 +246,9 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   const build = () => {
     const dest = lastParsed?.destination ?? 'Kyoto';
     const people = lastParsed?.travelers ?? 2;
-    setPlan(buildPlan(dest, people, 3));
+    // The plan's day cards span the trip length the traveler gave
+    // (14 days → 14 day cards), not a fixed 3.
+    setPlan(buildPlan(dest, people, lastParsed?.durationDays ?? 3));
     setActionMsg('');
   };
 
@@ -322,6 +351,31 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   // Curated guide for the current plan's destination (Kyoto only, researched
   // Nov 2026) — the fallback when no live-fetch voices exist for it.
   const guide = plan ? guideFor(plan.destination) : null;
+  // Layla-style trip card: map, per-city legs, day-by-day with real
+  // sights, and the price comparison. Built from the trip the chat
+  // collected (destination, travelers, month, length, origin) — the same
+  // numbers the chat quoted, so the card and the chat never disagree.
+  const tripCard: TripCard | null = useMemo(
+    () =>
+      plan
+        ? buildTripCard({
+            destination: plan.destination,
+            travelers: plan.travelers,
+            days: lastParsed?.durationDays ?? 3,
+            month: lastParsed?.month ?? 0,
+            origin: lastParsed?.origin ?? '',
+          })
+        : null,
+    [plan, lastParsed]
+  );
+  const comparison = useMemo(
+    () => (plan ? cardComparison(plan.destination, plan.travelers) : null),
+    [plan]
+  );
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const fmtDateYear = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   return (
     <div>
       <div className="chat">
@@ -357,6 +411,83 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
       {plan && (
         <div className="plan-print" style={{ marginTop: 20 }}>
           <h3>Your {plan.destination} plan — pick one</h3>
+          {tripCard && (
+            <div style={{ marginTop: 12 }}>
+              <h3 style={{ margin: '4px 0' }}>{tripCard.title}</h3>
+              <p style={{ fontSize: 13, color: '#6b655a', margin: '4px 0' }}>
+                {tripCard.days} days · {tripCard.stops.length} {tripCard.stops.length > 1 ? 'cities' : 'city'} · {tripCard.experiences} experiences · {tripCard.hotels} {tripCard.hotels > 1 ? 'stays' : 'stay'} · {tripCard.transports} transports
+              </p>
+              <p style={{ fontSize: 14, margin: '4px 0' }}>
+                <strong>{fmtDateYear(tripCard.startDate)} – {fmtDateYear(tripCard.endDate)}</strong>{' '}
+                <span style={{ color: '#6b655a', fontSize: 13 }}>(Suggested dates — change anytime.)</span>
+              </p>
+              <p style={{ fontSize: 14, margin: '8px 0' }}>{tripCard.routeLine}</p>
+              <div className="no-print">
+                <TripMap
+                  stops={tripCard.stops
+                    .filter((s) => CITY_INFO[s.city])
+                    .map((s) => ({ city: s.city, lat: CITY_INFO[s.city].lat, lng: CITY_INFO[s.city].lng }))}
+                />
+              </div>
+              <p className="print-only" style={{ fontSize: 13, color: '#6b655a' }}>Map: {tripCard.routeLine}</p>
+              <div style={{ background: '#f7f3e3', border: '1px solid #e8e0c8', borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>
+                <strong style={{ fontSize: 14 }}>Top improvement for your budget</strong>
+                <p style={{ fontSize: 14, margin: '4px 0' }}>{tripCard.budgetTip}</p>
+              </div>
+              {tripCard.stops.map((stop, si) => (
+                <div key={stop.city} style={{ borderTop: '1px solid #f0ead6', padding: '12px 0' }}>
+                  <strong>Days {stop.days[0]?.day ?? si + 1}{stop.days.length > 1 ? `-${stop.days[stop.days.length - 1].day}` : ''} · {fmtDate(stop.startDate)} – {fmtDate(stop.endDate)} · {stop.city}</strong>
+                  <p style={{ margin: '4px 0' }}>{stop.intro}</p>
+                  <p style={{ fontSize: 14, margin: '4px 0' }}>
+                    <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: '#6b655a' }}>(estimate)</span>
+                  </p>
+                  <p style={{ fontSize: 14, margin: '4px 0' }}>
+                    <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()} <span style={{ color: '#6b655a' }}>(planning estimate — real named stays arrive with a hotel supplier)</span>
+                  </p>
+                  <p style={{ fontSize: 14, margin: '8px 0 4px' }}><b>Itinerary</b></p>
+                  {stop.days.map((d) => (
+                    <p key={d.day} style={{ fontSize: 14, margin: '3px 0' }}>
+                      Day {d.day} · {fmtDate(d.date)}{d.weatherF ? ` · ${d.weatherF}°F typical` : ''} · {d.experiences} experiences — {d.title}
+                    </p>
+                  ))}
+                </div>
+              ))}
+              <div style={{ borderTop: '1px solid #f0ead6', padding: '12px 0' }}>
+                <p style={{ fontSize: 14, margin: '4px 0' }}>
+                  <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: '#6b655a' }}>(estimate)</span>
+                </p>
+              </div>
+              {comparison && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: '4px 0' }}>Our rate vs other options</h3>
+                  <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', borderBottom: '2px solid #e8e0c8' }}>
+                        <th style={{ padding: '6px 0' }}></th>
+                        <th style={{ padding: '6px 0' }}>FujinTrip — Best value</th>
+                        <th style={{ padding: '6px 0' }}>Booking separately</th>
+                        <th style={{ padding: '6px 0' }}>Other sites (live)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Flights</td><td>${comparison.best.flight.toLocaleString()}</td><td>${comparison.separate.flight.toLocaleString()}</td><td rowSpan={4} style={{ verticalAlign: 'top', color: '#6b655a' }}>Live competitor rates arrive with live fares — no live fare feed is connected yet, so we show nothing invented here.</td></tr>
+                      <tr><td>Hotels</td><td>${comparison.best.hotel.toLocaleString()}</td><td>${comparison.separate.hotel.toLocaleString()}</td></tr>
+                      <tr><td>Car</td><td>${comparison.best.car.toLocaleString()}</td><td>${comparison.separate.car.toLocaleString()}</td></tr>
+                      <tr><td>Activities</td><td>${comparison.best.activities.toLocaleString()}</td><td>${comparison.separate.activities.toLocaleString()}</td></tr>
+                      <tr style={{ borderTop: '2px solid #e8e0c8', fontWeight: 700 }}><td>Total</td><td>${comparison.best.total.toLocaleString()}</td><td>${comparison.separate.total.toLocaleString()}</td></tr>
+                    </tbody>
+                  </table>
+                  <p style={{ fontSize: 14, margin: '8px 0' }}>
+                    You save <strong>${comparison.save.toLocaleString()} (~{comparison.savePercent}%)</strong> with FujinTrip vs booking each leg separately. Prices are planning estimates, not live quotes.
+                  </p>
+                </div>
+              )}
+              <p style={{ fontSize: 15, margin: '12px 0 0' }}>
+                From <strong>${plan.options[choice].total.toLocaleString()}</strong> total ({plan.options[choice].name}){' '}
+                <button className="primary no-print" onClick={bookPlan} style={{ marginLeft: 8 }}>Book</button>
+              </p>
+            </div>
+          )}
           <div className="compare" style={{ marginTop: 12 }}>
             {plan.options.map((o, i) => (
               <div key={o.name} className={`box ${i === choice ? 'best chosen' : ''}`} onClick={() => setChoice(i)} style={{ cursor: 'pointer' }}>
@@ -395,13 +526,8 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
               )}
             </div>
           )}
-          <h3 style={{ marginTop: 24 }}>Day by day</h3>
-          {plan.days.map((d) => (
-            <div key={d.day} style={{ borderTop: '1px solid #f0ead6', padding: '12px 0' }}>
-              <strong>Day {d.day} — {d.title}</strong>
-              <p><b>Morning:</b> {d.morning}<br /><b>Afternoon:</b> {d.afternoon}<br /><b>Evening:</b> {d.evening}<br /><b>Transport:</b> {d.transport} · <b>Stay:</b> {d.stay}</p>
-            </div>
-          ))}
+          {/* Day by day now lives in the trip card above (real sight names
+          per city); the generic template days were redundant. */}
           <h3 style={{ marginTop: 24 }}>How to book</h3>
           <p style={{ fontSize: 14 }}>Book the <strong>{plan.options[choice].name}</strong> plan — ${plan.options[choice].total.toLocaleString()} for {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''} — with FujinTrip. One booking, one price; no bouncing between booking sites. Prices are planning estimates, not live quotes.</p>
           <ul style={{ fontSize: 14 }}>

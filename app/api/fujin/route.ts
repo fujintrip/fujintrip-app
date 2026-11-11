@@ -85,10 +85,13 @@ const SYSTEM_PROMPT = [
   'ADVICE — give clear, concrete advice grounded in real traveler experience, not generic lines: name the actual transport (which metro/tram/bus, which low-cost carrier, or when a private transfer is worth it), the actual kind of stay (hotel, motel, hostel, guesthouse), and the actual places to eat. Cover flights, stays, and transport in the advice, based on what the traveler asked for. Use the LOCAL VOICES material when it is present; when it is not, use specific knowledge and say what is typical — never invent a price, a review, or a quote.',
   'Understand the traveller’s request in their own language and reply in that same language.',
   'When planning a trip, include a brief day-by-day sketch in the reply (one line per day) naming real local places, markets and dishes where you can — the traveler should feel the plan was written by someone who knows the place, not a template.',
-  'FORMAT — keep the reply short and scannable: a warm line, the route, one line per day, the 3 prices, one recommendation, then the missing questions. Use short lines and simple bullets. Do not write long paragraphs or a full day-by-day guide in the chat — the full plan is what the PDF is for.',
+  'FORMAT — keep the reply short and scannable: a warm line, the route, one line per day, the 3 prices, one recommendation, then the missing questions. Use short lines and simple bullets. Do not write long paragraphs or a full day-by-day guide in the chat — the full plan is what the PDF is for. But while you are still gathering details, ask ONE question at a time and show NO prices and NO day sketch yet (see GUIDED).',
   'Extract: destination, traveler count, dates, budget, travel pace, and departure city (where they fly from).',
   'DESTINATION — accept ANY destination the traveler names: any city, country or region (for example Paris, Japan, Europe). Never decline a travel request because the destination is not in the list below. If they name a country or region instead of a city (for example Europe), accept it as the destination and propose a route through it (see RECOMMEND below); add a follow-up question to missing only after proposing.',
-  'ORIGIN — the flight fare depends on where the traveler flies from. If they did not say where they are traveling from, ask for the departure city and add "Departure city" to missing. Never quote a flight fare as if it were for a specific origin when the origin is unknown — planner prices are estimates, labeled as such.',
+  'GUIDED — when the traveler gives a vague request (a region with no cities, no dates, no origin, no length), guide them one question at a time, in this order: (1) if they said only "Europe", offer the choice — Central Europe (Prague, Vienna, Budapest) or sunny Portugal (Lisbon & Porto); (2) when are they going, and for how long; (3) where are they flying from; (4) their budget, only if they never mentioned one. Ask exactly ONE question per reply, keep it short, and show no prices and no day-by-day yet. Once destination, month, length and origin are all known, give the Trip Summary (route with nights per city, dates, style, travelers) and ask "Does this sound right — shall I build it?", then show the 3 prices. Never dump the full plan before the summary is confirmed.',
+  'ORIGIN — the flight fare depends on where the traveler flies from. If they did not say where they are traveling from, ask for the departure city and add "Departure city" to missing. Never quote a flight fare as if it were for a specific origin when the origin is unknown — planner prices are estimates, labeled as such. When the traveler gave a month (for example January) but no exact dates, ask "which dates in January?" — do not list "Dates" as missing as if nothing was said.',
+  'ROUTE STICKINESS — once you propose a route, KEEP IT across turns unless the traveler asks to change it. Never silently swap cities on the next reply: if turn 1 proposed Lisbon → Madrid → Barcelona → Paris → Rome → Athens, turn 2 must build on that same route, not propose a different one. A changed route confuses the traveler — the route they were just given disappeared.',
+  'ALL THREE PRICES — every plan reply shows all three totals: Cheapest, Best value AND Premium. Never show only two of them.',
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
   'Traveler count: "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'List anything missing as short questions in the missing array.',
@@ -124,8 +127,8 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '') {
-  const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage);
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '') {
+  const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
   // win the election?" after an Egypt chat came back as an Egypt route).
@@ -142,11 +145,15 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     missing = missing.filter((m) => m !== 'Destination');
   }
   // The reply must carry real value: the 3 tier prices with a clear pick,
-  // so the traveler can choose before asking for the plan.
-  if (destination) reply += `\n\n${optionsLine(destination, parsed.travelers)}`;
+  // so the traveler can choose before asking for the plan. But NOT while
+  // the conversation is still gathering details (guided flow): a reply
+  // that asks one question ("How many days?") must not also dump three
+  // prices — the prices arrive with the Trip Summary.
+  if (destination && !parsed.needsMore) reply += `\n\n${optionsLine(destination, parsed.travelers)}`;
   // Even when the live model is down, fresh traveler material still helps —
-  // but never on a decline, where it would read as an answer.
-  if (voices?.text && destination) reply += `\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`;
+  // but never on a decline, where it would read as an answer, and never on
+  // a guided question, where a long excerpt would bury the one question.
+  if (voices?.text && destination && !parsed.needsMore) reply += `\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`;
   return NextResponse.json({
     live: false,
     label,
@@ -217,10 +224,6 @@ export async function POST(req: NextRequest) {
   const stateTravelers =
     typeof tripState.travelers === 'number' && tripState.travelers >= 1 && tripState.travelers <= 9 ? tripState.travelers : 0;
   const stateOrigin = typeof tripState.origin === 'string' && tripState.origin.trim() ? tripState.origin.trim() : '';
-  // The fallback reads the origin from the joined text; if it scrolled off
-  // the history window, re-attach it so the fallback does not wrongly ask
-  // for the departure city again.
-  const fallbackText = stateOrigin && !fullText.toLowerCase().includes(stateOrigin.toLowerCase()) ? `${fullText} (flying from ${stateOrigin})` : fullText;
 
   // On-trip mode (feature 8): the traveler is already at the destination
   // and wants short, right-now local answers. The trip destination also
@@ -248,13 +251,14 @@ export async function POST(req: NextRequest) {
   const provider = getProvider();
   if (!provider) {
     return fallback(
-      fallbackText,
+      fullText,
       'Fujin AI is offline — using the built-in planner. Connect an AI provider (QWEN_API_KEY or MODEL_API_KEY) to switch on live AI.',
       voices,
       voicesDest,
       stateTravelers || 2,
       stateDestination,
-      message
+      message,
+      stateOrigin
     );
   }
   const apiKey = provider.apiKey;
@@ -308,14 +312,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fallbackText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fallbackText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin);
     }
 
     return NextResponse.json({
@@ -328,7 +332,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fallbackText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin);
   }
 }
 

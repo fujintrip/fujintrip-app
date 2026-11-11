@@ -211,6 +211,11 @@ const COUNTRY_ROUTES: Record<string, { display: string; route: string }> = {
     route:
       'New York (Central Park, food from every corner of the world) → San Francisco (the Bay, cable cars) → Los Angeles (beaches, studios). Domestic flights between cities, the subway in New York, and motels and budget hotels to keep the stay affordable.',
   },
+  centraleurope: {
+    display: 'Central Europe',
+    route:
+      'Prague (Old Town, Prague Castle) → Vienna (Schönbrunn Palace, coffee houses) → Budapest (thermal baths, ruin bars, the Danube). Trains between cities (Prague → Vienna about 4 hours, Vienna → Budapest about 2.5), metro and tram day passes inside them, and social hostels and family guesthouses to stay in.',
+  },
 };
 
 // Aliases that point at a route-map key (checked the same way as the key).
@@ -220,6 +225,8 @@ const COUNTRY_ALIASES: Record<string, string> = {
   'united states': 'usa',
   america: 'usa',
   'united kingdom': 'uk',
+  'central europe': 'centraleurope',
+  'eastern europe': 'centraleurope',
 };
 
 // Well-known cities — the traveler names a city, not a country, and the
@@ -253,7 +260,209 @@ const CITY_TO_COUNTRY: Record<string, { country: string; display: string }> = {
   luxor: { country: 'egypt', display: 'Luxor' },
   aswan: { country: 'egypt', display: 'Aswan' },
   'sharm el sheikh': { country: 'egypt', display: 'Sharm El Sheikh' },
+  prague: { country: 'centraleurope', display: 'Prague' },
+  vienna: { country: 'centraleurope', display: 'Vienna' },
+  budapest: { country: 'centraleurope', display: 'Budapest' },
+  porto: { country: 'portugal', display: 'Porto' },
+  sintra: { country: 'portugal', display: 'Sintra' },
 };
+
+// Route stops for the trip card (Layla-style): the cities of each route in
+// order, with a weight that sets how the nights are shared. The weights
+// are the trip card's shape — e.g. Central Europe 4/3/6 nights over
+// 13 nights matches the 14-day Layla-style flow exactly. Nights are
+// distributed from the trip length (see distributeNights), never invented
+// per city. A route key with no stops here renders as a single-city card.
+export const ROUTE_STOPS: Record<string, Array<{ city: string; country: string; weight: number }>> = {
+  europe: [
+    { city: 'Lisbon', country: 'Portugal', weight: 3 },
+    { city: 'Madrid', country: 'Spain', weight: 2 },
+    { city: 'Barcelona', country: 'Spain', weight: 2 },
+    { city: 'Paris', country: 'France', weight: 3 },
+    { city: 'Rome', country: 'Italy', weight: 3 },
+    { city: 'Athens', country: 'Greece', weight: 2 },
+  ],
+  centraleurope: [
+    { city: 'Prague', country: 'Czech Republic', weight: 4 },
+    { city: 'Vienna', country: 'Austria', weight: 3 },
+    { city: 'Budapest', country: 'Hungary', weight: 6 },
+  ],
+  portugal: [
+    { city: 'Lisbon', country: 'Portugal', weight: 4 },
+    { city: 'Porto', country: 'Portugal', weight: 3 },
+    { city: 'Sintra', country: 'Portugal', weight: 2 },
+  ],
+  egypt: [
+    { city: 'Cairo', country: 'Egypt', weight: 3 },
+    { city: 'Luxor', country: 'Egypt', weight: 3 },
+    { city: 'Aswan', country: 'Egypt', weight: 2 },
+    { city: 'Sharm El Sheikh', country: 'Egypt', weight: 3 },
+  ],
+  japan: [
+    { city: 'Tokyo', country: 'Japan', weight: 3 },
+    { city: 'Kyoto', country: 'Japan', weight: 4 },
+    { city: 'Osaka', country: 'Japan', weight: 2 },
+  ],
+  italy: [
+    { city: 'Rome', country: 'Italy', weight: 4 },
+    { city: 'Florence', country: 'Italy', weight: 3 },
+    { city: 'Venice', country: 'Italy', weight: 3 },
+  ],
+  france: [
+    { city: 'Paris', country: 'France', weight: 4 },
+    { city: 'Loire Valley', country: 'France', weight: 2 },
+    { city: 'Nice', country: 'France', weight: 3 },
+  ],
+  spain: [
+    { city: 'Barcelona', country: 'Spain', weight: 3 },
+    { city: 'Seville', country: 'Spain', weight: 3 },
+    { city: 'Madrid', country: 'Spain', weight: 3 },
+  ],
+  greece: [
+    { city: 'Athens', country: 'Greece', weight: 3 },
+    { city: 'Santorini', country: 'Greece', weight: 3 },
+    { city: 'Crete', country: 'Greece', weight: 3 },
+  ],
+  thailand: [
+    { city: 'Bangkok', country: 'Thailand', weight: 3 },
+    { city: 'Chiang Mai', country: 'Thailand', weight: 3 },
+    { city: 'Krabi', country: 'Thailand', weight: 3 },
+  ],
+  turkey: [
+    { city: 'Istanbul', country: 'Turkey', weight: 4 },
+    { city: 'Cappadocia', country: 'Turkey', weight: 3 },
+    { city: 'Antalya', country: 'Turkey', weight: 3 },
+  ],
+  morocco: [
+    { city: 'Marrakech', country: 'Morocco', weight: 3 },
+    { city: 'Fes', country: 'Morocco', weight: 3 },
+    { city: 'Chefchaouen', country: 'Morocco', weight: 2 },
+  ],
+  india: [
+    { city: 'Delhi', country: 'India', weight: 3 },
+    { city: 'Agra', country: 'India', weight: 2 },
+    { city: 'Jaipur', country: 'India', weight: 3 },
+  ],
+  uk: [
+    { city: 'London', country: 'United Kingdom', weight: 4 },
+    { city: 'Bath', country: 'United Kingdom', weight: 2 },
+    { city: 'Edinburgh', country: 'United Kingdom', weight: 3 },
+  ],
+  mexico: [
+    { city: 'Mexico City', country: 'Mexico', weight: 4 },
+    { city: 'Oaxaca', country: 'Mexico', weight: 3 },
+    { city: 'Tulum', country: 'Mexico', weight: 3 },
+  ],
+  usa: [
+    { city: 'New York', country: 'USA', weight: 3 },
+    { city: 'San Francisco', country: 'USA', weight: 3 },
+    { city: 'Los Angeles', country: 'USA', weight: 3 },
+  ],
+};
+
+// Share the trip's nights across the route stops by weight, so the nights
+// always add up exactly to days - 1 (a 14-day trip is 13 nights). The
+// longest stay absorbs the rounding difference.
+export function distributeNights(
+  routeKey: string,
+  days: number
+): Array<{ city: string; country: string; nights: number }> {
+  const stops = ROUTE_STOPS[routeKey];
+  if (!stops || !stops.length) return [];
+  const totalNights = Math.max(stops.length, days - 1);
+  const totalW = stops.reduce((s, x) => s + x.weight, 0);
+  const nights = stops.map((x) => Math.max(1, Math.round((totalNights * x.weight) / totalW)));
+  let diff = totalNights - nights.reduce((s, n) => s + n, 0);
+  while (diff > 0) {
+    const i = nights.indexOf(Math.max(...nights));
+    nights[i] += 1;
+    diff -= 1;
+  }
+  while (diff < 0) {
+    const candidates = nights.map((n, i) => (n > 1 ? i : -1)).filter((i) => i >= 0);
+    if (!candidates.length) break;
+    const i = candidates.reduce((a, b) => (nights[a] >= nights[b] ? a : b));
+    nights[i] -= 1;
+    diff += 1;
+  }
+  return stops.map((x, idx) => ({ city: x.city, country: x.country, nights: nights[idx] }));
+}
+
+// Route key for a destination display name ('Europe' → 'europe',
+// 'Central Europe' → 'centraleurope', 'Kyoto' → '' — a single city has
+// no multi-stop route). Used by the trip card and the Trip Summary.
+export function routeKeyForDestination(destination: string): string {
+  const lower = destination.toLowerCase();
+  const match = Object.entries(COUNTRY_ROUTES).find(
+    ([, v]) => v.display.toLowerCase() === lower
+  );
+  return match ? match[0] : '';
+}
+
+// Month names, for the guided flow and the trip card's suggested dates.
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+// Month of travel (1-12) from the conversation, or 0. Month names win
+// over seasons ("this winter in january" is January, not winter);
+// a bare season maps to its middle month (winter → January, spring →
+// April, summer → July, autumn → October).
+export function findMonth(text: string): number {
+  const lower = text.toLowerCase();
+  const patterns = [
+    /\bjan(?:uary)?\b/, /\bfeb(?:ruary)?\b/, /\bmar(?:ch)?\b/, /\bapr(?:il)?\b/,
+    /\bmay\b/, /\bjun(?:e)?\b/, /\bjul(?:y)?\b/, /\baug(?:ust)?\b/,
+    /\bsep(?:t(?:ember)?)?\b/, /\boct(?:ober)?\b/, /\bnov(?:ember)?\b/, /\bdec(?:ember)?\b/,
+  ];
+  for (let i = 0; i < patterns.length; i++) if (patterns[i].test(lower)) return i + 1;
+  if (/\bwinter\b/.test(lower)) return 1;
+  if (/\bspring\b/.test(lower)) return 4;
+  if (/\bsummer\b/.test(lower)) return 7;
+  if (/\bautumn\b|\bfall\b/.test(lower)) return 10;
+  return 0;
+}
+
+// Trip length in days, or 0. "14 days" → 14, "2 weeks" → 14, "a week" → 7.
+export function parseDuration(text: string): number {
+  const lower = text.toLowerCase();
+  const m = lower.match(/(\d+)\s*(?:days?|nights?)\b/);
+  if (m) return Math.min(30, Math.max(1, parseInt(m[1], 10)));
+  const w = lower.match(/(\d+)\s*weeks?\b/);
+  if (w) return Math.min(30, Math.max(1, parseInt(w[1], 10) * 7));
+  if (/\btwo weeks\b/.test(lower)) return 14;
+  if (/\ba week\b|\bone week\b/.test(lower)) return 7;
+  return 0;
+}
+
+// Bare-city answer to "where are you flying from?" — the traveler
+// answers "yes new york" or just "nyc" instead of "from New York".
+// Only for short answers (the current message), never for the joined
+// history: a city named anywhere else could be the destination.
+const ORIGIN_CITIES = [
+  'new york', 'nyc', 'london', 'paris', 'los angeles', 'chicago', 'boston',
+  'toronto', 'san francisco', 'miami', 'atlanta', 'dallas', 'houston',
+  'seattle', 'denver', 'washington', 'philadelphia', 'dubai', 'singapore',
+  'sydney', 'tokyo', 'hong kong', 'amsterdam', 'berlin', 'rome', 'madrid',
+];
+export function findOriginAnswer(text: string): string {
+  const t = text
+    .toLowerCase()
+    .trim()
+    .replace(/^(yes|yeah|yep|sure|ok|okay|from),?\s+/, '');
+  if (!t || t.split(/\s+/).length > 4) return '';
+  for (const c of ORIGIN_CITIES) {
+    if (new RegExp(`\\b${escapeRegExp(c)}\\b`).test(t)) {
+      if (c === 'nyc') return 'NYC';
+      return c
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    }
+  }
+  return '';
+}
 
 // Word-boundary matching for place names: plain substring matching
 // false-positives ("paris" inside "comparison", "uk" inside "souk").
@@ -282,18 +491,25 @@ function lastIndexOfAny(lower: string, needles: string[]): number {
 }
 
 export function findCountry(lower: string): string {
-  let bestKey = '';
-  let bestIdx = -1;
-  const check = (needle: string, key: string) => {
-    const idx = lastWordMatch(lower, needle);
-    if (idx > bestIdx) {
-      bestIdx = idx;
-      bestKey = key;
-    }
+  // Every candidate mention with its start and length. The last mention
+  // wins — but a multi-word phrase that contains a later single-word
+  // match ("central europe" contains "europe") is ONE mention, and the
+  // longer phrase wins: without this, "14 days, central europe" resolved
+  // to Europe, because the "europe" inside "central europe" starts later.
+  type Cand = { key: string; start: number; len: number };
+  const cands: Cand[] = [];
+  const add = (needle: string, key: string) => {
+    const re = new RegExp(`\\b${escapeRegExp(needle)}\\b`, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(lower))) cands.push({ key, start: m.index, len: needle.length });
   };
-  for (const key of Object.keys(COUNTRY_ROUTES)) check(key, key);
-  for (const [alias, key] of Object.entries(COUNTRY_ALIASES)) check(alias, key);
-  return bestKey;
+  for (const key of Object.keys(COUNTRY_ROUTES)) add(key, key);
+  for (const [alias, key] of Object.entries(COUNTRY_ALIASES)) add(alias, key);
+  if (!cands.length) return '';
+  cands.sort((a, b) => b.start - a.start || b.len - a.len);
+  const top = cands[0];
+  const container = cands.find((c) => c.start < top.start && c.start + c.len >= top.start + top.len);
+  return container ? container.key : top.key;
 }
 
 export function findCity(lower: string): string {
@@ -444,8 +660,9 @@ export function askFujin(
   text: string,
   defaultTravelers = 2,
   contextDestination = '',
-  currentMessage = ''
-): { destination: string; travelers: number; reply: string; missing: string[] } {
+  currentMessage = '',
+  contextOrigin = ''
+): { destination: string; travelers: number; reply: string; missing: string[]; needsMore: boolean } {
   // Off-topic is judged on the CURRENT message only. The joined history
   // would make any message look like travel — "who will win the election?"
   // after an Egypt chat came back as an Egypt route (Nov 10 overnight
@@ -458,6 +675,7 @@ export function askFujin(
       travelers: 2,
       reply: 'I only help with travel and trip planning — where would you like to go?',
       missing: ['Destination'],
+      needsMore: false,
     };
   }
   if (!isTravel(text)) {
@@ -466,6 +684,7 @@ export function askFujin(
       travelers: 2,
       reply: 'I only help with travel and trip planning — where would you like to go?',
       missing: ['Destination'],
+      needsMore: false,
     };
   }
   const lower = text.toLowerCase();
@@ -481,7 +700,17 @@ export function askFujin(
   const isSwitch =
     /\bactually\b|\binstead\b|\bchange\b|\bswitch\b|\blet'?s do\b|\brather\b/.test(currentLower);
   const place = lastPlaceMentioned(lower);
-  const effectivePlace = contextDestination && currentMessage && !isSwitch ? '' : place;
+  // Answering the region question ("Central Europe or Portugal?") with
+  // "central europe" is not a trip switch — but it IS the answer, so it
+  // must win over the bare "Europe" the context holds. A city follow-up
+  // ("hotels in Lisbon?") must not: only a region-level answer (a
+  // country/region display name) overrides the context.
+  const currentPlace = currentMessage ? lastPlaceMentioned(currentMessage.toLowerCase()) : '';
+  const isRegionAnswer =
+    contextDestination === 'Europe' &&
+    currentPlace !== '' &&
+    Object.values(COUNTRY_ROUTES).some((v) => v.display === currentPlace);
+  const effectivePlace = contextDestination && currentMessage && !isSwitch && !isRegionAnswer ? '' : place;
   let known = effectivePlace && Object.keys(BASE).includes(effectivePlace) ? effectivePlace : '';
   let routeKey = '';
   let display = '';
@@ -510,9 +739,32 @@ export function askFujin(
       lower
     );
   const travelers = hasPartySignal ? parseTravelers(lower) : defaultTravelers;
+  // Guided slots (Layla-style, Nov 11): the month, the trip length and
+  // the departure city are what the trip card is built from, so the
+  // conversation collects them one question at a time instead of dumping
+  // a full plan over a half-known trip.
+  const month = findMonth(lower);
+  const duration = parseDuration(lower);
+  // Origin: from the conversation ("from NYC"), from a bare-city answer
+  // ("yes new york"), or from the trip state the page/server already
+  // collected. The origin is passed as context, never appended to the
+  // text: appending "(flying from New York)" put New York at the END of
+  // the text, so lastPlaceMentioned made it the DESTINATION (Nov 11).
+  const origin =
+    findOrigin(text) ||
+    (currentMessage ? findOriginAnswer(currentMessage) : '') ||
+    (contextOrigin || '');
+  const hasBudget = /\$\s?\d|budget|economy|cheapest|affordable|cheap/.test(lower);
+  // Europe with no scope ("5 countries", "central europe", "portugal")
+  // still needs a choice: Central Europe or Portugal. A scoped request
+  // ("5 main countries") already has its route — don't narrow it.
+  const regionQuestion =
+    display === 'Europe' &&
+    !/\b\d+\s*(countries|stops|cities)\b/.test(lower) &&
+    !/central europe|eastern europe|portugal|lisbon|porto|sintra/.test(lower);
   const missing: string[] = [];
-  if (!/20\d\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/.test(lower)) missing.push('Dates');
-  if (!/\$\s?\d|budget|economy|cheapest|affordable|cheap/.test(lower)) missing.push('Budget');
+  if (!month) missing.push('Dates');
+  if (!hasBudget) missing.push('Budget');
   if (!/slow|fast|relax|adventure|food|surf|hike|culture/.test(lower)) missing.push('Pace');
   // Departure city: the flight fare depends on where the traveler flies
   // from, so ask for it when planning a trip and it was never said
@@ -521,7 +773,43 @@ export function askFujin(
   // need no departure city.
   const planningTrip = /plan|trip|flight|fly to|go to|travel to|visit|book|itinerary|holiday|vacation/.test(lower);
   const onTripNow = /tonight|right now|open now|where should (i|we) eat/.test(lower);
-  if (planningTrip && !onTripNow && !findOrigin(text)) missing.push('Departure city');
+  if (planningTrip && !onTripNow && !origin) missing.push('Departure city');
+  // Duration gates the trip card (nights per city), so it is a real
+  // missing item when planning — but never for a food/on-trip question.
+  const needsDuration = planningTrip && !onTripNow && (known || routeKey) && !duration;
+  if (needsDuration) missing.push('Duration');
+  // One question at a time, in Layla's order: region (Europe only),
+  // when + how long, flying from, budget when unknown. Never a wall of
+  // text or a full plan before the details exist.
+  const nextQuestion = (): string => {
+    if (regionQuestion)
+      return `Europe on a solo budget? Absolutely — we can stretch those dollars and still hit incredible historic sights, buzzing hostels, and top-tier street food. Which vibe sounds better for you — Central Europe (Prague, Vienna, Budapest: winter wonderland, thermal baths, dirt-cheap beer and food) or sunny Portugal (Lisbon & Porto: mild winter, great food, coastal viewpoints)?`;
+    if (!month && !duration)
+      return `When are you thinking of going, and for how long? (For example: January, 14 days.)`;
+    if (!month) return `When are you thinking of going? (For example: January, or next spring.)`;
+    if (!duration) return `How many days would you like your trip to be? (For example: 7, 10, or 14 days?)`;
+    if (!origin) return `Where will you be flying out from?`;
+    if (!hasBudget) return `Roughly what budget do you have in mind for the trip?`;
+    return '';
+  };
+  // Trip Summary (Layla's "Does this sound like the dream winter
+  // route?"): route, dates, style, travelers — then the traveler confirms
+  // and taps Build my plan. Nights come from distributeNights, so the
+  // summary and the trip card always agree.
+  const tripSummary = (dest: string, route: string): string => {
+    const legs = route ? distributeNights(route, duration || 14) : [];
+    const routeLine =
+      legs.length > 1
+        ? `${origin ? `${origin} ✈️ ` : ''}${legs.map((l) => `${l.city} (${l.nights} nights)`).join(' 🚆 ')}${origin ? ` ✈️ ${origin}` : ''}`
+        : legs.length === 1
+          ? `${origin ? `${origin} ✈️ ` : ''}${legs[0].city}`
+          : dest;
+    const monthName = month ? MONTH_NAMES[month - 1] : '';
+    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport. Does this sound right? Tap Build my plan to generate the full trip card.`;
+  };
+  const isConfirmation = /^(yes|yeah|yep|sure|ok|okay|looks great|looks good|perfect|sounds good|sounds great|build it|let'?s build|go ahead|do it|great|love it)\b/.test(
+    currentLower.trim()
+  );
   if (!known) {
     // RECOMMEND — the traveler gave constraints but no destination, or said
     // they have nothing in mind / are open to anything. Propose a route
@@ -535,6 +823,12 @@ export function askFujin(
       );
     const wantsCheap = /budget|cheap|affordable|low cost|economy|cheapest/.test(lower);
     if (routeKey) {
+      // Bare "Europe" still needs the region choice before any route is
+      // proposed — proposing the 5-country loop AND asking Central vs
+      // Portugal in the same breath would contradict itself.
+      if (regionQuestion) {
+        return { destination: display, travelers, reply: nextQuestion(), missing, needsMore: true };
+      }
       const route = COUNTRY_ROUTES[routeKey];
       let routeText = route.route;
       // Season notes, only when the traveler named the month — a January
@@ -543,11 +837,22 @@ export function askFujin(
         routeText = `January is actually a smart choice for a first trip: fewer crowds, lower prices, and the south stays mild. ${routeText}`;
       if (routeKey === 'egypt' && /\bmar/.test(lower))
         routeText = `March is a great month for Egypt — warm days, cool evenings, and the desert is not too hot for the tombs yet. ${routeText}`;
+      const q = nextQuestion();
+      if (q) {
+        return {
+          destination: display,
+          travelers,
+          reply: `Here's a route that fits — ${routeText}${wantsCheap ? ' Since you asked for affordable, I’ll lead with the Cheapest option — hostels and guesthouses, public transport, and low-cost flights where they help.' : ''} ${q}`,
+          missing,
+          needsMore: true,
+        };
+      }
       return {
         destination: display,
         travelers,
-        reply: `Here's a route that fits — ${routeText}${wantsCheap ? ' Since you asked for affordable, I’ll lead with the Cheapest option — hostels and guesthouses, public transport, and low-cost flights where they help.' : ''} I can build the full plan with Cheapest / Best value / Premium options. If that sounds good, say so — or name another place and I’ll replan.`,
+        reply: tripSummary(display, routeKey),
         missing,
+        needsMore: false,
       };
     }
     if (noIdea) {
@@ -555,12 +860,12 @@ export function askFujin(
       // request to recommend, not to ask again. Best fit with no
       // destination anywhere: Bali (affordable + great food) — framed as
       // a suggestion the traveler can change.
-      return {
-        destination: 'Bali',
-        travelers,
-        reply: `Here's a great first pick — Bali: affordable flights and stays, and some of the best local food anywhere (warungs, night markets, Ubud). Stay in guesthouses and small hotels, and get around by scooter or Gojek/Grab instead of private cars — it's cheaper, and it's how locals travel. I can build the full plan with Cheapest / Best value / Premium options. If that sounds good, say so — or name another place and I'll replan.`,
-        missing,
-      };
+      const q = nextQuestion();
+      const proposal = `Here's a great first pick — Bali: affordable flights and stays, and some of the best local food anywhere (warungs, night markets, Ubud). Stay in guesthouses and small hotels, and get around by scooter or Gojek/Grab instead of private cars — it's cheaper, and it's how locals travel.`;
+      if (q) {
+        return { destination: 'Bali', travelers, reply: `${proposal} ${q}`, missing, needsMore: true };
+      }
+      return { destination: 'Bali', travelers, reply: tripSummary('Bali', ''), missing, needsMore: false };
     }
     // No constraints to recommend from — ask which city or country.
     return {
@@ -568,11 +873,35 @@ export function askFujin(
       travelers,
       reply: `Got it — a trip for ${travelers} traveler${travelers > 1 ? 's' : ''}. Which city or country would you like to go to?`,
       missing: ['Destination', ...missing],
+      needsMore: true,
+    };
+  }
+  // Known destination (Kyoto, Bali, Paris...): still guided — ask the one
+  // missing slot instead of dumping the plan over a half-known trip.
+  const q = nextQuestion();
+  if (q) {
+    return {
+      destination: known,
+      travelers,
+      reply: `Got it — ${known} for ${travelers} traveler${travelers > 1 ? 's' : ''}. ${q}`,
+      missing,
+      needsMore: true,
+    };
+  }
+  if (isConfirmation) {
+    return {
+      destination: known,
+      travelers,
+      reply: `Great — your trip is set. Tap Build my plan below to generate the full trip card.`,
+      missing,
+      needsMore: false,
     };
   }
   return {
-    destination: known, travelers,
-    reply: `Got it — ${known} for ${travelers} traveler${travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, and you book it all with FujinTrip — no bouncing between booking sites.`,
+    destination: known,
+    travelers,
+    reply: tripSummary(known, ''),
     missing,
+    needsMore: false,
   };
 }
