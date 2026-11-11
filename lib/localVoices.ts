@@ -28,6 +28,14 @@ export type LocalVoices = { text: string; source: string };
 
 const cache = new Map<string, { at: number; voices: LocalVoices }>();
 
+// An empty result is never cached for long: a transient failure
+// (Wikivoyage throttling the shared IP, a slow network, the 4s budget
+// expiring under burst load) must not hide traveler notes for 24 hours.
+// Real results cache 24h; empty results are not cached at all, so the
+// next message retries the fetch right away. Verified Nov 11: the old
+// code cached empty results for 24h, so one throttled fetch poisoned
+// Kyoto voices for the rest of the day (3/69 campaign failures).
+
 // Travel subreddit per featured destination; anything else uses r/travel.
 const SUBREDDITS: Record<string, string> = {
   Kyoto: 'JapanTravel',
@@ -143,6 +151,7 @@ export async function fetchLocalVoices(destination: string): Promise<LocalVoices
     work,
     new Promise<LocalVoices>((resolve) => setTimeout(() => resolve({ text: '', source: '' }), FETCH_BUDGET_MS)),
   ]).catch(() => ({ text: '', source: '' } as LocalVoices));
-  cache.set(key, { at: Date.now(), voices });
+  // Cache only real results — see the note above the cache declaration.
+  if (voices.text) cache.set(key, { at: Date.now(), voices });
   return voices;
 }
