@@ -114,8 +114,13 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           message: text,
           // Conversation history: the last few turns, so the AI remembers
           // the trip instead of treating each message as a fresh
-          // conversation (the Nov 10 Europe bug).
-          history: msgs.slice(-6).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
+          // conversation (the Nov 10 Europe bug). 10 turns — a long
+          // conversation must not lose the trip.
+          history: msgs.slice(-10).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
+          // Durable trip memory: the trip already established (destination
+          // + travelers) goes with EVERY request, so it survives history
+          // scrolling off the window.
+          ...(lastParsed ? { tripState: lastParsed } : {}),
           // On-trip mode: tell the server the traveler is already there.
           ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
         }),
@@ -129,10 +134,10 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
         }
       } else {
-        parsed = withOptions(askFujin(contextText));
+        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text));
       }
     } catch {
-      parsed = withOptions(askFujin(contextText));
+      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text));
     }
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
