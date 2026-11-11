@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, bookingLinks, comparisonFor, optionsLine, type Plan } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, findOrigin, optionsLine, type Plan } from '../lib/planner';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 
@@ -27,12 +27,74 @@ function SafeImg({ src, alt, label, className }: { src: string; alt: string; lab
   return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
 }
 
+// Render an AI reply as readable formatted text. The model writes
+// markdown (bold, bullets, headings), and a plain-text bubble shows it as
+// a wall of asterisks (Nov 11 review: a Europe plan was unreadable).
+// Small safe renderer — no HTML parsing, React escapes all text, so no
+// injection risk. User messages stay plain text.
+function inlineMd(text: string, keyPrefix: string): ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith('**') && p.endsWith('**') && p.length > 4) return <strong key={`${keyPrefix}-${i}`}>{p.slice(2, -2)}</strong>;
+    if (p.startsWith('*') && p.endsWith('*') && p.length > 2) return <em key={`${keyPrefix}-${i}`}>{p.slice(1, -1)}</em>;
+    return <span key={`${keyPrefix}-${i}`}>{p}</span>;
+  });
+}
+
+function formatReply(text: string): ReactNode {
+  const lines = text.split('\n');
+  const out: ReactNode[] = [];
+  let bullets: string[] = [];
+  const flushBullets = () => {
+    if (!bullets.length) return;
+    const items = bullets;
+    bullets = [];
+    out.push(
+      <ul key={`ul-${out.length}`} style={{ margin: '6px 0', paddingLeft: 18 }}>
+        {items.map((b, i) => (
+          <li key={i}>{inlineMd(b, `b${out.length}-${i}`)}</li>
+        ))}
+      </ul>
+    );
+  };
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushBullets();
+      return;
+    }
+    const bullet = trimmed.match(/^[-*•]\s+(.*)$/);
+    if (bullet) {
+      bullets.push(bullet[1]);
+      return;
+    }
+    const heading = trimmed.match(/^#{1,3}\s+(.*)$/);
+    if (heading) {
+      flushBullets();
+      out.push(
+        <p key={i} style={{ margin: '8px 0 4px', fontWeight: 700 }}>
+          {inlineMd(heading[1], `h${i}`)}
+        </p>
+      );
+      return;
+    }
+    flushBullets();
+    out.push(
+      <p key={i} style={{ margin: '4px 0' }}>
+        {inlineMd(trimmed, `p${i}`)}
+      </p>
+    );
+  });
+  flushBullets();
+  return <>{out}</>;
+}
+
 function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; bookedDestinations: string[] }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number } | null>(null);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
@@ -103,6 +165,9 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     // Everything the traveler said so far, for the built-in planner when
     // the server can't be reached — same memory the server gets.
     const contextText = [...msgs.filter((m) => m.who === 'user').map((m) => m.text), text].join(' ');
+    // The departure city, from everything the traveler said so far — it
+    // rides along in tripState so the server never has to ask twice.
+    const origin = findOrigin(contextText) || lastParsed?.origin || '';
     // Live AI first (server route); any failure falls back to the built-in planner.
     let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
     let live = false;
@@ -118,9 +183,9 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           // conversation must not lose the trip.
           history: msgs.slice(-10).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
           // Durable trip memory: the trip already established (destination
-          // + travelers) goes with EVERY request, so it survives history
-          // scrolling off the window.
-          ...(lastParsed ? { tripState: lastParsed } : {}),
+          // + travelers + departure city) goes with EVERY request, so it
+          // survives history scrolling off the window.
+          ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}) } } : {}),
           // On-trip mode: tell the server the traveler is already there.
           ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
         }),
@@ -145,7 +210,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
       // A new destination means a new trip: the old plan no longer applies
       // — clear it so the traveler builds a fresh one for this trip.
       if (lastParsed && parsed.destination !== lastParsed.destination) setPlan(null);
-      setLastParsed({ destination: parsed.destination, travelers: parsed.travelers });
+      setLastParsed({ destination: parsed.destination, travelers: parsed.travelers, ...(origin ? { origin } : {}) });
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
     }
@@ -257,14 +322,12 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   // Curated guide for the current plan's destination (Kyoto only, researched
   // Nov 2026) — the fallback when no live-fetch voices exist for it.
   const guide = plan ? guideFor(plan.destination) : null;
-  // Honest booking links for the plan PDF ("How to book").
-  const links = plan ? bookingLinks(plan.destination) : null;
   return (
     <div>
       <div className="chat">
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
-            <span className="bubble">{m.text}</span>
+            {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
             {m.who === 'ai' && m.tips && m.tips.length > 0 && (
               <ul style={{ fontSize: 13, color: '#6b655a', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
                 {m.tips.map((t) => <li key={t}>{t}</li>)}
@@ -340,27 +403,16 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
             </div>
           ))}
           <h3 style={{ marginTop: 24 }}>How to book</h3>
-          <p style={{ fontSize: 14 }}>Booking the <strong>{plan.options[choice].name}</strong> plan — ${plan.options[choice].total.toLocaleString()} for {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''}. Prices are planning estimates, not live quotes.</p>
+          <p style={{ fontSize: 14 }}>Book the <strong>{plan.options[choice].name}</strong> plan — ${plan.options[choice].total.toLocaleString()} for {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''} — with FujinTrip. One booking, one price; no bouncing between booking sites. Prices are planning estimates, not live quotes.</p>
           <ul style={{ fontSize: 14 }}>
-            <li style={{ marginBottom: 8 }}><strong>Flights — book with FujinTrip:</strong>{' '}
-              <button className="ghost no-print" onClick={bookPlan}>Book this plan with FujinTrip</button>
-              <span className="print-only">Save a booking request in My Trips on fujintrip.com — the FujinTrip team follows up. Live booking activates with Duffel live mode. https://fujintrip.com</span>
-              <span className="no-print" style={{ color: '#6b655a' }}> A booking request — the team follows up; live booking activates with Duffel live mode.</span>
-            </li>
-            <li style={{ marginBottom: 8 }}><strong>Hotels — check real prices:</strong>{' '}
-              <a href={links!.hotels} target="_blank" rel="noreferrer">Google Hotels — {plan.destination}</a>
-              <span className="print-only"> {links!.hotels}</span>
-            </li>
-            <li style={{ marginBottom: 8 }}><strong>Car rental — check prices:</strong>{' '}
-              <a href={links!.cars} target="_blank" rel="noreferrer">Car rental in {plan.destination}</a>
-              <span className="print-only"> {links!.cars}</span>
-            </li>
-            <li><strong>Activities — check prices:</strong>{' '}
-              <a href={links!.activities} target="_blank" rel="noreferrer">Tours &amp; activities in {plan.destination}</a>
-              <span className="print-only"> {links!.activities}</span>
-            </li>
+            <li style={{ marginBottom: 8 }}><strong>Flights:</strong> booked with FujinTrip — your fare is passed through at cost, plus our service fee shown separately at checkout.</li>
+            <li style={{ marginBottom: 8 }}><strong>Hotels:</strong> booked with FujinTrip — the team confirms your stay with the hotel.</li>
+            <li style={{ marginBottom: 8 }}><strong>Car rental:</strong> booked with FujinTrip — picked up at the airport or your hotel.</li>
+            <li><strong>Activities:</strong> booked with FujinTrip — tickets and guides confirmed before you travel.</li>
           </ul>
-          <p className="notice">These links open price checks on other sites — FujinTrip takes no cut from them and never invents a price.</p>
+          <p><button className="primary no-print" onClick={bookPlan}>Book this plan with FujinTrip</button></p>
+          <p className="print-only">To book: save a booking request in My Trips on fujintrip.com — the FujinTrip team follows up. Live booking activates with Duffel live mode. https://fujintrip.com</p>
+          <p className="notice">A booking request — the team follows up; live booking activates with Duffel live mode. Nothing is booked on another site.</p>
           <h3 style={{ marginTop: 24 }}>What travelers say</h3>
           {voices && voices.destination === plan.destination ? (
             <div>
@@ -382,7 +434,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           )}
           <h3>Money-saving tips</h3>
           <ul>{plan.tips.map((t) => <li key={t}>{t}</li>)}</ul>
-          <p style={{ fontSize: 13, color: '#6b655a' }}>Travellers liked: {plan.liked.join(' · ')} — Verify with review links and hotel websites before you book.</p>
+          <p style={{ fontSize: 13, color: '#6b655a' }}>Travellers liked: {plan.liked.join(' · ')} — Book it all with FujinTrip, one booking, one price.</p>
         </div>
       )}
     </div>
@@ -461,7 +513,7 @@ export default function Home() {
         <section className="hero">
           <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
           <h1>One complete plan. Cheapest, Best value, or Premium.</h1>
-          <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, with links to reviews and hotel websites.</p>
+          <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, all booked with FujinTrip.</p>
         </section>
 
         <div className="tabs" role="tablist" aria-label="Search">
@@ -531,7 +583,7 @@ export default function Home() {
 
         <section>
           <h2>How FujinTrip works</h2>
-          <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — with links to reviews and hotel websites so you can verify before you book.</p>
+          <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — and you book it all with FujinTrip.</p>
           <h2 style={{ marginTop: 28 }}>My Trips</h2>
           <p style={{ fontSize: 13, color: '#6b655a' }}>“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
           {trips.length === 0 ? <p style={{ color: '#6b655a' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (

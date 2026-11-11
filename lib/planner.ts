@@ -42,7 +42,7 @@ export function buildPlan(destination: string, travelers: number, days = 3): Pla
   return {
     destination, travelers, options, days: planDays,
     tips: ['Book the flight + hotel together — that’s where most of the saving comes from.', 'Travel midweek when you can; weekend flights cost more for the same seat.', 'Check the hotel’s own website before booking — sometimes it’s cheaper, and we link it.'],
-    liked: ['One plan, not seven tabs', 'Clear Cheapest / Best value / Premium choices', 'Links to reviews and hotel websites to verify'],
+    liked: ['One plan, not seven tabs', 'Clear Cheapest / Best value / Premium choices', 'One booking with FujinTrip — no bouncing between sites'],
     notLiked: ['Live prices need a connected supplier — these are planning estimates for now'],
   };
 }
@@ -418,19 +418,26 @@ export function optionsLine(destination: string, travelers: number): string {
   return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}. Tap Build my plan to pick one.`;
 }
 
-// Booking links for the plan PDF ("How to book"). Honest links only:
-// Google Hotels for real hotel prices, Google searches for cars and
-// activities — built from the destination name, never an invented hotel
-// or supplier URL. Flights are booked with FujinTrip itself (a booking
-// request in My Trips; live booking activates with Duffel live mode),
-// so there is no external flights link.
-export function bookingLinks(destination: string): { hotels: string; cars: string; activities: string } {
-  const q = encodeURIComponent(destination);
-  return {
-    hotels: `https://www.google.com/travel/hotels/search?q=${q}`,
-    cars: `https://www.google.com/search?q=car+rental+${q}`,
-    activities: `https://www.google.com/search?q=${q}+tours+activities`,
-  };
+// Departure city (origin): the flight fare depends on where the traveler
+// flies from, so the AI must ask for it when it is missing (Nov 11 review:
+// a Europe plan was priced without ever asking where the traveler flies
+// from). Matches "from NYC", "from New York", "flying out of London",
+// "departing from Paris". Returns '' when nothing was said.
+const ORIGIN_STOPWORDS = new Set(['me', 'us', 'there', 'home', 'here', 'scratch', 'now', 'today', 'tomorrow']);
+const ORIGIN_TRAILING = new Set([
+  'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', 'next', 'this', 'in', 'on', 'at',
+]);
+
+export function findOrigin(text: string): string {
+  const lower = text.toLowerCase();
+  const m = lower.match(/\b(?:from|out of|depart(?:ing|s)? from|leav(?:e|ing) from)\s+([a-z]+(?:\s+[a-z]+)?)/);
+  if (!m) return '';
+  const words = m[1].trim().split(/\s+/);
+  while (words.length > 1 && ORIGIN_TRAILING.has(words[words.length - 1])) words.pop();
+  if (words.length === 0 || ORIGIN_STOPWORDS.has(words[0])) return '';
+  if (words.length === 1 && /^[a-z]{2,4}$/.test(words[0])) return words[0].toUpperCase();
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 export function askFujin(
@@ -507,6 +514,14 @@ export function askFujin(
   if (!/20\d\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/.test(lower)) missing.push('Dates');
   if (!/\$\s?\d|budget|economy|cheapest|affordable|cheap/.test(lower)) missing.push('Budget');
   if (!/slow|fast|relax|adventure|food|surf|hike|culture/.test(lower)) missing.push('Pace');
+  // Departure city: the flight fare depends on where the traveler flies
+  // from, so ask for it when planning a trip and it was never said
+  // (Nov 11 review: a Europe plan was priced without ever asking).
+  // Not for on-trip questions ("where should I eat tonight?") — those
+  // need no departure city.
+  const planningTrip = /plan|trip|flight|fly to|go to|travel to|visit|book|itinerary|holiday|vacation/.test(lower);
+  const onTripNow = /tonight|right now|open now|where should (i|we) eat/.test(lower);
+  if (planningTrip && !onTripNow && !findOrigin(text)) missing.push('Departure city');
   if (!known) {
     // RECOMMEND — the traveler gave constraints but no destination, or said
     // they have nothing in mind / are open to anything. Propose a route
@@ -557,7 +572,7 @@ export function askFujin(
   }
   return {
     destination: known, travelers,
-    reply: `Got it — ${known} for ${travelers} traveler${travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, with links to reviews and hotel websites so you can verify before you book.`,
+    reply: `Got it — ${known} for ${travelers} traveler${travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, and you book it all with FujinTrip — no bouncing between booking sites.`,
     missing,
   };
 }
