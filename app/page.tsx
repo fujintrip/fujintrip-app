@@ -276,7 +276,7 @@ export default function Home() {
       </main>
       <footer>
         <div className="wrap">
-          <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Named for Fujin, Japan’s wind god.</p>
+          <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Travel globally, act locally. Named for Fujin, Japan’s wind god.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>
           <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
           <p><a href="/privacy">Privacy Policy</a></p>
