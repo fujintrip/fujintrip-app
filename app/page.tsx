@@ -2,9 +2,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, type Plan } from '../lib/planner';
+import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 
 type Trip = { id: string; label: string; status: string; date: string };
+type Voices = { destination: string; text: string; source: string } | null;
 // Local copy of the Ogata Korin Wind God (public domain) — the Wikimedia
 // Commons URL this used to point at 404s (the file is not on Commons under
 // that name), so the portrait never loaded. Served locally now; credit stays
@@ -25,13 +27,22 @@ function SafeImg({ src, alt, label, className }: { src: string; alt: string; lab
   return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
 }
 
-function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: number }) => void }) {
+function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string) => void }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
   const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
+  // Fresh traveler material fetched live for the last chat destination
+  // (route returns it as `voices`) — feeds the "What travelers say" block.
+  const [voices, setVoices] = useState<Voices>(null);
+  // On-trip mode: the traveler is already at the destination and wants
+  // short, right-now local answers. WhatsApp delivery is a later step
+  // (needs a business number) — this mode works in the chat today.
+  const [tripMode, setTripMode] = useState(false);
+  // Confirmation line for the plan actions below (share / watch / hold / human).
+  const [actionMsg, setActionMsg] = useState('');
   const send = async () => {
     const text = input.trim();
     if (!text) return;
@@ -43,11 +54,23 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
     let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
     let live = false;
     try {
-      const r = await fetch('/api/fujin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+      const r = await fetch('/api/fujin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          // On-trip mode: tell the server the traveler is already there.
+          ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
+        }),
+      });
       const j = await r.json();
       if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
         parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [], tips: Array.isArray(j.tips) ? j.tips.filter((t: unknown): t is string => typeof t === 'string').slice(0, 3) : [] };
         live = j.live === true;
+        // Keep the fresh traveler material the server fetched for this trip.
+        if (typeof j.voices === 'string' && j.voices && typeof j.voicesDestination === 'string' && j.voicesDestination) {
+          setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
+        }
       } else {
         parsed = askFujin(text);
       }
@@ -67,7 +90,58 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
     const dest = lastParsed?.destination ?? 'Kyoto';
     const people = lastParsed?.travelers ?? 2;
     setPlan(buildPlan(dest, people, 3));
+    setActionMsg('');
   };
+
+  // --- Plan actions -------------------------------------------------------
+  // Share: copies a readable plan summary to the clipboard.
+  const sharePlan = async () => {
+    if (!plan) return;
+    const best = plan.options[1];
+    const summary = [
+      `My FujinTrip plan — ${plan.destination} for ${plan.travelers} traveler${plan.travelers > 1 ? 's' : ''}`,
+      `Best value: $${best.total.toLocaleString()} (Flights $${best.flight.toLocaleString()} · Hotel $${best.hotel.toLocaleString()} · Car $${best.car.toLocaleString()} · Activities $${best.activities.toLocaleString()})`,
+      `Cheapest: $${plan.options[0].total.toLocaleString()} · Premium: $${plan.options[2].total.toLocaleString()}`,
+      'Prices are planning estimates, not live quotes. fujintrip.com',
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(summary);
+      setActionMsg('Plan copied — paste it to share with your travel companions.');
+    } catch {
+      // Clipboard API unavailable (old browser / no permission): show the
+      // text so the traveler can copy it by hand instead of failing silently.
+      setActionMsg(`Copy didn’t work in this browser — here’s the plan to share:\n${summary}`);
+    }
+  };
+  // PDF: the browser print dialog, with a print stylesheet that prints
+  // only the plan (see globals.css). No extra dependency.
+  const printPlan = () => window.print();
+  // Watch this price: the whole-package price-drop alert. Honest label —
+  // planner prices are static estimates, so no alert can fire until live
+  // fares connect; the watch is saved now and switches on then.
+  const watchPrice = () => {
+    if (!plan) return;
+    const best = plan.options[1];
+    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price watch — alerts start when live fares connect');
+    setActionMsg('Watching this price. You’ll be alerted when the whole trip price drops — alerts switch on once live fares are connected; planner prices don’t move until then.');
+  };
+  // Hold my price: a request for the FujinTrip team, not a guaranteed hold
+  // — there is no live inventory to freeze a price against yet.
+  const holdPrice = () => {
+    if (!plan) return;
+    const best = plan.options[1];
+    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price hold requested');
+    setActionMsg('Hold requested. This asks the FujinTrip team to hold the Best value price when booking opens — it is a request, not a guaranteed hold yet, because there is no live inventory to freeze it against.');
+  };
+  // Ask a human: a person reviews the plan before anything is booked.
+  const askHuman = () => {
+    if (!plan) return;
+    onSaveTrip(`${plan.destination} plan — Best value $${plan.options[1].total.toLocaleString()}`, 'Advisor review requested');
+    setActionMsg('Sent for a human check. A person reviews this plan before anything is booked — no booking happens until they’ve looked at it.');
+  };
+  // Curated guide for the current plan's destination (Kyoto only, researched
+  // Nov 2026) — the fallback when no live-fetch voices exist for it.
+  const guide = plan ? guideFor(plan.destination) : null;
   return (
     <div>
       <div className="chat">
@@ -83,14 +157,25 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
         ))}
       </div>
       <div className="row">
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Try: Bali, 2 travelers, surf and food, next spring, $2,000" aria-label="Ask Fujin AI" />
+        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
         <button className="primary" onClick={send}>Send</button>
       </div>
       <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
-      {aiLive !== null && <p style={{ fontSize: 12, color: '#6b655a' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
-      <p style={{ marginTop: 16 }}><button className="primary" onClick={build}>Build my plan</button></p>
+      <p className="selling">No margin on top, no hidden fees — FujinTrip earns commission from suppliers, never by marking up your price.</p>
+      {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: '#6b655a' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
+      <p className="no-print" style={{ marginTop: 16 }}>
+        <button className="primary" onClick={build}>Build my plan</button>{' '}
+        {lastParsed && (
+          <button className="ghost" onClick={() => setTripMode((m) => !m)}>
+            {tripMode ? `✓ On-trip mode on — ${lastParsed.destination}` : 'Take this plan on your trip'}
+          </button>
+        )}
+      </p>
+      {tripMode && lastParsed && (
+        <p className="no-print" style={{ fontSize: 13, color: '#6b655a' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
+      )}
       {plan && (
-        <div style={{ marginTop: 20 }}>
+        <div className="plan-print" style={{ marginTop: 20 }}>
           <h3>Your {plan.destination} plan — pick one</h3>
           <div className="compare" style={{ marginTop: 12 }}>
             {plan.options.map((o, i) => (
@@ -108,6 +193,14 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
             ))}
           </div>
           <p className="notice">Planning estimates — not a live quote. Prices come from suppliers once connected; we never invent live fares.</p>
+          <div className="row no-print" style={{ marginTop: 12 }}>
+            <button className="ghost" onClick={sharePlan}>Share plan</button>
+            <button className="ghost" onClick={printPlan}>Save as PDF</button>
+            <button className="ghost" onClick={watchPrice}>Watch this price</button>
+            <button className="ghost" onClick={holdPrice}>Hold my price</button>
+            <button className="ghost" onClick={askHuman}>Ask a human to check this plan</button>
+          </div>
+          {actionMsg && <p className="no-print" style={{ fontSize: 13, color: '#1f5c4d', whiteSpace: 'pre-line' }}>{actionMsg}</p>}
           <h3 style={{ marginTop: 24 }}>Day by day</h3>
           {plan.days.map((d) => (
             <div key={d.day} style={{ borderTop: '1px solid #f0ead6', padding: '12px 0' }}>
@@ -115,6 +208,25 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
               <p><b>Morning:</b> {d.morning}<br /><b>Afternoon:</b> {d.afternoon}<br /><b>Evening:</b> {d.evening}<br /><b>Transport:</b> {d.transport} · <b>Stay:</b> {d.stay}</p>
             </div>
           ))}
+          <h3 style={{ marginTop: 24 }}>What travelers say</h3>
+          {voices && voices.destination === plan.destination ? (
+            <div>
+              <p style={{ fontSize: 13, color: '#6b655a' }}>From real traveler guides — never invented reviews. Source: {voices.source || 'Wikivoyage traveler guide, fetched live'}.</p>
+              {voices.text.split('\n').filter((l) => l.trim()).map((line, i) => (
+                <p key={i} style={{ fontSize: 14 }}>{line}</p>
+              ))}
+            </div>
+          ) : guide ? (
+            <div>
+              <p style={{ fontSize: 13, color: '#6b655a' }}>From researched traveler guides — real dishes and places, never invented reviews. Source: {guide.source}.</p>
+              <p><b>Dishes to know:</b></p>
+              <ul>{guide.dishes.map((d) => <li key={d}>{d}</li>)}</ul>
+              <p><b>Named places:</b></p>
+              <ul>{guide.places.map((p) => <li key={p}>{p}</li>)}</ul>
+            </div>
+          ) : (
+            <p>No traveler notes fetched for {plan.destination} yet — ask Fujin AI about it in the chat and fresh notes will be pulled in live.</p>
+          )}
           <h3>Money-saving tips</h3>
           <ul>{plan.tips.map((t) => <li key={t}>{t}</li>)}</ul>
           <p style={{ fontSize: 13, color: '#6b655a' }}>Travellers liked: {plan.liked.join(' · ')} — Verify with review links and hotel websites before you book.</p>
@@ -175,7 +287,7 @@ export default function Home() {
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-trips', JSON.stringify(trips)); } catch {} }, [trips]);
-  const saveTrip = (label: string) => setTrips((t) => [{ id: String(Date.now()), label, status: 'Request saved', date: new Date().toLocaleDateString() }, ...t]);
+  const saveTrip = (label: string, status = 'Request saved') => setTrips((t) => [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString() }, ...t]);
   const useGeo = () => {
     if (!navigator.geolocation) { setGeoStatus('Geolocation is not available in this browser — pick a city below.'); return; }
     setGeoStatus('Asking for your location…');
@@ -200,7 +312,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 
         <section>
@@ -257,6 +369,7 @@ export default function Home() {
             <div className="box"><strong>Booking each leg separately</strong><p style={{ fontSize: 30, margin: '8px 0' }}>${cmp.separate.total.toLocaleString()}</p><table><tbody><tr><td>Flights</td><td>${cmp.separate.flight.toLocaleString()}</td></tr><tr><td>Hotel</td><td>${cmp.separate.hotel.toLocaleString()}</td></tr><tr><td>Car</td><td>${cmp.separate.car.toLocaleString()}</td></tr><tr><td>Sightseeing</td><td>${cmp.separate.activities.toLocaleString()}</td></tr></tbody></table></div>
           </div>
           <p><strong>You save ${cmp.save.toLocaleString()} — about {cmp.savePercent}%.</strong></p>
+          <p style={{ fontSize: 14, color: '#1f5c4d' }}>No margin on top, no hidden fees — FujinTrip earns commission from suppliers, never by marking up your price.</p>
           <p className="notice">Illustrative planning estimates — not a live quote. Live prices come from suppliers once connected.</p>
         </section>
 
@@ -277,6 +390,7 @@ export default function Home() {
       <footer>
         <div className="wrap">
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Travel globally, act locally. Named for Fujin, Japan’s wind god.</p>
+          <p>No margin on top, no hidden fees — FujinTrip earns commission from suppliers, never by marking up your price.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>
           <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
           <p><a href="/privacy">Privacy Policy</a></p>

@@ -59,3 +59,12 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
 .adslot{margin:32px 0;text-align:center}
 .mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f0ead6;font-size:14px}
 @media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:16px}.hero{padding:40px 0 20px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}}
+/* Print ("Save as PDF"): only the plan prints. The chat, search forms,
+   homepage sections, header, footer and ads are hidden; the plan block
+   and its traveler notes print in full. */
+@media print{
+  body{background:#fff}
+  header,footer,.hero,.tabs,.adslot,section,.chat,.row,.selling,.no-print{display:none !important}
+  .panel{border:none;box-shadow:none;padding:0;margin:0}
+  .plan-print{display:block !important}
+}
