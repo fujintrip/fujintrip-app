@@ -120,15 +120,26 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
 
 function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '') {
   const parsed = askFujin(message);
+  // The destination can come from request context, not the message —
+  // on-trip mode passes it as tripContext. Don't ask "which city?" when
+  // we already know it.
+  let destination = parsed.destination;
+  let reply = parsed.reply;
+  let missing = parsed.missing;
+  if (!destination && voicesDest) {
+    destination = voicesDest;
+    reply = `Got it — ${voicesDest} for ${parsed.travelers} traveler${parsed.travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, with links to reviews and hotel websites so you can verify before you book.`;
+    missing = missing.filter((m) => m !== 'Destination');
+  }
   // Even when the live model is down, fresh traveler material still helps.
-  const reply = voices?.text
-    ? `${parsed.reply}\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`
-    : parsed.reply;
+  if (voices?.text) reply += `\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`;
   return NextResponse.json({
     live: false,
     label,
     ...parsed,
+    destination,
     reply,
+    missing,
     voices: voices?.text ?? '',
     voicesSource: voices?.source ?? '',
     voicesDestination: voicesDest,
