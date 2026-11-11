@@ -112,9 +112,15 @@ const TRAVEL_WORDS = [
   'person', 'people', 'family', 'weekend', 'road trip', 'staycation',
 ];
 
+// Regions count as travel too — "europe, january" names a place and a
+// month, and must reach the recommend rule, not the off-topic decline
+// (the Nov 10 Europe bug came back in exactly this form).
+const REGIONS = ['europe', 'asia', 'africa', 'america', 'caribbean', 'mediterranean', 'oceania', 'middle east', 'southeast asia', 'south east asia'];
+
 function isTravel(text: string): boolean {
   const lower = text.toLowerCase();
   if (Object.keys(BASE).some((d) => lower.includes(d.toLowerCase()))) return true;
+  if (REGIONS.some((r) => lower.includes(r))) return true;
   return TRAVEL_WORDS.some((w) => lower.includes(w));
 }
 
@@ -137,9 +143,32 @@ export function askFujin(text: string): { destination: string; travelers: number
   if (!/\$\s?\d|budget/.test(lower)) missing.push('Budget');
   if (!/slow|fast|relax|adventure|food|surf|hike|culture/.test(lower)) missing.push('Pace');
   if (!known) {
-    // Never silently plan the wrong place (it used to default to Kyoto).
-    // Ask which city or country instead — the live AI handles any
-    // destination; this fallback only runs when the live call fails.
+    // RECOMMEND — the traveler gave constraints but no destination, or said
+    // they have nothing in mind. Propose a route that fits instead of
+    // asking again or declining (Nov 10 Europe bug: a budget first-timer
+    // asking for affordable flights + food was declined as off-topic).
+    // A proposal is not a silent default: the reply says it's a suggestion
+    // the traveler can change.
+    const noIdea = /nothing in mind|don'?t know|no idea|anywhere|not sure|don'?t mind|first time|first timer|first trip/.test(lower);
+    const wantsCheap = /budget|cheap|affordable|low cost/.test(lower);
+    const wantsFood = /food|cuisine|eat/.test(lower);
+    if (/europe/.test(lower)) {
+      return {
+        destination: 'Europe',
+        travelers,
+        reply: `Here's a route that fits — and January is actually a smart choice for a first trip: fewer crowds, lower prices, and the south stays mild. Lisbon (Portugal) → Madrid → Barcelona (Spain) → Paris (France) → Rome (Italy) → Athens (Greece): five countries, great food at every stop. Fly between cities on low-cost carriers (Ryanair, easyJet, Wizz Air) — that's where the budget wins. Stay in hostels and family guesthouses, and get around by metro, tram and bus — a day pass beats taxis every time. I can build the full plan with Cheapest / Best value / Premium options. If that sounds good, say so — or name another place and I'll replan.`,
+        missing,
+      };
+    }
+    if (noIdea && (wantsCheap || wantsFood)) {
+      return {
+        destination: 'Bali',
+        travelers,
+        reply: `Here's one that fits — Bali: affordable flights and stays, and some of the best local food anywhere (warungs, night markets, Ubud). Stay in guesthouses and small hotels, and get around by scooter or Gojek/Grab instead of private cars — it's cheaper, and it's how locals travel. I can build the full plan with Cheapest / Best value / Premium options. If that sounds good, say so — or name another place and I'll replan.`,
+        missing,
+      };
+    }
+    // No constraints to recommend from — ask which city or country.
     return {
       destination: '',
       travelers,

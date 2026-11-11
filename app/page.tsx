@@ -50,6 +50,9 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
     // Show your message right away; the AI reply is added when it arrives,
     // so a slow server never looks like the message didn't send.
     setMsgs((m) => [...m, { who: 'user', text }]);
+    // Everything the traveler said so far, for the built-in planner when
+    // the server can't be reached — same memory the server gets.
+    const contextText = [...msgs.filter((m) => m.who === 'user').map((m) => m.text), text].join(' ');
     // Live AI first (server route); any failure falls back to the built-in planner.
     let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
     let live = false;
@@ -59,6 +62,10 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
+          // Conversation history: the last few turns, so the AI remembers
+          // the trip instead of treating each message as a fresh
+          // conversation (the Nov 10 Europe bug).
+          history: msgs.slice(-6).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
           // On-trip mode: tell the server the traveler is already there.
           ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
         }),
@@ -72,10 +79,10 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
           setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
         }
       } else {
-        parsed = askFujin(text);
+        parsed = askFujin(contextText);
       }
     } catch {
-      parsed = askFujin(text);
+      parsed = askFujin(contextText);
     }
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.

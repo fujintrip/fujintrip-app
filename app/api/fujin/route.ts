@@ -78,19 +78,23 @@ const PRICE_TABLE = [...KNOWN_DESTINATIONS, 'Other destinations']
 const SYSTEM_PROMPT = [
   'You are Fujin AI, a travel planner for FujinTrip, a one-stop tourism platform.',
   'You answer ONLY about travel: destinations, flights, hotels, cars, buses, taxis, cruises, sightseeing, trip plans, prices and booking help, and local food and cuisine, restaurants, markets, neighborhoods, festivals, culture and local experiences. Questions about what to eat, where locals eat, and how to experience a place like a local ARE travel questions — answer them, never decline them.',
-  'For anything off-topic (general chat, news, politics, homework, coding, health, or anything not travel), politely decline in one short sentence and steer back to travel, asking where they want to go or what trip they are planning. Never answer off-topic questions even if asked directly, and never argue about the limit.',
+  'For anything off-topic (general chat, news, politics, homework, coding, health, or anything not travel), politely decline in one short sentence and steer back to travel, asking where they want to go or what trip they are planning. Never answer off-topic questions even if asked directly, and never argue about the limit. Only decline when the request has no travel content at all. A travel request with no destination yet is NOT off-topic — recommend, never decline.',
   'For off-topic requests, return destination as an empty string, travelers as 2, reply as the short decline, missing as ["Destination"], and tips as [].',
+  'TONE — sound like a knowledgeable friend who loves travel, not a form. Show feeling: acknowledge what the traveler is feeling (first-trip excitement, budget worries, a special occasion) in a warm sentence before the plan. Be encouraging and specific; never sound robotic or copy-pasted.',
+  'BUDGET — when the traveler says budget, affordable, cheap, or low cost, lead with the Cheapest option and keep every suggestion affordable: budget stays (hostels, motels, guesthouses, not luxury hotels), public transport (metro, tram, bus, day passes) over taxis and private cars unless the traveler asks for private, and low-cost flights. Say plainly where the money is saved. Never push Premium when they asked for affordable.',
+  'ADVICE — give clear, concrete advice grounded in real traveler experience, not generic lines: name the actual transport (which metro/tram/bus, which low-cost carrier, or when a private transfer is worth it), the actual kind of stay (hotel, motel, hostel, guesthouse), and the actual places to eat. Cover flights, stays, and transport in the advice, based on what the traveler asked for. Use the LOCAL VOICES material when it is present; when it is not, use specific knowledge and say what is typical — never invent a price, a review, or a quote.',
   'Understand the traveller’s request in their own language and reply in that same language.',
   'When planning a trip, include a brief day-by-day sketch in the reply (one line per day) naming real local places, markets and dishes where you can — the traveler should feel the plan was written by someone who knows the place, not a template.',
   'Extract: destination, traveler count, dates, budget and travel pace.',
-  'DESTINATION — accept ANY destination the traveler names: any city, country or region (for example Paris, Japan, Europe). Never decline a travel request because the destination is not in the list below. If they name a country or region instead of a city (for example Europe), accept it as the destination and ask which city they would like to start with — add that question to missing. Only return an empty destination for non-travel requests.',
+  'DESTINATION — accept ANY destination the traveler names: any city, country or region (for example Paris, Japan, Europe). Never decline a travel request because the destination is not in the list below. If they name a country or region instead of a city (for example Europe), accept it as the destination and propose a route through it (see RECOMMEND below); add a follow-up question to missing only after proposing.',
+  'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, or anywhere: DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a region (for example Europe), propose a route through that region. Ask at most one short follow-up question, and only after proposing.',
   'Traveler count: "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates, per trip for 2 travelers; scale proportionally for other party sizes). Never invent any other price or fare. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from the table below (about 13% more when booking separately). Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
   'FujinTrip plan prices (2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
   'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[]}.',
-  'If the destination is unclear, ask which city or country they mean — do not pick one of the listed destinations for them.',
+  'If the destination is unclear AND the traveler gave no constraints at all, ask which city or country they mean. If they already said they don\'t know or have nothing in mind, recommend instead of asking again.',
 ].join(' ');
 
 const FUJIN_SCHEMA = {
@@ -174,11 +178,30 @@ export async function POST(req: NextRequest) {
   const raw = body as Record<string, unknown>;
   const message = typeof raw.message === 'string' ? raw.message : '';
 
+  // Conversation history: the chat sends its last few turns so the model
+  // remembers the trip (destination, dates, budget) instead of treating
+  // each message as a fresh conversation (the Nov 10 Europe bug: the
+  // second message lost Europe/January/NYC entirely).
+  type HistoryTurn = { role: 'user' | 'assistant'; content: string };
+  const history: HistoryTurn[] = Array.isArray(raw.history)
+    ? (raw.history as Array<Record<string, unknown>>)
+        .filter((t) => t && typeof t === 'object')
+        .map((t) => ({
+          role: t.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+          content: typeof t.content === 'string' ? t.content : '',
+        }))
+        .filter((t) => t.content.trim().length > 0)
+        .slice(-6)
+    : [];
+  // Plain text of everything the traveler said so far — the fallback and
+  // the destination guess need it too, not just the live model.
+  const fullText = [...history.filter((t) => t.role === 'user').map((t) => t.content), message].filter(Boolean).join(' ');
+
   // On-trip mode (feature 8): the traveler is already at the destination
   // and wants short, right-now local answers. The trip destination also
   // drives the live fetch below.
   const onTrip = typeof raw.tripContext === 'string' && raw.tripContext.trim() ? raw.tripContext.trim() : '';
-  const voicesDest = onTrip || guessDestination(raw, message);
+  const voicesDest = onTrip || guessDestination(raw, fullText);
   // Best-effort and capped (~4s inside): never let the fetch break the chat.
   const voices: LocalVoices = voicesDest ? await fetchLocalVoices(voicesDest).catch(() => ({ text: '', source: '' })) : { text: '', source: '' };
 
@@ -197,7 +220,7 @@ export async function POST(req: NextRequest) {
   const provider = getProvider();
   if (!provider) {
     return fallback(
-      message,
+      fullText,
       'Fujin AI is offline — using the built-in planner. Connect an AI provider (QWEN_API_KEY or MODEL_API_KEY) to switch on live AI.',
       voices,
       voicesDest
@@ -220,6 +243,7 @@ export async function POST(req: NextRequest) {
           model: provider.model,
           messages: [
             { role: 'system', content: systemPrompt },
+            ...history.map((t) => ({ role: t.role, content: t.content })),
             { role: 'user', content: message },
           ],
           temperature: 0.3,
@@ -253,14 +277,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(message, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(message, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest);
     }
 
     return NextResponse.json({
@@ -273,7 +297,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(message, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest);
   }
 }
 
