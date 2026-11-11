@@ -36,6 +36,9 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
     const text = input.trim();
     if (!text) return;
     setInput('');
+    // Show your message right away; the AI reply is added when it arrives,
+    // so a slow server never looks like the message didn't send.
+    setMsgs((m) => [...m, { who: 'user', text }]);
     // Live AI first (server route); any failure falls back to the built-in planner.
     let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
     let live = false;
@@ -58,7 +61,7 @@ function Chat({ onParsed }: { onParsed?: (t: { destination: string; travelers: n
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
     }
-    setMsgs((m) => [...m, { who: 'user', text }, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
+    setMsgs((m) => [...m, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
   };
   const build = () => {
     const dest = lastParsed?.destination ?? 'Kyoto';
