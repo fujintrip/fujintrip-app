@@ -59,6 +59,9 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
 .adslot{margin:32px 0;text-align:center}
 .mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f0ead6;font-size:14px}
 @media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:16px}.hero{padding:40px 0 20px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}}
+/* Screen only: .print-only lines (your choice, full booking URLs) are
+   hidden until printing. */
+.print-only{display:none}
 /* Print ("Save as PDF"): only the plan prints. The chat, search forms,
    homepage sections, header, footer and ads are hidden; the plan block
    and its traveler notes print in full. */
@@ -67,4 +70,11 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
   header,footer,.hero,.tabs,.adslot,section,.chat,.row,.selling,.no-print{display:none !important}
   .panel{border:none;box-shadow:none;padding:0;margin:0}
   .plan-print{display:block !important}
+  /* Print-only lines (your choice, full booking URLs) show only on paper —
+     browsers don't print link hrefs, so the URLs are rendered as text. */
+  .print-only{display:block !important}
+  /* The PDF shows the tier the traveler chose; the other two print as a
+     one-line summary instead of full boxes. */
+  .plan-print .compare{grid-template-columns:1fr}
+  .plan-print .compare .box:not(.chosen){display:none !important}
 }

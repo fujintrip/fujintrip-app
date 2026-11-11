@@ -44,6 +44,46 @@ visitor's location, and featured hidden gems: St. George (Utah), Tacoma
   dashboard (Settings → App-Level Environment Variables), redeploy.
   Pay-as-you-go, roughly $10-$30 per 1,000 trip plans.
 
+## Plan PDF — $1 to download, free when booked
+
+Firm rule (Nov 10, 2026): the AI reply carries real value (the 3 tier prices
+with a clear pick); the options stay in the traveler's browser memory
+(localStorage — trip + built plan + chosen tier, restored on reload) until
+they request the plan; the plan generates as a PDF with links to book.
+Downloading the PDF costs **$1 when the traveler has NOT booked with
+FujinTrip** and is **FREE when they booked with us**.
+
+- The plan view has a "How to book" section: flights are booked with
+  FujinTrip (a booking request saved to My Trips — the team follows up;
+  live booking activates with Duffel live mode); hotels link to Google
+  Hotels, cars and activities to Google searches built from the
+  destination name. In the printed PDF the full URLs print as text.
+- The PDF shows the tier the traveler chose; the other two print as a
+  one-line summary.
+- A trip is "booked" when a My Trips item for that destination is marked
+  "Booked with FujinTrip" (the "Mark as booked" button — set by the
+  traveler or the team when a booking request is confirmed; it is not a
+  live booking).
+- `POST /api/plan-download` decides: `{destination, travelers, booked}`
+  → `{decision: "free" | "pay_1", priceCents, stripe, checkoutUrl}`.
+  Today it returns `stripe: "not_configured"` and `checkoutUrl: null` for
+  the $1 case, and the UI explains Stripe setup is needed — it never
+  pretends a payment happened.
+
+### To collect the $1 (needs the user)
+
+1. Create a Stripe account at https://dashboard.stripe.com/register
+   (business details + bank account for payouts).
+2. In the Stripe dashboard, get the **secret key** (Developers → API keys).
+3. Set `STRIPE_SECRET_KEY` in the DigitalOcean dashboard (Settings →
+   App-Level Environment Variables) and redeploy.
+4. Wire Stripe Checkout in `app/api/plan-download/route.ts` — the route
+   has a marked `// TODO: Stripe Checkout` block: create a Checkout
+   Session for $1 (100 cents, USD) and return its URL as `checkoutUrl`;
+   the UI already redirects there when one is returned. Verify with a
+   Stripe test card first; no real money until live mode is switched on
+   in Stripe.
+
 ## Local dev
 
 ```bash

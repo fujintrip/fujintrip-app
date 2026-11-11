@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, type Plan } from '../lib/planner';
+import { askFujin, buildPlan, bookingLinks, comparisonFor, optionsLine, type Plan } from '../lib/planner';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 
-type Trip = { id: string; label: string; status: string; date: string };
+type Trip = { id: string; label: string; status: string; date: string; destination?: string };
 type Voices = { destination: string; text: string; source: string } | null;
 // Local copy of the Ogata Korin Wind God (public domain) — the Wikimedia
 // Commons URL this used to point at 404s (the file is not on Commons under
@@ -27,7 +27,7 @@ function SafeImg({ src, alt, label, className }: { src: string; alt: string; lab
   return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
 }
 
-function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string) => void }) {
+function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; bookedDestinations: string[] }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -43,6 +43,56 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
   const [tripMode, setTripMode] = useState(false);
   // Confirmation line for the plan actions below (share / watch / hold / human).
   const [actionMsg, setActionMsg] = useState('');
+  // PDF download state: the $1 rule is decided by the server route.
+  const [pdfNotice, setPdfNotice] = useState('');
+  const [pdfPay, setPdfPay] = useState(false);
+  // Options stay in memory: the in-progress trip and built plan survive a
+  // reload (localStorage) until the traveler requests the plan or starts
+  // a new trip. Restored once on mount; writes wait until restore is done
+  // so the mount-time nulls don't wipe the saved values.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem('fujintrip-current-trip');
+      if (t) {
+        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown };
+        if (typeof p.destination === 'string' && typeof p.travelers === 'number') {
+          setLastParsed({ destination: p.destination, travelers: p.travelers });
+          onParsed?.({ destination: p.destination, travelers: p.travelers });
+        }
+      }
+      const pl = localStorage.getItem('fujintrip-current-plan');
+      if (pl) {
+        const d = JSON.parse(pl) as { plan?: unknown; choice?: unknown };
+        const p = d.plan as Plan | null;
+        if (p && typeof p.destination === 'string' && Array.isArray(p.options) && p.options.length === 3 && Array.isArray(p.days)) {
+          setPlan(p);
+          if (typeof d.choice === 'number' && d.choice >= 0 && d.choice <= 2) setChoice(d.choice);
+        }
+      }
+    } catch {}
+    setHydrated(true);
+    // Run once on mount — onParsed is Home's setAiTrip, stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (lastParsed) localStorage.setItem('fujintrip-current-trip', JSON.stringify(lastParsed));
+      else localStorage.removeItem('fujintrip-current-trip');
+    } catch {}
+  }, [hydrated, lastParsed]);
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (plan) localStorage.setItem('fujintrip-current-plan', JSON.stringify({ plan, choice }));
+      else localStorage.removeItem('fujintrip-current-plan');
+    } catch {}
+  }, [hydrated, plan, choice]);
+  // Built-in planner replies carry the 3 tier prices too (same as the
+  // server fallback) — the reply must have real value before the plan.
+  const withOptions = (p: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] }) =>
+    p.destination ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers)}` } : p;
   const send = async () => {
     const text = input.trim();
     if (!text) return;
@@ -79,14 +129,17 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
           setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
         }
       } else {
-        parsed = askFujin(contextText);
+        parsed = withOptions(askFujin(contextText));
       }
     } catch {
-      parsed = askFujin(contextText);
+      parsed = withOptions(askFujin(contextText));
     }
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
     if (parsed.destination) {
+      // A new destination means a new trip: the old plan no longer applies
+      // — clear it so the traveler builds a fresh one for this trip.
+      if (lastParsed && parsed.destination !== lastParsed.destination) setPlan(null);
       setLastParsed({ destination: parsed.destination, travelers: parsed.travelers });
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
@@ -120,16 +173,66 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
       setActionMsg(`Copy didn’t work in this browser — here’s the plan to share:\n${summary}`);
     }
   };
-  // PDF: the browser print dialog, with a print stylesheet that prints
-  // only the plan (see globals.css). No extra dependency.
-  const printPlan = () => window.print();
+  // Book this plan with FujinTrip: a booking request in My Trips (the team
+  // follows up). Live booking activates with Duffel live mode — there is
+  // no checkout yet, so this is honestly a request, not a booking.
+  const bookPlan = () => {
+    if (!plan) return;
+    const chosen = plan.options[choice];
+    onSaveTrip(`${plan.destination} plan — ${chosen.name} $${chosen.total.toLocaleString()}`, 'Booking request — team follows up', plan.destination);
+    setActionMsg('Booking request saved to My Trips. Live booking activates with Duffel live mode — for now the FujinTrip team follows up on your request. Once it’s marked booked, your plan PDF is free.');
+  };
+  // Save as PDF — the $1 rule (firm, Nov 10, 2026): downloading the PDF
+  // costs $1 when the traveler has NOT booked with FujinTrip; it is FREE
+  // when they booked with us. The server route (/api/plan-download)
+  // decides; Stripe is not connected yet, so the $1 path explains that
+  // instead of pretending a payment happened. Nothing is charged and the
+  // plan stays saved either way.
+  const planBooked = plan ? bookedDestinations.includes(plan.destination) : false;
+  const requestPdf = async () => {
+    if (!plan) return;
+    setPdfPay(false);
+    setPdfNotice('Checking your download…');
+    try {
+      const r = await fetch('/api/plan-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: plan.destination, travelers: plan.travelers, booked: planBooked }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.decision === 'free') {
+        setPdfNotice('Your guide is free — you booked with us. Your PDF is opening now.');
+        window.print();
+      } else if (r.ok && j.decision === 'pay_1') {
+        // Future: when Stripe is wired the route returns a checkoutUrl and
+        // we send the traveler there. Today it is not configured.
+        if (typeof j.checkoutUrl === 'string' && j.checkoutUrl) { window.location.href = j.checkoutUrl; return; }
+        setPdfNotice('$1 to download the full plan — free if you book with us. The $1 checkout isn’t connected yet: Stripe setup is needed before anyone can pay. Your plan stays saved here — nothing was charged and no PDF was downloaded.');
+        setPdfPay(true);
+      } else {
+        setPdfNotice('Couldn’t check the download right now — your plan is still saved; try again in a moment.');
+      }
+    } catch {
+      setPdfNotice('Couldn’t reach the server to check the download — your plan is still saved; try again in a moment.');
+    }
+  };
+  // Start a new trip: clears the plan and the saved trip, so the next
+  // chat starts fresh.
+  const startNewTrip = () => {
+    setPlan(null);
+    setLastParsed(null);
+    setChoice(1);
+    setPdfNotice('');
+    setPdfPay(false);
+    setActionMsg('Started a new trip — ask Fujin AI where to next.');
+  };
   // Watch this price: the whole-package price-drop alert. Honest label —
   // planner prices are static estimates, so no alert can fire until live
   // fares connect; the watch is saved now and switches on then.
   const watchPrice = () => {
     if (!plan) return;
     const best = plan.options[1];
-    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price watch — alerts start when live fares connect');
+    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price watch — alerts start when live fares connect', plan.destination);
     setActionMsg('Watching this price. You’ll be alerted when the whole trip price drops — alerts switch on once live fares are connected; planner prices don’t move until then.');
   };
   // Hold my price: a request for the FujinTrip team, not a guaranteed hold
@@ -137,18 +240,20 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
   const holdPrice = () => {
     if (!plan) return;
     const best = plan.options[1];
-    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price hold requested');
+    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price hold requested', plan.destination);
     setActionMsg('Hold requested. This asks the FujinTrip team to hold the Best value price when booking opens — it is a request, not a guaranteed hold yet, because there is no live inventory to freeze it against.');
   };
   // Ask a human: a person reviews the plan before anything is booked.
   const askHuman = () => {
     if (!plan) return;
-    onSaveTrip(`${plan.destination} plan — Best value $${plan.options[1].total.toLocaleString()}`, 'Advisor review requested');
+    onSaveTrip(`${plan.destination} plan — Best value $${plan.options[1].total.toLocaleString()}`, 'Advisor review requested', plan.destination);
     setActionMsg('Sent for a human check. A person reviews this plan before anything is booked — no booking happens until they’ve looked at it.');
   };
   // Curated guide for the current plan's destination (Kyoto only, researched
   // Nov 2026) — the fallback when no live-fetch voices exist for it.
   const guide = plan ? guideFor(plan.destination) : null;
+  // Honest booking links for the plan PDF ("How to book").
+  const links = plan ? bookingLinks(plan.destination) : null;
   return (
     <div>
       <div className="chat">
@@ -186,7 +291,7 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
           <h3>Your {plan.destination} plan — pick one</h3>
           <div className="compare" style={{ marginTop: 12 }}>
             {plan.options.map((o, i) => (
-              <div key={o.name} className={`box ${i === choice ? 'best' : ''}`} onClick={() => setChoice(i)} style={{ cursor: 'pointer' }}>
+              <div key={o.name} className={`box ${i === choice ? 'best chosen' : ''}`} onClick={() => setChoice(i)} style={{ cursor: 'pointer' }}>
                 <strong>{o.name}{i === 1 ? ' ★ Best value' : ''}</strong>
                 <p style={{ fontSize: 26, margin: '8px 0' }}>${o.total.toLocaleString()}</p>
                 <table><tbody>
@@ -200,14 +305,28 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
             ))}
           </div>
           <p className="notice">Planning estimates — not a live quote. Prices come from suppliers once connected; we never invent live fares.</p>
+          <p className="print-only">Your choice: {plan.options[choice].name} — ${plan.options[choice].total.toLocaleString()} for {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''}. Also available: {plan.options.map((o, i) => (i === choice ? null : `${o.name} $${o.total.toLocaleString()}`)).filter(Boolean).join(' · ')}.</p>
           <div className="row no-print" style={{ marginTop: 12 }}>
             <button className="ghost" onClick={sharePlan}>Share plan</button>
-            <button className="ghost" onClick={printPlan}>Save as PDF</button>
+            <button className="ghost" onClick={requestPdf}>{planBooked ? 'Save as PDF — free, you booked with us' : 'Save as PDF — $1 (free if you book)'}</button>
+            <button className="ghost" onClick={bookPlan}>Book this plan with FujinTrip</button>
             <button className="ghost" onClick={watchPrice}>Watch this price</button>
             <button className="ghost" onClick={holdPrice}>Hold my price</button>
             <button className="ghost" onClick={askHuman}>Ask a human to check this plan</button>
+            <button className="ghost" onClick={startNewTrip}>Start a new trip</button>
           </div>
           {actionMsg && <p className="no-print" style={{ fontSize: 13, color: '#1f5c4d', whiteSpace: 'pre-line' }}>{actionMsg}</p>}
+          {pdfNotice && (
+            <div className="no-print" style={{ fontSize: 13, color: '#1f5c4d', marginTop: 8 }}>
+              <p style={{ margin: '4px 0' }}>{pdfNotice}</p>
+              {pdfPay && (
+                <p style={{ margin: '4px 0' }}>
+                  <button className="ghost" onClick={bookPlan}>Book this plan with FujinTrip</button>{' '}
+                  <button className="ghost" onClick={() => { setPdfNotice(''); setPdfPay(false); }}>Dismiss</button>
+                </p>
+              )}
+            </div>
+          )}
           <h3 style={{ marginTop: 24 }}>Day by day</h3>
           {plan.days.map((d) => (
             <div key={d.day} style={{ borderTop: '1px solid #f0ead6', padding: '12px 0' }}>
@@ -215,6 +334,28 @@ function Chat({ onParsed, onSaveTrip }: { onParsed?: (t: { destination: string; 
               <p><b>Morning:</b> {d.morning}<br /><b>Afternoon:</b> {d.afternoon}<br /><b>Evening:</b> {d.evening}<br /><b>Transport:</b> {d.transport} · <b>Stay:</b> {d.stay}</p>
             </div>
           ))}
+          <h3 style={{ marginTop: 24 }}>How to book</h3>
+          <p style={{ fontSize: 14 }}>Booking the <strong>{plan.options[choice].name}</strong> plan — ${plan.options[choice].total.toLocaleString()} for {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''}. Prices are planning estimates, not live quotes.</p>
+          <ul style={{ fontSize: 14 }}>
+            <li style={{ marginBottom: 8 }}><strong>Flights — book with FujinTrip:</strong>{' '}
+              <button className="ghost no-print" onClick={bookPlan}>Book this plan with FujinTrip</button>
+              <span className="print-only">Save a booking request in My Trips on fujintrip.com — the FujinTrip team follows up. Live booking activates with Duffel live mode. https://fujintrip.com</span>
+              <span className="no-print" style={{ color: '#6b655a' }}> A booking request — the team follows up; live booking activates with Duffel live mode.</span>
+            </li>
+            <li style={{ marginBottom: 8 }}><strong>Hotels — check real prices:</strong>{' '}
+              <a href={links!.hotels} target="_blank" rel="noreferrer">Google Hotels — {plan.destination}</a>
+              <span className="print-only"> {links!.hotels}</span>
+            </li>
+            <li style={{ marginBottom: 8 }}><strong>Car rental — check prices:</strong>{' '}
+              <a href={links!.cars} target="_blank" rel="noreferrer">Car rental in {plan.destination}</a>
+              <span className="print-only"> {links!.cars}</span>
+            </li>
+            <li><strong>Activities — check prices:</strong>{' '}
+              <a href={links!.activities} target="_blank" rel="noreferrer">Tours &amp; activities in {plan.destination}</a>
+              <span className="print-only"> {links!.activities}</span>
+            </li>
+          </ul>
+          <p className="notice">These links open price checks on other sites — FujinTrip takes no cut from them and never invents a price.</p>
           <h3 style={{ marginTop: 24 }}>What travelers say</h3>
           {voices && voices.destination === plan.destination ? (
             <div>
@@ -294,7 +435,10 @@ export default function Home() {
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-trips', JSON.stringify(trips)); } catch {} }, [trips]);
-  const saveTrip = (label: string, status = 'Request saved') => setTrips((t) => [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString() }, ...t]);
+  const saveTrip = (label: string, status = 'Request saved', destination?: string) => setTrips((t) => [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString(), ...(destination ? { destination } : {}) }, ...t]);
+  // Destinations with a trip marked "Booked with FujinTrip" — those plans
+  // download as PDF free; every other plan costs $1 (see /api/plan-download).
+  const bookedDestinations = trips.filter((t) => t.status === 'Booked with FujinTrip' && t.destination).map((t) => t.destination as string);
   const useGeo = () => {
     if (!navigator.geolocation) { setGeoStatus('Geolocation is not available in this browser — pick a city below.'); return; }
     setGeoStatus('Asking for your location…');
@@ -319,7 +463,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} bookedDestinations={bookedDestinations} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 
         <section>
@@ -384,9 +528,10 @@ export default function Home() {
           <h2>How FujinTrip works</h2>
           <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — with links to reviews and hotel websites so you can verify before you book.</p>
           <h2 style={{ marginTop: 28 }}>My Trips</h2>
+          <p style={{ fontSize: 13, color: '#6b655a' }}>“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
           {trips.length === 0 ? <p style={{ color: '#6b655a' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
-              {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span><button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button></span></li>))}
+              {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button></span></li>))}
             </ul>
           )}
         </section>

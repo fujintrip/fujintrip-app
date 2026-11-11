@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS, optionsLine } from '../../../lib/planner';
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 
 /**
@@ -135,6 +135,9 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     reply = `Got it — ${voicesDest} for ${parsed.travelers} traveler${parsed.travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, with links to reviews and hotel websites so you can verify before you book.`;
     missing = missing.filter((m) => m !== 'Destination');
   }
+  // The reply must carry real value: the 3 tier prices with a clear pick,
+  // so the traveler can choose before asking for the plan.
+  if (destination) reply += `\n\n${optionsLine(destination, parsed.travelers)}`;
   // Even when the live model is down, fresh traveler material still helps.
   if (voices?.text) reply += `\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`;
   return NextResponse.json({

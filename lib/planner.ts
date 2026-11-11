@@ -124,6 +124,31 @@ function isTravel(text: string): boolean {
   return TRAVEL_WORDS.some((w) => lower.includes(w));
 }
 
+// --- Plan PDF helpers -----------------------------------------------------
+// Options line: the chat reply must carry real value — the 3 tier prices
+// with a clear pick — so the traveler can choose before asking for the
+// plan. Used by the built-in fallback (route + page local fallback); the
+// live model already quotes the Best value total from its prompt.
+export function optionsLine(destination: string, travelers: number): string {
+  const opts = buildPlan(destination, travelers, 3).options;
+  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}. Tap Build my plan to pick one.`;
+}
+
+// Booking links for the plan PDF ("How to book"). Honest links only:
+// Google Hotels for real hotel prices, Google searches for cars and
+// activities — built from the destination name, never an invented hotel
+// or supplier URL. Flights are booked with FujinTrip itself (a booking
+// request in My Trips; live booking activates with Duffel live mode),
+// so there is no external flights link.
+export function bookingLinks(destination: string): { hotels: string; cars: string; activities: string } {
+  const q = encodeURIComponent(destination);
+  return {
+    hotels: `https://www.google.com/travel/hotels/search?q=${q}`,
+    cars: `https://www.google.com/search?q=car+rental+${q}`,
+    activities: `https://www.google.com/search?q=${q}+tours+activities`,
+  };
+}
+
 export function askFujin(text: string): { destination: string; travelers: number; reply: string; missing: string[] } {
   if (!isTravel(text)) {
     return {
