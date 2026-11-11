@@ -95,6 +95,22 @@ export function comparisonFor(destination: string, travelers: number): TripCompa
   };
 }
 
+// Duffel flight service fee — DECIDED by the user Nov 11, 2026 (tiered
+// flat fee, option C of the margin model). Charged per flight ORDER (not
+// per passenger) on top of the airline fare, and must always be shown
+// separately at checkout ("Fare $300 at cost + service $35"), never
+// hidden inside the fare — that is what keeps the site's promise honest.
+// Duffel itself pays no percentage: FujinTrip pays Duffel $3 per
+// confirmed order + 1% Managed Content in live mode + ~2.9% card
+// processing, so a % markup alone loses money (3% on $300 = $9 fee vs
+// ~$15 costs). The checkout flow (not built yet) calls this to price the
+// fee; the planner's trip totals stay fare-only.
+export function serviceFee(orderFareTotal: number): number {
+  if (orderFareTotal < 250) return 19;
+  if (orderFareTotal <= 800) return 35;
+  return 49;
+}
+
 // Travel-only guardrail (same limit as the live AI system prompt).
 // Fujin AI answers only about travel and trip planning. Anything with no
 // travel signal gets a short decline and a redirect, never a plan.
