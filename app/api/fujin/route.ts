@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS } from '../../../lib/planner';
+import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 
 /**
  * Fujin AI — live model, server-side only. TRAVEL-ONLY scope: the system
@@ -18,6 +19,15 @@ import { askFujin, buildPlan, comparisonFor, KNOWN_DESTINATIONS } from '../../..
  * Keys are never sent to the browser and never logged. API errors are
  * surfaced in the fallback label AND logged server-side so a failed call
  * can be diagnosed (status alone hides the cause).
+ *
+ * Local Voices (live fetch): before the model runs, fresh traveler
+ * material for the destination is pulled from Wikivoyage (traveler-written
+ * guide; Reddit is attempted best-effort — it blocks this server) via
+ * lib/localVoices and appended to the system prompt, so the reply names
+ * real places and dishes instead of generic tips. The same material is
+ * returned as `voices` so the plan view can show a "What travelers say"
+ * block. A fetch failure never breaks the chat — the model just answers
+ * from its own knowledge.
  */
 
 type Provider = {
@@ -98,9 +108,31 @@ const FUJIN_SCHEMA = {
 
 type FujinResult = { destination: string; travelers: number; reply: string; missing: string[]; tips: string[] };
 
-function fallback(message: string, label: string) {
+// The live fetch needs a destination BEFORE the model runs, so guess it
+// from the request: an explicit destination, or a known destination named
+// in the message. Anything else skips the fetch — the model still answers
+// from its own knowledge.
+function guessDestination(raw: Record<string, unknown>, message: string): string {
+  if (typeof raw.destination === 'string' && raw.destination.trim()) return raw.destination.trim();
+  const lower = message.toLowerCase();
+  return KNOWN_DESTINATIONS.find((d) => lower.includes(d.toLowerCase())) ?? '';
+}
+
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '') {
   const parsed = askFujin(message);
-  return NextResponse.json({ live: false, label, ...parsed });
+  // Even when the live model is down, fresh traveler material still helps.
+  const reply = voices?.text
+    ? `${parsed.reply}\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`
+    : parsed.reply;
+  return NextResponse.json({
+    live: false,
+    label,
+    ...parsed,
+    reply,
+    voices: voices?.text ?? '',
+    voicesSource: voices?.source ?? '',
+    voicesDestination: voicesDest,
+  });
 }
 
 function parseModelJson(content: string): FujinResult | null {
@@ -131,11 +163,33 @@ export async function POST(req: NextRequest) {
   const raw = body as Record<string, unknown>;
   const message = typeof raw.message === 'string' ? raw.message : '';
 
+  // On-trip mode (feature 8): the traveler is already at the destination
+  // and wants short, right-now local answers. The trip destination also
+  // drives the live fetch below.
+  const onTrip = typeof raw.tripContext === 'string' && raw.tripContext.trim() ? raw.tripContext.trim() : '';
+  const voicesDest = onTrip || guessDestination(raw, message);
+  // Best-effort and capped (~4s inside): never let the fetch break the chat.
+  const voices: LocalVoices = voicesDest ? await fetchLocalVoices(voicesDest).catch(() => ({ text: '', source: '' })) : { text: '', source: '' };
+
+  // System prompt for this request: base prompt + fresh traveler material
+  // + on-trip framing when applicable.
+  let systemPrompt = SYSTEM_PROMPT;
+  if (voices.text) {
+    systemPrompt +=
+      ' LOCAL VOICES — fresh traveler material for this destination, fetched just now from traveler guides. Prefer naming the real places, dishes and tips from it in your reply and in tips. Never invent a reviewer name, quote, or review score; if a place in this material contradicts your own knowledge, trust the material. ' +
+      voices.text;
+  }
+  if (onTrip) {
+    systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;
+  }
+
   const provider = getProvider();
   if (!provider) {
     return fallback(
       message,
-      'Fujin AI is offline — using the built-in planner. Connect an AI provider (QWEN_API_KEY or MODEL_API_KEY) to switch on live AI.'
+      'Fujin AI is offline — using the built-in planner. Connect an AI provider (QWEN_API_KEY or MODEL_API_KEY) to switch on live AI.',
+      voices,
+      voicesDest
     );
   }
   const apiKey = provider.apiKey;
@@ -154,7 +208,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model: provider.model,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: message },
           ],
           temperature: 0.3,
@@ -188,20 +242,27 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(message, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`);
+      return fallback(message, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(message, 'Fujin AI gave an unclear answer — using the built-in planner.');
+      return fallback(message, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest);
     }
 
-    return NextResponse.json({ live: true, label: `Live Fujin AI (${provider.name}).`, ...parsed });
+    return NextResponse.json({
+      live: true,
+      label: `Live Fujin AI (${provider.name}).`,
+      ...parsed,
+      voices: voices.text,
+      voicesSource: voices.source,
+      voicesDestination: voicesDest,
+    });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(message, 'Could not reach Fujin AI right now — using the built-in planner.');
+    return fallback(message, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest);
   }
 }
 

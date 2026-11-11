@@ -104,6 +104,10 @@ const TRAVEL_WORDS = [
   'beach', 'island', 'mountain', 'hike', 'surf', 'culture', 'visit', 'plan',
   'book', 'booking', 'destination', 'airport', 'passport', 'visa', 'itinerary',
   'resort', 'getaway', 'honeymoon', 'adventure', 'relax', 'explore', 'food',
+  // Food questions are travel (same scope as the live AI prompt) — this
+  // matters for on-trip mode, where "where should I eat tonight?" must
+  // reach the plan, not a decline.
+  'eat', 'eating', 'restaurant', 'dinner', 'lunch', 'cuisine', 'dish',
   'traveler', 'travelers', 'traveller', 'travellers', 'adult', 'adults',
   'person', 'people', 'family', 'weekend', 'road trip', 'staycation',
 ];
