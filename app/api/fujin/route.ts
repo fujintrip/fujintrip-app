@@ -155,6 +155,11 @@ export async function POST(req: NextRequest) {
             { role: 'user', content: message },
           ],
           temperature: 0.3,
+          // Qwen 3.7-flash thinks by default (hidden reasoning before the
+          // answer) — that made live replies take ~21s. The planner task
+          // needs short structured answers, not deep reasoning, so turn
+          // thinking off for Qwen only; Muse has no such parameter.
+          ...(provider.name === 'Qwen' ? { enable_thinking: false } : {}),
           // Muse uses strict JSON Schema; Qwen uses plain JSON mode —
           // the system prompt still demands the same JSON shape, and
           // parseModelJson extracts it either way.
