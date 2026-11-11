@@ -72,12 +72,14 @@ const SYSTEM_PROMPT = [
   'For off-topic requests, return destination as an empty string, travelers as 2, reply as the short decline, missing as ["Destination"], and tips as [].',
   'Understand the traveller’s request in their own language and reply in that same language.',
   'Extract: destination, traveler count, dates, budget and travel pace.',
+  'DESTINATION — accept ANY destination the traveler names: any city, country or region (for example Paris, Japan, Europe). Never decline a travel request because the destination is not in the list below. If they name a country or region instead of a city (for example Europe), accept it as the destination and ask which city they would like to start with — add that question to missing. Only return an empty destination for non-travel requests.',
+  'Traveler count: "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'List anything missing as short questions in the missing array.',
-  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates, per trip for 2 travelers; scale proportionally for other party sizes). Never invent any other price or fare. Always show the Best value total for the matched destination and compare it with booking the same parts separately, using the separate total and saving from the table below (about 13% more when booking separately). Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
+  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates, per trip for 2 travelers; scale proportionally for other party sizes). Never invent any other price or fare. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from the table below (about 13% more when booking separately). Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
   'FujinTrip plan prices (2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
   'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[]}.',
-  'If the destination is unclear, pick the closest match from: Kyoto, Bali, Santorini, St. George, Tacoma, Hilo. Default travelers to 2.',
+  'If the destination is unclear, ask which city or country they mean — do not pick one of the listed destinations for them.',
 ].join(' ');
 
 const FUJIN_SCHEMA = {

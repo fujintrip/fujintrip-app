@@ -124,16 +124,28 @@ export function askFujin(text: string): { destination: string; travelers: number
     };
   }
   const lower = text.toLowerCase();
-  const dest = Object.keys(BASE).find((d) => lower.includes(d.toLowerCase())) ?? 'Kyoto';
+  const known = Object.keys(BASE).find((d) => lower.includes(d.toLowerCase()));
+  const solo = /\bsolo\b|\balone\b|\bjust me\b/.test(lower);
   const m = lower.match(/(\d+)\s*(people|travelers|traveler|adults|person)/);
-  const travelers = m ? parseInt(m[1], 10) : 2;
+  const travelers = m ? parseInt(m[1], 10) : solo ? 1 : 2;
   const missing: string[] = [];
   if (!/20\d\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/.test(lower)) missing.push('Dates');
   if (!/\$\s?\d|budget/.test(lower)) missing.push('Budget');
   if (!/slow|fast|relax|adventure|food|surf|hike|culture/.test(lower)) missing.push('Pace');
+  if (!known) {
+    // Never silently plan the wrong place (it used to default to Kyoto).
+    // Ask which city or country instead — the live AI handles any
+    // destination; this fallback only runs when the live call fails.
+    return {
+      destination: '',
+      travelers,
+      reply: `Got it — a trip for ${travelers} traveler${travelers > 1 ? 's' : ''}. Which city or country would you like to go to?`,
+      missing: ['Destination', ...missing],
+    };
+  }
   return {
-    destination: dest, travelers,
-    reply: `Got it — ${dest} for ${travelers} traveler${travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, with links to reviews and hotel websites so you can verify before you book.`,
+    destination: known, travelers,
+    reply: `Got it — ${known} for ${travelers} traveler${travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, with links to reviews and hotel websites so you can verify before you book.`,
     missing,
   };
 }
