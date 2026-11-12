@@ -242,3 +242,37 @@ html{scroll-padding-bottom:96px}
   .hero p{display:none}
   .hero-cta{display:none}
 }
+
+/* --- Portable plan / on-trip "Today" view (community round, design §7) --- */
+/* Offline banner: a slim banner instead of a dead screen. */
+.offline-banner{background:#fff7e8;border:1px solid #ead9a8;border-radius:10px;padding:8px 12px;font-size:13px;color:#5c4a12;margin-bottom:8px;flex:0 0 auto}
+/* On-trip mode: the chat messages and the Today view share the panel —
+   each scrolls inside its own region instead of pushing the other out. */
+.chatcol.tripmode-on .chat{flex:1 1 38%}
+.ontrip-wrap{flex:1 1 auto;min-height:0;overflow-y:auto;border-top:1px solid var(--line-soft);padding-top:12px;margin-top:4px}
+.today{flex:0 0 auto}
+.today-head{margin-bottom:8px}
+.today-days{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
+.today-days::-webkit-scrollbar{display:none}
+.today-day{flex:0 0 auto;border:1px solid #d9d9d6;background:#fff;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:44px}
+.today-day span{display:block;font-size:11px;color:var(--muted);font-weight:400}
+.today-day.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.today-day.selected span{color:#ddd}
+.today-now{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.today-now-label{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;margin-bottom:6px}
+.today-now strong{display:block;font-size:15px}
+.today-now a{font-size:13px;font-weight:600}
+.today-timeline{list-style:none;margin:0 0 8px;padding:0}
+.today-timeline li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line-soft)}
+.today-timeline li.done{opacity:.55}
+.today-timeline li.done .today-block strong{text-decoration:line-through}
+.today-done{flex:0 0 28px;width:28px;height:28px;border-radius:50%;border:1.5px solid #c9c9c6;background:#fff;cursor:pointer;font-size:14px;font-weight:700;color:var(--success);margin-top:2px}
+.today-done[aria-pressed="true"]{background:var(--success-soft);border-color:var(--success)}
+.today-block{flex:1;min-width:0}
+.today-block-time{display:block;font-size:12px;font-weight:700;color:var(--muted)}
+.today-block strong{font-size:14px}
+.today-block a{font-size:13px;font-weight:600}
+.today-map{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:12px 0}
+.today-essentials{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.today-portable{border-top:1px solid var(--line-soft);padding-top:12px}
+.today-portable input{width:100%;margin-top:4px}

@@ -14,6 +14,8 @@ import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
+import OfflineBanner from '../components/OfflineBanner';
+import TodayView from '../components/TodayView';
 
 // Trip map (Leaflet) is client-only — it needs window, so it loads
 // without server rendering. While the chunk loads, a map-shaped skeleton
@@ -1227,7 +1229,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           and the flights, stays and cars as price tags the traveler can
           click to read more or add to the plan. */}
       <div className="chatmap">
-        <div className="chatcol">
+        <div className={`chatcol${tripMode ? ' tripmode-on' : ''}`}>
+          {/* Offline banner (community round, design §7): a slim banner
+              instead of a dead screen — the saved plan still works
+              offline, live fares and chat replies do not. */}
+          <OfflineBanner />
           {/* Trip Summary card (design #14): pinned above the messages,
               always visible once the chat knows a destination. Tap a line
               to change that slot; the tier row switches the plan tier
@@ -1359,7 +1365,27 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </div>
           </div>
           {tripMode && lastParsed && (
-            <div className="no-print" style={{ marginTop: 8 }}>
+            <div className="ontrip-wrap no-print">
+              {/* Today on your trip (community round, design §7): the plan
+                  in the traveler's pocket — Now/Next first, the day's
+                  timeline, the essentials strip, the day's map, and the
+                  offline + share controls. The on-trip chat input is
+                  directly above, so Fujin AI is one tap away from today. */}
+              {mapCard && (
+                <TodayView
+                  card={mapCard}
+                  destination={lastParsed.destination}
+                  travelers={lastParsed.travelers}
+                  days={lastParsed.durationDays ?? 14}
+                  month={lastParsed.month ?? 0}
+                  origin={lastParsed.origin ?? ''}
+                  choice={choice}
+                  onFindDinner={() => {
+                    void fetchTonightPlaces();
+                    setTimeout(() => document.getElementById('tonight-near-you')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+                  }}
+                />
+              )}
               <p className="plan-muted">On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
               {/* Check my flight (competitor learning #5, TripIt Pro /
                   Romie / Layla): live status, gate + baggage, and the
@@ -1415,7 +1441,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   price band, open-now, walk time, dish and one Wikivoyage
                   quote. Fetched on demand; a place whose hours cannot be
                   verified says so, never guessed open. */}
-              <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+              <div id="tonight-near-you" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
                 <strong style={{ fontSize: 13 }}>Tonight near you</strong>
                 <div className="row" style={{ marginTop: 8 }}>
                   <button className="ghost" onClick={fetchTonightPlaces} disabled={tonight === 'loading'}>
@@ -2069,6 +2095,18 @@ export default function Home() {
     setChatSeed({ destination: name, cities: info?.cities ?? [name] });
     document.getElementById('fujin-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  // A shared plan or reel link (/?plan=<destination>) seeds the chat
+  // with that trip — the stranger who taps a shared link lands in the
+  // chat with the route ready, not on a blank page. Once per load.
+  const planParamUsedRef = useRef(false);
+  useEffect(() => {
+    if (planParamUsedRef.current) return;
+    const q = new URLSearchParams(window.location.search).get('plan');
+    if (!q) return;
+    planParamUsedRef.current = true;
+    planThisTrip(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Destinations with a trip marked "Booked with FujinTrip" — those plans
   // download as PDF free; every other plan costs $1 (see /api/plan-download).
   const bookedDestinations = trips.filter((t) => t.status === 'Booked with FujinTrip' && t.destination).map((t) => t.destination as string);
