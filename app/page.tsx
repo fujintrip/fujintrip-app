@@ -51,6 +51,35 @@ type PriceWatch = {
   lastCheckedAt: string | null;
 };
 type Voices = { destination: string; text: string; source: string } | null;
+// On-trip flight status (competitor learning #5, TripIt Pro / Romie /
+// Layla): the /api/flight-status response. live:false is the honest
+// answer when the CLI is not on the server or the flight isn't found.
+type FlightStatusData = {
+  live: boolean;
+  reason?: string;
+  message?: string;
+  flight?: string;
+  date?: string;
+  status?: string;
+  cancellationConfirmed?: boolean;
+  cancellationUnconfirmed?: boolean;
+  cancellationNote?: string;
+  delayedMinutes?: number;
+  diverted?: boolean;
+  origin?: { iata: string; city: string; name: string };
+  destination?: { iata: string; city: string; name: string };
+  scheduledDeparture?: string | null;
+  estimatedDeparture?: string | null;
+  actualDeparture?: string | null;
+  scheduledArrival?: string | null;
+  estimatedArrival?: string | null;
+  actualArrival?: string | null;
+  gateOrigin?: string | null;
+  gateDestination?: string | null;
+  terminalOrigin?: string | null;
+  terminalDestination?: string | null;
+  baggageClaim?: string | null;
+};
 // Local copy of the Ogata Korin Wind God (public domain) — the Wikimedia
 // Commons URL this used to point at 404s (the file is not on Commons under
 // that name), so the portrait never loaded. Served locally now; credit stays
@@ -147,6 +176,54 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
   // short, right-now local answers. WhatsApp delivery is a later step
   // (needs a business number) — this mode works in the chat today.
   const [tripMode, setTripMode] = useState(false);
+  // On-trip flight check (competitor learning #5): flight number/date
+  // the traveler typed, and the last checked status ('loading' while it
+  // runs). A live status rides with the "my flight was cancelled"
+  // message so the AI quotes a confirmed status, never a guess.
+  const [flightNo, setFlightNo] = useState('');
+  const [flightDate, setFlightDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [flightStatus, setFlightStatus] = useState<FlightStatusData | 'loading' | null>(null);
+  const checkFlight = async () => {
+    const ident = flightNo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!ident || !flightDate) return;
+    setFlightStatus('loading');
+    try {
+      const r = await fetch('/api/flight-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flight: ident, date: flightDate }),
+      });
+      const j = (await r.json()) as FlightStatusData;
+      setFlightStatus(j);
+    } catch {
+      setFlightStatus({
+        live: false,
+        reason: 'error',
+        flight: ident,
+        date: flightDate,
+        message: `Live flight status couldn't be reached — check ${ident} on ${flightDate} on your airline's flight status page.`,
+      });
+    }
+  };
+  // "My flight was cancelled" — sends the disruption report with the
+  // checked status attached when there is one, so the AI can list
+  // rebooking options (the live fares) instead of inventing them.
+  const reportCancellation = () => {
+    const ident = flightNo.trim().toUpperCase().replace(/\s+/g, '');
+    const checked = flightStatus && flightStatus !== 'loading' && flightStatus.live ? flightStatus : null;
+    const statusLine = checked
+      ? ` (checked status: ${checked.status ?? ''}${checked.cancellationConfirmed ? ', cancellation confirmed' : ''}${checked.cancellationUnconfirmed ? ', cancellation NOT confirmed' : ''}${checked.estimatedDeparture ? `, now due ${new Date(checked.estimatedDeparture).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : ''})`
+      : '';
+    void send(`My flight${ident ? ` ${ident}` : ''} was cancelled${statusLine} — what are my options?`, checked);
+  };
+  // "Leave now" hint for a flight that is still on the ground and
+  // departs within 4 hours — general advice, not a per-flight fact.
+  const leaveNow = (s: FlightStatusData): string | null => {
+    if (!s.live || s.cancellationConfirmed || s.actualDeparture || !s.estimatedDeparture) return null;
+    const mins = Math.round((new Date(s.estimatedDeparture).getTime() - Date.now()) / 60000);
+    if (mins < 0 || mins > 240) return null;
+    return `Departs in ${mins < 60 ? `${mins} minutes` : `${Math.floor(mins / 60)}h ${mins % 60}m`} — if you're not at the airport yet, leave now: most airlines close check-in an hour before departure.`;
+  };
   // Confirmation line for the plan actions below (share / watch / hold / human).
   const [actionMsg, setActionMsg] = useState('');
   // PDF download state: the $1 rule is decided by the server route.
@@ -226,8 +303,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
   // flow): a reply that asks one question must not also dump three prices.
   const withOptions = (p: { destination: string; travelers: number; reply: string; missing: string[]; needsMore?: boolean; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number }) =>
     p.destination && !p.needsMore ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers)}` } : p;
-  const send = async () => {
-    const text = input.trim();
+  const send = async (textOverride?: string, statusOverride?: FlightStatusData | null) => {
+    const text = (textOverride ?? input).trim();
     if (!text) return;
     setInput('');
     // Show your message right away; the AI reply is added when it arrives,
@@ -267,6 +344,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
           ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}) } } : {}),
           // On-trip mode: tell the server the traveler is already there.
           ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
+          // Disruption report: the checked flight status rides along so
+          // the AI quotes a confirmed status, never a guess (feature 5).
+          ...(statusOverride ? { flightStatus: statusOverride } : {}),
         }),
       });
       const j = await r.json();
@@ -606,7 +686,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
           </div>
           <div className="row">
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
-            <button className="primary" onClick={send}>Send</button>
+            <button className="primary" onClick={() => send()}>Send</button>
           </div>
           <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
           <p className="selling">No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
@@ -620,7 +700,58 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
             )}
           </p>
           {tripMode && lastParsed && (
-            <p className="no-print" style={{ fontSize: 13, color: '#666' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
+            <div className="no-print" style={{ marginTop: 8 }}>
+              <p style={{ fontSize: 13, color: '#666' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
+              {/* Check my flight (competitor learning #5, TripIt Pro /
+                  Romie / Layla): live status, gate + baggage, and the
+                  "my flight was cancelled" path to rebooking options. */}
+              <div style={{ border: '1px solid #e5e5e5', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+                <strong style={{ fontSize: 13 }}>Check my flight</strong>
+                <div className="row" style={{ marginTop: 8 }}>
+                  <input value={flightNo} onChange={(e) => setFlightNo(e.target.value)} placeholder="Flight number, e.g. UAL123" aria-label="Flight number" style={{ textTransform: 'uppercase' }} />
+                  <input type="date" value={flightDate} onChange={(e) => setFlightDate(e.target.value)} aria-label="Departure date" />
+                  <button className="ghost" onClick={checkFlight} disabled={!flightNo.trim() || !flightDate || flightStatus === 'loading'}>
+                    {flightStatus === 'loading' ? 'Checking…' : 'Check status'}
+                  </button>
+                </div>
+                {flightStatus && flightStatus !== 'loading' && flightStatus.live && (
+                  <div style={{ marginTop: 10, fontSize: 13, textAlign: 'left' }}>
+                    <strong>
+                      {flightStatus.flight} — {flightStatus.cancellationConfirmed ? 'Cancelled (confirmed)' : flightStatus.status}
+                      {typeof flightStatus.delayedMinutes === 'number' && flightStatus.delayedMinutes > 0 ? ` · delayed ${flightStatus.delayedMinutes} min` : ''}
+                      {flightStatus.diverted ? ' · diverted' : ''}
+                    </strong>
+                    {(flightStatus.origin?.city || flightStatus.destination?.city) && (
+                      <p style={{ margin: '4px 0' }}>
+                        {flightStatus.origin?.city || flightStatus.origin?.iata}{flightStatus.origin?.name ? ` (${flightStatus.origin.name})` : ''} → {flightStatus.destination?.city || flightStatus.destination?.iata}{flightStatus.destination?.name ? ` (${flightStatus.destination.name})` : ''}
+                      </p>
+                    )}
+                    <p style={{ margin: '4px 0' }}>
+                      Departs {flightStatus.scheduledDeparture ? new Date(flightStatus.scheduledDeparture).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+                      {flightStatus.estimatedDeparture && flightStatus.estimatedDeparture !== flightStatus.scheduledDeparture ? ` (now ${new Date(flightStatus.estimatedDeparture).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })})` : ''}
+                      {' · '}Arrives {flightStatus.scheduledArrival ? new Date(flightStatus.scheduledArrival).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
+                      {flightStatus.estimatedArrival && flightStatus.estimatedArrival !== flightStatus.scheduledArrival ? ` (now ${new Date(flightStatus.estimatedArrival).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })})` : ''}
+                    </p>
+                    <p style={{ margin: '4px 0', color: '#666' }}>
+                      {flightStatus.terminalOrigin ? `Terminal ${flightStatus.terminalOrigin}` : ''}
+                      {flightStatus.gateOrigin ? ` · gate ${flightStatus.gateOrigin}` : ''}
+                      {flightStatus.terminalDestination || flightStatus.gateDestination ? ` · arrival ${flightStatus.terminalDestination ? `terminal ${flightStatus.terminalDestination}` : ''}${flightStatus.terminalDestination && flightStatus.gateDestination ? ', ' : ''}${flightStatus.gateDestination ? `gate ${flightStatus.gateDestination}` : ''}` : ''}
+                      {flightStatus.baggageClaim ? ` · baggage claim ${flightStatus.baggageClaim}` : ''}
+                    </p>
+                    {flightStatus.cancellationUnconfirmed && flightStatus.cancellationNote && (
+                      <p style={{ margin: '4px 0', color: '#b45309' }}>{flightStatus.cancellationNote}</p>
+                    )}
+                    {(() => { const hint = leaveNow(flightStatus); return hint ? <p style={{ margin: '4px 0', fontWeight: 600 }}>{hint}</p> : null; })()}
+                  </div>
+                )}
+                {flightStatus && flightStatus !== 'loading' && !flightStatus.live && (
+                  <p style={{ marginTop: 10, fontSize: 13, color: '#666' }}>{flightStatus.message ?? 'Live flight status isn’t available for this flight right now.'}</p>
+                )}
+                <button className="ghost" style={{ marginTop: 10 }} onClick={reportCancellation}>
+                  ✈ My flight was cancelled — what are my options?
+                </button>
+              </div>
+            </div>
           )}
         </div>
         <div className="mapcol no-print">

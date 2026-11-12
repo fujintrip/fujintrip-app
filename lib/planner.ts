@@ -636,6 +636,23 @@ export function applyRevision(
   }
 }
 
+// --- On-trip disruption (competitor learning, Nov 11: TripIt Pro /
+// Romie / Layla) ------------------------------------------------------
+// A flight number from a free-text message ("my flight UAL123 was
+// cancelled") — ICAO preferred, IATA accepted, 2–3 letters + digits.
+export function parseFlightIdent(text: string): string {
+  const m = text.toUpperCase().match(/\b([A-Z]{2,3}\d{1,4}[A-Z]?)\b/);
+  return m ? m[1] : '';
+}
+
+// Is the current message a disruption report — a cancelled, delayed,
+// missed or diverted flight — rather than a planning question?
+export function isDisruptionMessage(text: string): boolean {
+  return /\b(my flight|our flight|the flight|my plane|our plane)\b.{0,40}\b(cancel|cancelled|canceled|delay|delayed|missed|diverted)\b|\b(cancel|cancelled|canceled|delayed|missed|diverted)\b.{0,40}\b(flight|plane)\b|\bflight (was )?(cancelled|canceled|delayed|diverted)\b/i.test(
+    text
+  );
+}
+
 // Route key for a destination display name ('Europe' → 'europe',
 // 'Central Europe' → 'centraleurope', 'Kyoto' → '' — a single city has
 // no multi-stop route). Used by the trip card and the Trip Summary.
@@ -1267,6 +1284,24 @@ export function askFujin(
         };
       }
     }
+  }
+  // DISRUPTION — the traveler's flight was cancelled, delayed, missed
+  // or diverted. This is not a planning question and not a revision:
+  // acknowledge it, point at the confirmed status (the "Check my
+  // flight" box — the chat never invents a status), and let the live
+  // fares below the reply be the rebooking options. The server's
+  // fallback appends the live fares when they exist; this reply never
+  // promises them when they don't.
+  if (contextDestination && currentMessage && isDisruptionMessage(currentMessage)) {
+    const ident = parseFlightIdent(currentMessage);
+    return {
+      destination: known || contextDestination,
+      travelers,
+      reply: `I'm really sorry — a disrupted flight is the worst start to a trip.${ident ? ` For ${ident}, check the live status in the "Check my flight" box below the chat — it shows the confirmed status, the new times, the gate and the baggage claim, so you know what's actually happening. I don't invent a flight status here.` : ` Check the live status in the "Check my flight" box below the chat — it shows the confirmed status, the new times, the gate and the baggage claim, so you know what's actually happening. I don't invent a flight status here.`} For rebooking: the live fares below, when they're listed, are the flights you can move onto with FujinTrip on this same route. If no live fare is listed, save a booking request in My Trips and the FujinTrip team will look into the next available flight.`,
+      missing,
+      needsMore: false,
+      kids: kidAges,
+    };
   }
   if (!known) {
     // RECOMMEND — the traveler gave constraints but no destination, or said
