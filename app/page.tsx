@@ -1752,6 +1752,20 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           <h3>Money-saving tips</h3>
           <ul>{plan.tips.map((t) => <li key={t}>{t}</li>)}</ul>
           <p style={{ fontSize: 13, color: '#666' }}>Travellers liked: {plan.liked.join(' · ')} — Book it all with FujinTrip, one booking, one price.</p>
+          {/* Spacer so the sticky bar never covers the last lines of the
+              plan while the traveler reads them. */}
+          <div className="no-print" style={{ height: 64 }} aria-hidden="true" />
+        </div>
+      )}
+      {/* Sticky bottom bar (design #3): the plan's total + one Book action,
+          visible while the traveler reads the plan — on a phone it is the
+          one thumb, one action that ends the page. */}
+      {plan && (
+        <div className="stickybar no-print" role="region" aria-label="Plan total and booking">
+          <span className="total">
+            <strong>${plan.options[choice].total.toLocaleString()}</strong> total · {plan.options[choice].name} · {plan.travelers} traveler{plan.travelers > 1 ? 's' : ''}
+          </span>
+          <button className="primary" onClick={bookPlan}>Book</button>
         </div>
       )}
     </div>

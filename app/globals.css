@@ -139,6 +139,19 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
   .plan-print .compare .box:not(.chosen){display:none !important}
 }
 
+/* Sticky bottom bar (design #3): one thumb, one action. On phones the
+   traveler who has decided must not scroll back up to act — the running
+   total and one Book action stay visible while they read the day-by-day.
+   Mobile: full-width bar at the bottom. Desktop: a slim floating pill,
+   bottom-right. html scroll-padding-bottom keeps a focused element from
+   ever hiding under it (the Airbnb sticky-bar lesson). */
+html{scroll-padding-bottom:96px}
+.stickybar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,255,255,.96);border-top:1px solid var(--line);padding:10px 16px;box-shadow:0 -4px 20px rgba(0,0,0,.08)}
+.stickybar .total{font-size:14px;color:var(--muted)}
+.stickybar .total strong{font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+.stickybar button{min-height:48px}
+@media(min-width:901px){.stickybar{left:auto;right:24px;bottom:24px;width:auto;border:1px solid var(--line);border-radius:999px;padding:8px 8px 8px 20px;box-shadow:0 8px 28px rgba(0,0,0,.14)}}
+
 /* Map as the background, chat on top (Nov 11, user: "the map as
    background and chat on top of it so the map will change based on
    the chat and draw the route") — Layla-style: the map fills the
