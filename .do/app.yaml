@@ -39,6 +39,9 @@ services:
       - key: DUFFEL_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: TRAVELPAYOUTS_TOKEN
+        scope: RUN_TIME
+        type: SECRET
       - key: MODEL_API_KEY
         scope: RUN_TIME
         type: SECRET

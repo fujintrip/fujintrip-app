@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
       });
     }
     // Cached comparison fares (Travelpayouts) — labeled cached, never live.
-    let comparison = { configured: false, fares: [], label: '' } as Awaited<ReturnType<typeof fetchCachedFares>>;
+    let comparison = { configured: false, ok: false, fares: [], label: '', checkedAt: '' } as Awaited<ReturnType<typeof fetchCachedFares>>;
     if (typeof body.date === 'string') {
       comparison = await fetchCachedFares({
         origin: body.origin as string,

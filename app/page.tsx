@@ -11,6 +11,7 @@ import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard, type TripLeg } from '../lib/tripCard';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
 import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
+import type { CompetitorFares } from '../lib/travelpayouts';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
@@ -979,6 +980,32 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     void fetchPriceCheck();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, lastParsed, watches]);
+  // Competitor fares (Travelpayouts, cached — user chose Nov 12, 2026):
+  // the cheapest cached round-trip fare for this exact trip, fetched
+  // once per trip like the price check. The column stays honestly empty
+  // until a fare comes back with its check date — nothing invented.
+  const [competitorFares, setCompetitorFares] = useState<CompetitorFares | null>(null);
+  const competitorKeyRef = useRef('');
+  useEffect(() => {
+    const origin = lastParsed?.origin ?? '';
+    const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const depart = tripCard ? isoDay(tripCard.startDate) : '';
+    const ret = tripCard ? isoDay(tripCard.endDate) : '';
+    if (!plan || !origin || !depart || !ret) {
+      setCompetitorFares(null);
+      competitorKeyRef.current = '';
+      return;
+    }
+    const key = `${plan.destination}|${plan.travelers}|${origin}|${depart}|${ret}`;
+    if (key === competitorKeyRef.current) return;
+    competitorKeyRef.current = key;
+    const params = new URLSearchParams({ origin, destination: plan.destination, depart, return: ret, travelers: String(plan.travelers) });
+    fetch(`/api/competitor-fares?${params}`)
+      .then((r) => r.json())
+      .then((j) => { if (competitorKeyRef.current === key) setCompetitorFares(j as CompetitorFares); })
+      .catch(() => { if (competitorKeyRef.current === key) setCompetitorFares(null); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, tripCard, lastParsed]);
   // Map inventory (split-screen, Nov 11): the legs the traveler picked
   // from the map's price tags, and the leg whose card is open. A new
   // destination clears the picks — they belonged to the old trip.
@@ -1727,11 +1754,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                         <th style={{ padding: '6px 0' }}></th>
                         <th style={{ padding: '6px 0' }}>FujinTrip — Best value</th>
                         <th style={{ padding: '6px 0' }}>Booking separately</th>
-                        <th style={{ padding: '6px 0' }}>Other sites (live)</th>
+                        <th style={{ padding: '6px 0' }}>Other sites (cached)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr><td>Flights</td><td>${comparison.best.flight.toLocaleString()}</td><td>${comparison.separate.flight.toLocaleString()}</td><td rowSpan={4} style={{ verticalAlign: 'top', color: 'var(--muted)' }}>Live competitor rates arrive with live fares — no live fare feed is connected yet, so we show nothing invented here.</td></tr>
+                      <tr><td>Flights</td><td>${comparison.best.flight.toLocaleString()}</td><td>${comparison.separate.flight.toLocaleString()}</td><td rowSpan={4} style={{ verticalAlign: 'top' }}>{competitorFares?.available ? (<><div><strong>Flights from ${competitorFares.total?.toLocaleString()}</strong>{competitorFares.travelers > 1 ? ` for ${competitorFares.travelers} travelers` : ''}</div><div style={{ color: 'var(--muted)' }}>${competitorFares.farePerTraveler?.toLocaleString()} per traveler, round trip{competitorFares.airline ? ` · ${competitorFares.airline}` : ''}{typeof competitorFares.stops === 'number' ? ` · ${competitorFares.stops === 0 ? 'nonstop' : `${competitorFares.stops} stop${competitorFares.stops > 1 ? 's' : ''}`}` : ''} · {competitorFares.originIata} → {competitorFares.destIata}</div><div style={{ color: 'var(--muted)' }}>{competitorFares.label}</div><div style={{ color: 'var(--muted)' }}>Flights only — no cached hotel, car or activity comparison yet.</div></>) : (<span style={{ color: 'var(--muted)' }}>{competitorFares ? competitorFares.label : 'Cached competitor fares for this trip will appear here once the trip has a departure city — labeled with the date they were checked. Nothing invented in the meantime.'}</span>)}</td></tr>
                       <tr><td>Hotels</td><td>${comparison.best.hotel.toLocaleString()}</td><td>${comparison.separate.hotel.toLocaleString()}</td></tr>
                       <tr><td>Car</td><td>${comparison.best.car.toLocaleString()}</td><td>${comparison.separate.car.toLocaleString()}</td></tr>
                       <tr><td>Activities</td><td>${comparison.best.activities.toLocaleString()}</td><td>${comparison.separate.activities.toLocaleString()}</td></tr>

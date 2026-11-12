@@ -270,3 +270,22 @@ test('discovery map: section renders with a priced default pin and a Plan this t
   // so they are not in the SSR HTML — their rendering needs the live
   // visual check after Deploy, not this test.
 });
+
+test('competitor fares: without a token the route stays honestly empty', async () => {
+  // No TRAVELPAYOUTS_TOKEN in this environment, so the route must say
+  // so — never an invented fare, and the token never leaks into the reply.
+  const r = await fetch(`${BASE}/api/competitor-fares?origin=New%20York&destination=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.available, false);
+  assert.equal(j.configured, false);
+  assert.equal(j.reason, 'not-configured');
+  assert.equal(j.farePerTraveler, null);
+  assert.equal(j.total, null);
+  assert.ok(typeof j.label === 'string' && j.label.length > 0, 'an honest label is returned');
+  assert.ok(!('token' in j), 'the route returns no token field (the label names the env var to set, never a value)');
+  // Bad dates degrade the same way instead of erroring.
+  const bad = await fetch(`${BASE}/api/competitor-fares?origin=New%20York&destination=Central%20Europe&depart=soon&return=later&travelers=2`);
+  assert.equal(bad.status, 200);
+  assert.equal((await bad.json()).available, false);
+});

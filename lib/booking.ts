@@ -719,29 +719,63 @@ export type CachedFare = {
   departDate?: string;
   returnDate?: string;
   stops?: number;
+  returnStops?: number;
+  durationMinutes?: number;
+  link?: string;
+  expiresAt?: string;
 };
 
 /**
  * Cached fares for the "our rates vs competitors" column.
  * Returns live:false data with the label "cached" — never a live quote.
  * Endpoint: GET api.travelpayouts.com/aviasales/v3/prices_for_dates
- * (token via X-Access-Token header, server-side only).
+ * (token via X-Access-Token header, server-side only; token query param
+ * is also accepted by the API but hit 502s in third-party testing, so
+ * the header is the only auth used here).
+ *
+ * Verified Nov 12, 2026 against the official Aviasales Data API docs:
+ * - Auth: X-Access-Token header, token from Profile → API token
+ *   (free, auto-generated at signup).
+ * - Params: origin/destination are IATA city codes; departure_at and
+ *   return_at accept YYYY-MM or YYYY-MM-DD; one_way defaults true —
+ *   pass one_way=false with a return_at to get round-trip offers, whose
+ *   price is the round-trip fare for ONE traveler.
+ * - `currency` is the documented currency param (the docs' example URL
+ *   also shows `cy` — both are sent, the API ignores the unknown one).
+ * - `market=us`: the cache is per-market and defaults to ru; partners
+ *   in America should ask for the US market.
+ * - Freshness: cheapest tickets found by Aviasales users in the last
+ *   48h; the cache is stored up to 7 days. The docs recommend caching
+ *   results onsite for 24h.
+ * - Rate limit: 600 req/min for /v3/prices_for_dates (429 if exceeded).
  */
 export async function fetchCachedFares(opts: {
   origin: string;
   destination: string;
-  month: string; // YYYY-MM
+  month: string; // YYYY-MM (kept for the checkout caller)
+  departDate?: string; // YYYY-MM-DD — exact trip start, preferred
+  returnDate?: string; // YYYY-MM-DD — exact trip end; implies round-trip
+  oneWay?: boolean; // default: round-trip when returnDate is given
+  market?: string;
   currency?: string;
-}): Promise<{ configured: boolean; fares: CachedFare[]; label: string }> {
+}): Promise<{ configured: boolean; ok: boolean; fares: CachedFare[]; label: string; checkedAt: string }> {
   const token = process.env.TRAVELPAYOUTS_TOKEN;
+  const checkedAt = new Date().toISOString().slice(0, 10);
   if (!token) {
-    return { configured: false, fares: [], label: 'Travelpayouts is not configured — no cached comparison fares. Add TRAVELPAYOUTS_TOKEN (free) to enable them.' };
+    return { configured: false, ok: false, fares: [], label: 'Travelpayouts is not configured — no cached comparison fares. Add TRAVELPAYOUTS_TOKEN (free) to enable them.', checkedAt };
   }
+  const departureAt = opts.departDate || opts.month;
+  const roundTrip = opts.returnDate ? opts.oneWay !== true : false;
   const params = new URLSearchParams({
     origin: opts.origin.toUpperCase(),
     destination: opts.destination.toUpperCase(),
-    departure_at: opts.month,
+    departure_at: departureAt,
+    ...(opts.returnDate ? { return_at: opts.returnDate } : {}),
+    ...(roundTrip ? { one_way: 'false' } : {}),
+    market: opts.market || 'us',
     currency: opts.currency || 'USD',
+    cy: opts.currency || 'usd',
+    sorting: 'price',
     limit: '5',
   });
   try {
@@ -749,8 +783,8 @@ export async function fetchCachedFares(opts: {
       headers: { 'X-Access-Token': token },
       signal: AbortSignal.timeout(10000),
     });
-    const json = (await res.json().catch(() => ({}))) as { data?: Array<Record<string, unknown>> };
-    if (!res.ok) return { configured: true, fares: [], label: `Travelpayouts lookup failed (${res.status}) — no cached fares right now.` };
+    const json = (await res.json().catch(() => ({}))) as { success?: boolean; data?: Array<Record<string, unknown>> };
+    if (!res.ok) return { configured: true, ok: false, fares: [], label: `Travelpayouts lookup failed (${res.status}) — no cached fares right now.`, checkedAt };
     const fares: CachedFare[] = (json.data ?? []).map((d) => ({
       price: Math.round(Number(d.price ?? 0)),
       currency: (d.currency as string | undefined) || opts.currency || 'USD',
@@ -758,14 +792,20 @@ export async function fetchCachedFares(opts: {
       departDate: d.departure_at as string | undefined,
       returnDate: d.return_at as string | undefined,
       stops: typeof d.transfers === 'number' ? d.transfers : undefined,
+      returnStops: typeof d.return_transfers === 'number' ? d.return_transfers : undefined,
+      durationMinutes: typeof d.duration === 'number' ? d.duration : undefined,
+      link: typeof d.link === 'string' ? d.link : undefined,
+      expiresAt: typeof d.expires_at === 'string' ? d.expires_at : undefined,
     })).filter((f) => f.price > 0);
     return {
       configured: true,
+      ok: true,
       fares,
-      label: 'Cached prices (Travelpayouts/Aviasales — last seen within 48h–7 days). Indicative only — not a live quote.',
+      label: `Cached prices (Travelpayouts/Aviasales — cheapest tickets found in the last 48h, cache kept up to 7 days), checked ${checkedAt}. Indicative only — not a live quote.`,
+      checkedAt,
     };
   } catch {
-    return { configured: true, fares: [], label: 'Could not reach Travelpayouts right now — no cached fares.' };
+    return { configured: true, ok: false, fares: [], label: 'Could not reach Travelpayouts right now — no cached fares.', checkedAt };
   }
 }
 
