@@ -31,6 +31,15 @@ header{border-bottom:1px solid var(--line);background:#fff}
 .msg{margin:10px 0;font-size:15px}
 .msg.user{text-align:right}
 .msg .bubble{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+/* Chips — quick replies (design #1, NN/g prompt controls): tappable
+   answers under the input, 3–4 at a time, so the traveler never faces a
+   blank box. Horizontal scroll row; a tapped chip sends as typed text. */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 2px 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-height:40px;font-family:inherit;transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
+.chip:hover{border-color:var(--ink);transform:translateY(-1px)}
+.chip:active{transform:translateY(1px)}
+.chip:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .msg.user .bubble{background:var(--ink);color:#fff;border-color:var(--ink)}
 /* Motion (design #5 — the 2026 baseline: every interactive element has a
    state change; 150–300ms, ease-out, transform + opacity only, never

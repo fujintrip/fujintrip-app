@@ -928,6 +928,87 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const fmtDateYear = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Starter + follow-up chips (design #1, NN/g prompt controls): the
+  // highest-impact chat element in the 2026 consensus — a first-time
+  // visitor can start a trip in one tap instead of inventing a perfect
+  // sentence, and the guided flow's questions become one-tap answers.
+  // A chip sends exactly like typed text (the chat history and tripState
+  // treat it the same); "Build my plan" runs the build action instead.
+  // Max 4 visible; the row scrolls. Contextual, never the same static set.
+  type Chip = { label: string; text?: string; action?: 'build' };
+  const hasUserMsg = msgs.some((m) => m.who === 'user');
+  const lastAi = [...msgs].reverse().find((m) => m.who === 'ai');
+  const chips: Chip[] = (() => {
+    if (tripMode) {
+      return [
+        { label: 'Where to eat tonight?', text: 'Where should I eat tonight?' },
+        { label: "What's open now?", text: "What's open now near me?" },
+        { label: 'How do I get there?', text: 'How do I get there from here?' },
+      ];
+    }
+    if (!hasUserMsg) {
+      return [
+        { label: 'Central Europe in January', text: 'Central Europe in January' },
+        { label: 'Warm beach in February', text: 'I want a warm beach in February' },
+        { label: 'Family of 4, $2,000', text: 'Family of 4, $2,000 budget' },
+        { label: 'Surprise me', text: 'Surprise me' },
+      ];
+    }
+    const r = lastAi?.text ?? '';
+    if (/central europe/i.test(r) && /portugal/i.test(r)) {
+      return [
+        { label: 'Central Europe', text: 'Central Europe' },
+        { label: 'Portugal', text: 'Portugal' },
+      ];
+    }
+    if (/does this sound right/i.test(r)) {
+      return [
+        { label: 'Looks right', text: 'Looks right — build it' },
+        { label: 'Change something', text: 'I want to change something' },
+        { label: 'Make it cheaper', text: 'Make it cheaper' },
+      ];
+    }
+    if (/flying from|departure city/i.test(r)) {
+      return [
+        { label: 'New York', text: 'New York' },
+        { label: 'Los Angeles', text: 'Los Angeles' },
+        { label: 'Chicago', text: 'Chicago' },
+      ];
+    }
+    if (/when are you going|how long|how many days/i.test(r)) {
+      return [
+        { label: '2 weeks', text: '2 weeks' },
+        { label: '10 days', text: '10 days' },
+        { label: 'January', text: 'January' },
+        { label: 'July', text: 'July' },
+      ];
+    }
+    if (/how many kids|kids.{0,20}ages/i.test(r)) {
+      return [
+        { label: '2 kids, ages 4 and 7', text: '2 kids, ages 4 and 7' },
+        { label: 'No kids', text: 'No kids, just adults' },
+      ];
+    }
+    if (/budget/i.test(r) && /\?/.test(r)) {
+      return [
+        { label: '$1,500', text: 'My budget is $1,500' },
+        { label: '$2,000', text: 'My budget is $2,000' },
+        { label: '$3,000', text: 'My budget is $3,000' },
+      ];
+    }
+    if (lastParsed?.destination) {
+      return [
+        { label: 'Build my plan', action: 'build' },
+        { label: 'Make it cheaper', text: 'Make it cheaper' },
+        { label: 'What should I eat there?', text: 'What should I eat there?' },
+      ];
+    }
+    return [
+      { label: 'Surprise me', text: 'Surprise me' },
+      { label: 'Central Europe', text: 'Central Europe' },
+      { label: 'Kyoto, 7 days', text: 'Kyoto for 7 days' },
+    ];
+  })();
   return (
     <div>
       {/* Split screen (Nov 11): the chat stays still on the left, the map
@@ -936,7 +1017,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           click to read more or add to the plan. */}
       <div className="chatmap">
         <div className="chatcol">
-          <div className="chat" ref={chatRef}>
+          <div className="chat" ref={chatRef} aria-live="polite" aria-label="Conversation with Fujin AI">
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
                 {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
@@ -952,8 +1033,18 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
             <button className="primary" onClick={() => send()}>Send</button>
           </div>
+          <div className="chips no-print" role="group" aria-label="Quick replies">
+            {chips.map((c) => (
+              <button key={c.label} type="button" className="chip" onClick={() => (c.action === 'build' ? build() : send(c.text ?? c.label))}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+          {/* One trust line under the input (design §2.2): the
+              no-hidden-margin line used to repeat here, in the plan
+              section and in the footer — it now lives once, near the
+              prices in the plan section and in the footer. */}
           <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
-          <p className="selling">No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
           {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: '#666' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
           <p className="no-print" style={{ marginTop: 16 }}>
             <button className="primary" onClick={build}>Build my plan</button>{' '}
