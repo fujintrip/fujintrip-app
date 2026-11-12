@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, routeKeyForDestination, type Plan } from '../lib/planner';
@@ -374,6 +374,29 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
         : null,
     [plan, lastParsed, choice]
   );
+  // Live map preview (Nov 11, user: "the map doesn't reflect as i'm
+  // talking to the ai like lyla"): the map used to appear only after
+  // "Build my plan", so while the traveler chatted it stayed empty. Now
+  // the map shows the trip as soon as the chat knows a destination —
+  // the route, the markers and the price tags update with every turn,
+  // and the full plan card takes over once "Build my plan" is tapped.
+  // The preview assumes 14 days when the length is not known yet; once
+  // the traveler gives it, the preview and the plan use the same length.
+  const previewCard: TripCard | null = useMemo(
+    () =>
+      lastParsed?.destination
+        ? buildTripCard({
+            destination: lastParsed.destination,
+            travelers: lastParsed.travelers,
+            days: lastParsed.durationDays ?? 14,
+            month: lastParsed.month ?? 0,
+            origin: lastParsed.origin ?? '',
+            tier: choice,
+          })
+        : null,
+    [lastParsed, choice]
+  );
+  const mapCard = tripCard ?? previewCard;
   const comparison = useMemo(
     () => (plan ? cardComparison(plan.destination, plan.travelers) : null),
     [plan]
@@ -385,9 +408,20 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   const [selectedLeg, setSelectedLeg] = useState<TripLeg | null>(null);
   const [legExpanded, setLegExpanded] = useState(false);
   const chosenTotal = useMemo(
-    () => (tripCard ? tripCard.legs.filter((l) => chosenLegs.has(l.id)).reduce((s, l) => s + l.price, 0) : 0),
-    [tripCard, chosenLegs]
+    () => (mapCard ? mapCard.legs.filter((l) => chosenLegs.has(l.id)).reduce((s, l) => s + l.price, 0) : 0),
+    [mapCard, chosenLegs]
   );
+  // Chat auto-scroll (Nov 11, user: "the chat doesn't update as i send
+  // messages and reply i have to scroll to read"): the messages area
+  // scrolls inside the split screen, but nothing scrolled it to the
+  // newest message — the traveler had to scroll by hand. Now every new
+  // message (theirs, the AI's, or an "Added to your plan" note) scrolls
+  // the chat to the bottom.
+  const chatRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [msgs]);
   // Add to plan: the leg joins the trip plan AND the chat — the traveler
   // sees the pick in the conversation, not just on the map.
   const addLegToPlan = (leg: TripLeg) => {
@@ -406,7 +440,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           click to read more or add to the plan. */}
       <div className="chatmap">
         <div className="chatcol">
-          <div className="chat">
+          <div className="chat" ref={chatRef}>
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
                 {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
@@ -438,14 +472,14 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
           )}
         </div>
         <div className="mapcol no-print">
-          {tripCard ? (
+          {mapCard ? (
             <>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <TripMap
-                  stops={tripCard.stops
+                  stops={mapCard.stops
                     .filter((s) => CITY_INFO[s.city])
                     .map((s) => ({ city: s.city, lat: CITY_INFO[s.city].lat, lng: CITY_INFO[s.city].lng }))}
-                  legs={tripCard.legs}
+                  legs={mapCard.legs}
                   selectedLegId={selectedLeg?.id ?? null}
                   onSelectLeg={(leg) => {
                     setSelectedLeg(leg);
@@ -483,7 +517,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
               )}
               {chosenLegs.size > 0 && (
                 <p className="maphint">
-                  In your plan so far: {chosenLegs.size} of {tripCard.legs.length} items · ${chosenTotal.toLocaleString()} — the full plan is below.
+                  In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${chosenTotal.toLocaleString()} — the full plan is below.
                 </p>
               )}
             </>

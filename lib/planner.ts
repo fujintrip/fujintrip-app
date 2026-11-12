@@ -120,6 +120,10 @@ const TRAVEL_WORDS = [
   'beach', 'island', 'mountain', 'hike', 'surf', 'culture', 'visit', 'plan',
   'book', 'booking', 'destination', 'airport', 'passport', 'visa', 'itinerary',
   'resort', 'getaway', 'honeymoon', 'adventure', 'relax', 'explore', 'food',
+  'go to', 'going to',
+  // "Go to" is how travelers most often name a destination ("i want to
+  // go to zanzibar") — without it, an unknown place gets declined as
+  // off-topic instead of asked about honestly (Nov 11).
   // Food questions are travel (same scope as the live AI prompt) — this
   // matters for on-trip mode, where "where should I eat tonight?" must
   // reach the plan, not a decline.
@@ -176,6 +180,11 @@ const COUNTRY_ROUTES: Record<string, { display: string; route: string }> = {
     route:
       'Bangkok (Grand Palace, floating markets, street food) → Chiang Mai (temples, night bazaar) → Krabi (islands, long-tail boats). Take the overnight sleeper train to Chiang Mai, tuk-tuks and the metro in Bangkok, and stay in guesthouses and small hotels.',
   },
+  southeastasia: {
+    display: 'Southeast Asia',
+    route:
+      'Bangkok (Grand Palace, floating markets, street food) → Siem Reap (Angkor Wat sunrise, the temples) → Hanoi (Old Quarter, pho, Hoan Kiem Lake). Fly between cities on short domestic flights, and stay in social hostels and guesthouses — the best value and the most local way to travel.',
+  },
   turkey: {
     display: 'Turkey',
     route:
@@ -227,6 +236,8 @@ const COUNTRY_ALIASES: Record<string, string> = {
   'united kingdom': 'uk',
   'central europe': 'centraleurope',
   'eastern europe': 'centraleurope',
+  'southeast asia': 'southeastasia',
+  'south east asia': 'southeastasia',
 };
 
 // Well-known cities — the traveler names a city, not a country, and the
@@ -327,6 +338,14 @@ export const ROUTE_STOPS: Record<string, Array<{ city: string; country: string; 
     { city: 'Bangkok', country: 'Thailand', weight: 3 },
     { city: 'Chiang Mai', country: 'Thailand', weight: 3 },
     { city: 'Krabi', country: 'Thailand', weight: 3 },
+  ],
+  // Warm winter escape (Nov 11): the route the AI recommends for "warm,
+  // culture, safe, food, surprise me" — Bangkok 4 / Siem Reap 3 / Hanoi
+  // 7 nights over a 15-day trip, matching the sketch the AI gives.
+  southeastasia: [
+    { city: 'Bangkok', country: 'Thailand', weight: 4 },
+    { city: 'Siem Reap', country: 'Cambodia', weight: 3 },
+    { city: 'Hanoi', country: 'Vietnam', weight: 8 },
   ],
   turkey: [
     { city: 'Istanbul', country: 'Turkey', weight: 4 },
@@ -669,6 +688,19 @@ export function askFujin(
   // campaign). A follow-up like "make it cheaper" has no travel words of
   // its own, so the travel gate below still uses the joined text.
   const current = (currentMessage || text).toLowerCase();
+  // A greeting is not off-topic — it is how a new visitor starts. Answer
+  // warmly and ask where they want to go, instead of the cold travel-only
+  // decline (Nov 11: a pasted live chat opened with "hello" and got told
+  // off). No trip yet, so the destination stays empty.
+  if (/^(hi|hello|hey|good (morning|afternoon|evening)|yo)\b/.test(current.trim()) && !contextDestination) {
+    return {
+      destination: '',
+      travelers: 2,
+      reply: "Hi there! I'm Fujin AI, your travel planner. Where are you dreaming of going next?",
+      missing: ['Destination'],
+      needsMore: true,
+    };
+  }
   if (OFF_TOPIC.some((w) => current.includes(w))) {
     return {
       destination: '',
@@ -795,12 +827,22 @@ export function askFujin(
   // Trip Summary (Layla's "Does this sound like the dream winter
   // route?"): route, dates, style, travelers — then the traveler confirms
   // and taps Build my plan. Nights come from distributeNights, so the
-  // summary and the trip card always agree.
+  // summary and the trip card always agree. The separator between cities
+  // is the way you travel between them (trains in Europe, flights in
+  // Southeast Asia) — the trip card's LEG_MODE says the same, mirrored
+  // here because planner.ts must not import tripCard.ts (circular).
+  const ROUTE_SEPARATOR: Record<string, string> = {
+    southeastasia: '✈️',
+    turkey: '✈️',
+    mexico: '✈️',
+    greece: '⛴️',
+  };
   const tripSummary = (dest: string, route: string): string => {
     const legs = route ? distributeNights(route, duration || 14) : [];
+    const sep = (ROUTE_SEPARATOR[route] ?? '🚆');
     const routeLine =
       legs.length > 1
-        ? `${origin ? `${origin} ✈️ ` : ''}${legs.map((l) => `${l.city} (${l.nights} nights)`).join(' 🚆 ')}${origin ? ` ✈️ ${origin}` : ''}`
+        ? `${origin ? `${origin} ✈️ ` : ''}${legs.map((l) => `${l.city} (${l.nights} nights)`).join(` ${sep} `)}${origin ? ` ✈️ ${origin}` : ''}`
         : legs.length === 1
           ? `${origin ? `${origin} ✈️ ` : ''}${legs[0].city}`
           : dest;
@@ -859,8 +901,21 @@ export function askFujin(
       // "Surprise me" / "open to anything" / "nothing in mind" is a
       // request to recommend, not to ask again. Best fit with no
       // destination anywhere: Bali (affordable + great food) — framed as
-      // a suggestion the traveler can change.
+      // a suggestion the traveler can change. Except when the traveler
+      // asked for WARMTH (Nov 11: "warm place... surprise me" got Bali,
+      // which is fine, but the live model picked the warmer, more
+      // cultural Southeast Asia route — the fallback should match it):
+      // Bangkok → Siem Reap → Hanoi, warm in winter, rich culture, safe,
+      // great food.
+      const wantsWarm = /warm|warmth|winter sun|escape (the )?cold|sunny|hot weather|tropical/.test(lower);
       const q = nextQuestion();
+      if (wantsWarm) {
+        const proposal = `Here's a great first pick for warmth and culture — Southeast Asia: Bangkok (Grand Palace, floating markets, street food) → Siem Reap (Angkor Wat sunrise) → Hanoi (Old Quarter, pho). Warm in winter, safe to travel, and some of the best local food anywhere. Stay in social hostels and guesthouses, and get around by metro, tuk-tuk and short domestic flights.`;
+        if (q) {
+          return { destination: 'Southeast Asia', travelers, reply: `${proposal} ${q}`, missing, needsMore: true };
+        }
+        return { destination: 'Southeast Asia', travelers, reply: tripSummary('Southeast Asia', 'southeastasia'), missing, needsMore: false };
+      }
       const proposal = `Here's a great first pick — Bali: affordable flights and stays, and some of the best local food anywhere (warungs, night markets, Ubud). Stay in guesthouses and small hotels, and get around by scooter or Gojek/Grab instead of private cars — it's cheaper, and it's how locals travel.`;
       if (q) {
         return { destination: 'Bali', travelers, reply: `${proposal} ${q}`, missing, needsMore: true };

@@ -54,6 +54,10 @@ export const CITY_INFO: Record<string, CityInfo> = {
   Santorini: { country: 'Greece', lat: 36.39, lng: 25.46, jan: 57, jul: 86, intro: 'Oia sunsets and the caldera.', days: [{ t: 'Oia Sunset and the Caldera', n: 4 }, { t: 'Akrotiri and the Beaches', n: 4 }, { t: 'Wine Tasting in the Villages', n: 3 }] },
   Crete: { country: 'Greece', lat: 35.34, lng: 25.14, jan: 59, jul: 86, intro: 'Knossos, Chania harbour, and the gorges.', days: [{ t: 'Knossos Palace', n: 4 }, { t: 'Chania Old Town and the Harbour', n: 4 }, { t: 'Samaria Gorge or the Beaches', n: 3 }] },
   Bangkok: { country: 'Thailand', lat: 13.76, lng: 100.5, jan: 90, jul: 92, intro: 'Grand Palace, floating markets, and street food at every corner.', days: [{ t: 'Grand Palace and the Temples', n: 5 }, { t: 'Floating Markets and Street Food', n: 5 }, { t: 'Chinatown and the River', n: 4 }] },
+  // Southeast Asia route (Nov 11): Siem Reap and Hanoi had no card data,
+  // so the warm-winter route could not render a trip card or a map.
+  'Siem Reap': { country: 'Cambodia', lat: 13.37, lng: 103.87, jan: 88, jul: 91, intro: 'Angkor Wat at sunrise, and a town built around it.', days: [{ t: 'Angkor Wat Sunrise', n: 6 }, { t: 'Angkor Thom and the Bayon', n: 5 }, { t: 'Tonlé Sap Floating Village', n: 4 }] },
+  Hanoi: { country: 'Vietnam', lat: 21.03, lng: 105.85, jan: 66, jul: 91, intro: 'A thousand-year-old capital of pho, coffee, and the Old Quarter.', days: [{ t: 'Old Quarter and Hoan Kiem Lake', n: 6 }, { t: 'Street Food and Pho Crawl', n: 5 }, { t: 'Halong Bay Day Trip', n: 5 }] },
   'Chiang Mai': { country: 'Thailand', lat: 18.79, lng: 98.99, jan: 87, jul: 91, intro: 'Temples, the night bazaar, and the mountains.', days: [{ t: 'Temples and the Old City', n: 5 }, { t: 'Night Bazaar and Food Stalls', n: 4 }, { t: 'Elephant Sanctuary Day', n: 3 }] },
   Krabi: { country: 'Thailand', lat: 8.09, lng: 98.91, jan: 90, jul: 90, intro: 'Long-tail boats, cliffs, and island days.', days: [{ t: 'Island Hopping by Long-tail Boat', n: 4 }, { t: 'Railay Beach and the Cliffs', n: 4 }, { t: 'Tiger Cave Temple', n: 3 }] },
   Istanbul: { country: 'Turkey', lat: 41.01, lng: 28.98, jan: 48, jul: 83, intro: 'Hagia Sophia, the Grand Bazaar, and the Bosphorus.', days: [{ t: 'Hagia Sophia and the Blue Mosque', n: 5 }, { t: 'Grand Bazaar and the Spice Market', n: 5 }, { t: 'Bosphorus Cruise and Kadıköy', n: 4 }] },
@@ -93,6 +97,7 @@ const LEG_MODE: Record<string, string> = {
   spain: '🚆 AVE train',
   greece: '⛴️ Ferry',
   thailand: '🚆 Sleeper train',
+  southeastasia: '✈️ Domestic flight',
   turkey: '✈️ Domestic flight',
   morocco: '🚆 Train',
   india: '🚆 Train',
