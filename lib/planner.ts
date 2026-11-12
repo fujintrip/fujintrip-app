@@ -408,6 +408,234 @@ export function distributeNights(
   return stops.map((x, idx) => ({ city: x.city, country: x.country, nights: nights[idx] }));
 }
 
+// --- In-chat plan revision (competitor learning, Nov 11: Layla) --------
+// A revision is a change to the EXISTING trip — swap / drop / add a stop,
+// reorder, slow down, give a city more time, or change the budget tier.
+// It never changes the destination, origin or dates unless asked, and it
+// never rebuilds the trip from scratch: the route stays the route, with
+// the one change applied. Trip stickiness is sacred here — a revision
+// message names cities INSIDE the route, so it must never be read as a
+// destination change (that is exactly the route-flip bug).
+export type RouteOverride = { cities: string[]; weights?: Record<string, number> };
+
+export type Revision =
+  | { type: 'swap'; from: string; to: string }
+  | { type: 'remove'; city: string }
+  | { type: 'add'; city: string }
+  | { type: 'reorder'; city: string; before?: string; toFront?: boolean }
+  | { type: 'slow' }
+  | { type: 'moreTime'; city: string }
+  | { type: 'tier'; tier: number }
+  | { type: 'budget'; amount: number };
+
+// Nights per stop for an explicit stop list (the revision's override),
+// with weights: a city's original route weight when it had one, 3 by
+// default. Same distribution rule as distributeNights, so the nights
+// always add up to days - 1 and the longest stay absorbs the rounding.
+export function distributeNightsForStops(
+  stops: Array<{ city: string; country: string; weight: number }>,
+  days: number
+): Array<{ city: string; country: string; nights: number }> {
+  if (!stops.length) return [];
+  const totalNights = Math.max(stops.length, days - 1);
+  const totalW = stops.reduce((s, x) => s + x.weight, 0);
+  const nights = stops.map((x) => Math.max(1, Math.round((totalNights * x.weight) / totalW)));
+  let diff = totalNights - nights.reduce((s, n) => s + n, 0);
+  while (diff > 0) {
+    const i = nights.indexOf(Math.max(...nights));
+    nights[i] += 1;
+    diff -= 1;
+  }
+  while (diff < 0) {
+    const candidates = nights.map((n, i) => (n > 1 ? i : -1)).filter((i) => i >= 0);
+    if (!candidates.length) break;
+    const i = candidates.reduce((a, b) => (nights[a] >= nights[b] ? a : b));
+    nights[i] -= 1;
+    diff += 1;
+  }
+  return stops.map((x, idx) => ({ city: x.city, country: x.country, nights: nights[idx] }));
+}
+
+// A city name resolved from a free-text fragment ("swap Vienna for
+// Budapest" → "Budapest") — a route city only, never a country or a BASE
+// destination like "Japan", which is not a stop you can swap in.
+export function resolveCityName(fragment: string): string {
+  const cityKey = findCity(fragment.toLowerCase());
+  if (!cityKey) return '';
+  return CITY_TO_COUNTRY[cityKey].display;
+}
+
+// The weighted stop list for a route, honoring a revision override:
+// the override's cities in order, each with its original route weight
+// when it had one (so a swap keeps the old stop's share of the nights),
+// 3 by default — plus any weight override ("more time in Prague").
+export function stopsForRoute(
+  routeKey: string,
+  override?: RouteOverride
+): Array<{ city: string; country: string; weight: number }> {
+  if (!override) return ROUTE_STOPS[routeKey] ?? [];
+  const routeStops = ROUTE_STOPS[routeKey] ?? [];
+  return override.cities.map((city) => {
+    const known = routeStops.find((s) => s.city === city);
+    return {
+      city,
+      country: known?.country ?? findCountryForCity(city) ?? '',
+      weight: override.weights?.[city] ?? known?.weight ?? 3,
+    };
+  });
+}
+
+function findCountryForCity(city: string): string | null {
+  for (const stops of Object.values(ROUTE_STOPS)) {
+    const found = stops.find((s) => s.city === city);
+    if (found) return found.country;
+  }
+  return null;
+}
+
+// Read a revision intent from the CURRENT message only — the message is
+// the change; everything before it is the trip it changes. Returns null
+// when the message is not a revision (a new destination, an answer to a
+// question, a greeting), so normal flow is untouched.
+export function parseRevision(text: string): Revision | null {
+  const lower = text.toLowerCase();
+
+  // Budget as a number — "change the budget to $2000" — is resolved to a
+  // tier by the caller (the nearest tier total); here we only parse it.
+  const budgetMatch = lower.match(/\b(?:change|set|make)?\s*(?:the|my)?\s*budget\s*(?:to|at|of)?\s*\$?\s*(\d{3,5})\b/);
+  if (budgetMatch) return { type: 'budget', amount: parseInt(budgetMatch[1], 10) };
+
+  // Tier changes — "make it cheaper", "upgrade to premium".
+  if (/\bmake it cheaper\b|\bgo cheapest\b|\bcut the budget\b|\bcheapest (?:plan|tier|option)\b/.test(lower)) return { type: 'tier', tier: 0 };
+  if (/\bupgrade\b|\bgo premium\b|\bpremium (?:plan|tier|option)\b|\bmake it nicer\b/.test(lower)) return { type: 'tier', tier: 2 };
+  if (/\bbest value\b/.test(lower)) return { type: 'tier', tier: 1 };
+
+  // Swap — "swap Vienna for Budapest", "replace Vienna with Budapest".
+  const swapMatch = lower.match(/\b(?:swap|replace|switch|trade)\s+(.+?)\s+(?:for|with|to)\s+(.+)/);
+  if (swapMatch) {
+    const from = resolveCityName(swapMatch[1]);
+    const to = resolveCityName(swapMatch[2]);
+    if (from && to && from !== to) return { type: 'swap', from, to };
+    if (from && to) return null;
+    return null;
+  }
+
+  // Remove — "drop Athens", "remove Rome", "skip Vienna".
+  const removeMatch = lower.match(/\b(?:drop|remove|skip|cut|delete)\s+(.+)/);
+  if (removeMatch) {
+    const city = resolveCityName(removeMatch[1]);
+    if (city) return { type: 'remove', city };
+  }
+
+  // Add — "add Porto", "add a stop in Porto", "include Porto".
+  const addMatch = lower.match(/\b(?:add|include)\s+(?:a stop (?:in|at)\s+|stops? (?:in|at)\s+|a visit to\s+)?(.+)/);
+  if (addMatch) {
+    const city = resolveCityName(addMatch[1]);
+    if (city) return { type: 'add', city };
+  }
+
+  // Reorder — "Budapest before Vienna", "put Budapest first".
+  const beforeMatch = lower.match(/\b(.+?)\s+before\s+(.+)/);
+  if (beforeMatch) {
+    const city = resolveCityName(beforeMatch[1]);
+    const before = resolveCityName(beforeMatch[2]);
+    if (city && before && city !== before) return { type: 'reorder', city, before };
+  }
+  const firstMatch = lower.match(/\bput\s+(.+?)\s+(?:first|at the start)\b|\bmove\s+(.+?)\s+(?:to the front|first)\b/);
+  if (firstMatch) {
+    const city = resolveCityName(firstMatch[1] ?? firstMatch[2] ?? '');
+    if (city) return { type: 'reorder', city, toFront: true };
+  }
+
+  // More time — "more time in Prague", "an extra night in Prague".
+  const moreMatch = lower.match(/\b(?:more time|an extra night|another night|extra (?:day|night))\s+(?:in|at)\s+(.+)/);
+  if (moreMatch) {
+    const city = resolveCityName(moreMatch[1]);
+    if (city) return { type: 'moreTime', city };
+  }
+
+  // Slow down — "slow down", "fewer cities", "less rushed".
+  if (/\bslow(?:er)?\s+down\b|\bslow(?:er)? pace\b|\bfewer cities\b|\bless rushed\b|\btoo (?:many|much) (?:cities|stops)\b/.test(lower)) {
+    return { type: 'slow' };
+  }
+
+  return null;
+}
+
+// Apply a revision to the current stop list. Returns the new override +
+// a one-line note for the chat reply, or null when it cannot be applied
+// honestly (unknown city, a city that is not on the route, a change that
+// would leave the trip with no stops). The caller turns a null into a
+// clarification question instead of inventing the change.
+export function applyRevision(
+  currentStops: Array<{ city: string; country: string; weight: number }>,
+  revision: Revision,
+  days: number
+): { override: RouteOverride; note: string } | null {
+  const currentCities = currentStops.map((s) => s.city);
+  const list = (cities: string[]) => cities.join(' → ');
+  switch (revision.type) {
+    case 'swap': {
+      if (!currentCities.includes(revision.from)) return null;
+      if (currentCities.includes(revision.to)) return null;
+      const cities = currentCities.map((c) => (c === revision.from ? revision.to : c));
+      return { override: { cities }, note: `Swapped ${revision.from} for ${revision.to} — your route is now ${list(cities)}.` };
+    }
+    case 'remove': {
+      if (!currentCities.includes(revision.city)) return null;
+      if (currentCities.length < 2) return null;
+      const cities = currentCities.filter((c) => c !== revision.city);
+      return { override: { cities }, note: `Dropped ${revision.city} — your route is now ${list(cities)}.` };
+    }
+    case 'add': {
+      if (currentCities.includes(revision.city)) return null;
+      const cities = [...currentCities, revision.city];
+      return { override: { cities }, note: `Added ${revision.city} at the end — your route is now ${list(cities)}.` };
+    }
+    case 'reorder': {
+      if (!currentCities.includes(revision.city)) return null;
+      const rest = currentCities.filter((c) => c !== revision.city);
+      let cities: string[];
+      if (revision.toFront) {
+        cities = [revision.city, ...rest];
+      } else if (revision.before && rest.includes(revision.before)) {
+        const idx = rest.indexOf(revision.before);
+        cities = [...rest.slice(0, idx), revision.city, ...rest.slice(idx)];
+      } else {
+        return null;
+      }
+      if (cities.join() === currentCities.join()) return null;
+      return { override: { cities }, note: `Reordered — your route is now ${list(cities)}.` };
+    }
+    case 'slow': {
+      if (currentCities.length < 3) return null;
+      // Drop the stop with the fewest nights in the current distribution,
+      // using the real route weights (Budapest holds 6 nights; Vienna 3).
+      const plan = distributeNightsForStops(currentStops, days);
+      const shortest = plan.reduce((a, b) => (a.nights <= b.nights ? a : b));
+      const cities = currentCities.filter((c) => c !== shortest.city);
+      return {
+        override: { cities },
+        note: `Slowed it down — dropped ${shortest.city} (the shortest stop) so the rest of the trip has more breathing room. Your route is now ${list(cities)}.`,
+      };
+    }
+    case 'moreTime': {
+      if (!currentCities.includes(revision.city)) return null;
+      // A higher weight gives this city more nights when the nights are
+      // redistributed; the other stops keep their weight.
+      const maxW = Math.max(...currentStops.map((s) => s.weight));
+      return {
+        override: { cities: currentCities, weights: { [revision.city]: maxW + 3 } },
+        note: `Gave ${revision.city} more time — it now gets the longest stay on the trip.`,
+      };
+    }
+    case 'tier':
+    case 'budget':
+      // These do not change the route; the caller applies the tier.
+      return { override: { cities: currentCities }, note: '' };
+  }
+}
+
 // Route key for a destination display name ('Europe' → 'europe',
 // 'Central Europe' → 'centraleurope', 'Kyoto' → '' — a single city has
 // no multi-stop route). Used by the trip card and the Trip Summary.
@@ -623,7 +851,7 @@ export function parseKidAges(text: string): number[] {
 // gives the count with ages unknown (the chat then asks for the ages).
 // "family of 5" with no breakdown is 5. Everything else falls back to
 // parseTravelers, so solo/couple/bare-number behavior is unchanged.
-export function parseParty(text: string): { adults: number; kids: number; kidAges: number[] } {
+export function parseParty(text: string): { adults: number; kids: number; kidAges: number[]; familyOf?: number } {
   const lower = text.toLowerCase();
   const kidAges = parseKidAges(lower);
   const kidCountM = lower.match(/(\d+)\s*(?:kids?|children)\b/);
@@ -636,7 +864,7 @@ export function parseParty(text: string): { adults: number; kids: number; kidAge
     kids,
     kidAges,
     ...(familyOfM && !adults && !kids ? { familyOf: Math.min(9, parseInt(familyOfM[1], 10)) } : {}),
-  } as { adults: number; kids: number; kidAges: number[]; familyOf?: number };
+  };
 }
 
 // Travelers from the party composition. Explicit adults + kids sum;
@@ -757,8 +985,12 @@ export function askFujin(
   defaultTravelers = 2,
   contextDestination = '',
   currentMessage = '',
-  contextOrigin = ''
-): { destination: string; travelers: number; reply: string; missing: string[]; needsMore: boolean; kids?: number[] } {
+  contextOrigin = '',
+  // The trip's current route override (from a previous revision): the
+  // ordered cities + any weight override, so the summary and a new
+  // revision keep building on the revised route instead of the original.
+  contextOverride?: RouteOverride
+): { destination: string; travelers: number; reply: string; missing: string[]; needsMore: boolean; kids?: number[]; routeOverride?: RouteOverride; tier?: number } {
   // Off-topic is judged on the CURRENT message only. The joined history
   // would make any message look like travel — "who will win the election?"
   // after an Egypt chat came back as an Egypt route (Nov 10 overnight
@@ -930,7 +1162,14 @@ export function askFujin(
     greece: '⛴️',
   };
   const tripSummary = (dest: string, route: string): string => {
-    const legs = route ? distributeNights(route, duration || 14) : [];
+    // A revised route (from an earlier revision) is what the summary
+    // shows — its nights, not the original route's.
+    const legs =
+      contextOverride?.cities.length
+        ? distributeNightsForStops(stopsForRoute(route, contextOverride), duration || 14)
+        : route
+          ? distributeNights(route, duration || 14)
+          : [];
     const sep = (ROUTE_SEPARATOR[route] ?? '🚆');
     const routeLine =
       legs.length > 1
@@ -944,6 +1183,91 @@ export function askFujin(
   const isConfirmation = /^(yes|yeah|yep|sure|ok|okay|looks great|looks good|perfect|sounds good|sounds great|build it|let'?s build|go ahead|do it|great|love it)\b/.test(
     currentLower.trim()
   );
+  // REVISION — the traveler is changing the trip they already have
+  // ("swap Vienna for Budapest", "make it cheaper", "more time in
+  // Prague"). This runs BEFORE the normal flow, because a revision
+  // message names cities INSIDE the route — reading them as a new
+  // destination is exactly the route-flip bug (Nov 11). Only when a
+  // trip is already established; without one there is nothing to revise.
+  if (contextDestination && currentMessage) {
+    const revision = parseRevision(currentMessage);
+    if (revision) {
+      const dest = known || contextDestination;
+      const rk = routeKey && ROUTE_STOPS[routeKey] ? routeKey : routeKeyForDestination(dest);
+      const stops = contextOverride?.cities.length
+        ? stopsForRoute(rk, contextOverride)
+        : (ROUTE_STOPS[rk] ?? []);
+      if (stops.length) {
+        const TIER_NAMES = ['Cheapest', 'Best value', 'Premium'];
+        if (revision.type === 'tier') {
+          return {
+            destination: dest,
+            travelers,
+            reply: `Got it — switched to the ${TIER_NAMES[revision.tier]} plan. Your route stays ${stops.map((s) => s.city).join(' → ')}, and the trip card prices update to the new tier. Tap Build my plan to see it.`,
+            missing,
+            needsMore: false,
+            kids: kidAges,
+            tier: revision.tier,
+          };
+        }
+        if (revision.type === 'budget') {
+          // The highest tier whose whole-trip total fits the budget —
+          // the plan must fit what the traveler said, not the closest
+          // number above it.
+          const totals = buildPlan(dest, travelers, duration || 14).options.map((o) => o.total);
+          let tier = 0;
+          totals.forEach((total, i) => {
+            if (total <= revision.amount) tier = i;
+          });
+          return {
+            destination: dest,
+            travelers,
+            reply: `Your $${revision.amount.toLocaleString()} budget fits the ${TIER_NAMES[tier]} plan ($${totals[tier].toLocaleString()} for the whole trip, flights, stays, transport between cities and activities included). Your route stays ${stops.map((s) => s.city).join(' → ')}. Tap Build my plan to see it.`,
+            missing,
+            needsMore: false,
+            kids: kidAges,
+            tier,
+          };
+        }
+        const applied = applyRevision(stops, revision, duration || 14);
+        if (applied) {
+          const nights = distributeNightsForStops(stopsForRoute(rk, applied.override), duration || 14);
+          const routeLine = nights.map((n) => `${n.city} (${n.nights} nights)`).join(' → ');
+          return {
+            destination: dest,
+            travelers,
+            reply: `${applied.note} The nights are now ${routeLine} — everything else (dates, origin, budget) stays the same. Tap Build my plan to see the updated trip card.`,
+            missing,
+            needsMore: false,
+            kids: kidAges,
+            routeOverride: applied.override,
+          };
+        }
+        // Swapping in a city that is already a stop is not a swap — it
+        // is really "drop the other one and spend more time here". Say
+        // so instead of a generic clarification.
+        if (revision.type === 'swap' && stops.some((s) => s.city === revision.to)) {
+          return {
+            destination: dest,
+            travelers,
+            reply: `${revision.to} is already one of your stops (${stops.map((s) => s.city).join(' → ')}). Did you mean to drop ${revision.from} and spend more time in ${revision.to}? Say "drop ${revision.from}" and I'll give ${revision.to} the extra nights.`,
+            missing,
+            needsMore: false,
+            kids: kidAges,
+          };
+        }
+        // Could not apply it honestly — ask, don't invent the change.
+        return {
+          destination: dest,
+          travelers,
+          reply: `I couldn't make that change as written — your stops right now are ${stops.map((s) => s.city).join(', ')}. Which city should I swap out, or which one should I add?`,
+          missing,
+          needsMore: false,
+          kids: kidAges,
+        };
+      }
+    }
+  }
   if (!known) {
     // RECOMMEND — the traveler gave constraints but no destination, or said
     // they have nothing in mind / are open to anything. Propose a route
@@ -965,6 +1289,13 @@ export function askFujin(
       }
       const route = COUNTRY_ROUTES[routeKey];
       let routeText = route.route;
+      // A revised route replaces the canned route text — the traveler
+      // is looking at THEIR route, not the template, while the last
+      // slots are still being collected.
+      if (contextOverride?.cities.length) {
+        const nights = distributeNightsForStops(stopsForRoute(routeKey, contextOverride), duration || 14);
+        routeText = nights.map((n) => `${n.city} (${n.nights} nights)`).join(' → ');
+      }
       // Season notes, only when the traveler named the month — a January
       // line on a July trip would be wrong.
       if (routeKey === 'europe' && /\bjan/.test(lower))

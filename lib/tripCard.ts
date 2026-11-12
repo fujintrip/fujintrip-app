@@ -9,7 +9,7 @@
 // flights: the card shows the planner's estimated fare split, labeled as
 // an estimate, until Duffel live fares connect.
 
-import { buildPlan, comparisonFor, distributeNights, familyPaceLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from './planner';
+import { buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, stopsForRoute, type RouteOverride } from './planner';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -200,6 +200,11 @@ export function buildTripCard(opts: {
   origin: string;
   tier?: number;
   kids?: number[];
+  // A revision from the chat ("swap Vienna for Porto"): the ordered
+  // stops replace the route's default stops; the nights follow the
+  // override's weights, so the card, the map and the summary all show
+  // the same revised route.
+  routeOverride?: RouteOverride;
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -215,10 +220,13 @@ export function buildTripCard(opts: {
   const totalNights = days - 1;
 
   // Nights per stop: the route's distribution, or the whole stay for a
-  // single-city destination.
-  const nightPlan = routeKey
-    ? distributeNights(routeKey, days)
-    : [{ city: opts.destination, country: CITY_INFO[opts.destination]?.country ?? '', nights: totalNights }];
+  // single-city destination — or the revised route when the traveler
+  // changed the trip in the chat.
+  const nightPlan = opts.routeOverride?.cities.length
+    ? distributeNightsForStops(stopsForRoute(routeKey, opts.routeOverride), days)
+    : routeKey
+      ? distributeNights(routeKey, days)
+      : [{ city: opts.destination, country: CITY_INFO[opts.destination]?.country ?? '', nights: totalNights }];
 
   const legFlightOut = Math.round(best.flight * 0.4);
   const legFlightBack = Math.round(best.flight * 0.4);

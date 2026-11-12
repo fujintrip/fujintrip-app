@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, distributeNights, findMonth, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, routeKeyForDestination, ROUTE_STOPS } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 import { fetchLiveFares, faresPromptBlock, faresSummaryLine, type LiveFares } from '../../../lib/duffel';
 import { suggestedStart } from '../../../lib/tripCard';
@@ -114,12 +114,13 @@ const SYSTEM_PROMPT = [
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
   'TRAVELER COUNT — "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'FAMILY — when the traveler mentions kids, children or a family trip, ask how many kids and their ages (one question, right after the party size is known) and remember them in the kids array of your JSON answer. "2 adults, 3 kids" is 5 travelers, not 2. Adjust the plan to the YOUNGEST kid: under 5 — slow days, 2 major activities a day, a nap or downtime after lunch, kid-friendly restaurants near each stop; ages 5–11 — 2–3 activities a day with buffers and realistic walking distances; 12+ — full days are fine with a mix of sights and something active. Never suggest late-night bars or nightlife for a family with young kids. Mention the family pace in the Trip Summary.',
+  'REVISION — when the traveler changes the trip they already have, change ONLY what they asked for and keep everything else (destination, dates, origin, travelers, the other stops). "Swap Vienna for Porto" means the route becomes Prague → Porto → Budapest with the same nights per city; "drop Vienna" removes it; "add Porto" adds it at the end; "Budapest before Vienna" or "put Budapest first" reorders; "slow down" drops the shortest stop; "more time in Prague" gives Prague the longest stay (set routeWeights {"Prague": 9}); "make it cheaper" / "upgrade" / "best value" changes the tier (return the tier field: 0 Cheapest, 1 Best value, 2 Premium); "change the budget to $2000" means pick the highest tier whose total fits $2000 and return its tier. Return the revised ordered list of cities in routeStops, and ONLY the changes the traveler asked for — never rebuild the route, never add a city they did not ask for, and never change the destination. If the city they name is not on the route (or is already on it), say so honestly and ask what they meant instead of inventing the change. A revision message naming route cities is NEVER a new destination.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
   'LIVE FARES — before the model runs, the server asks Duffel for the real fares for this exact trip (origin to the first city of the route, and back) on the trip\'s suggested dates, and appends them as a LIVE FARES block below. ONLY when a LIVE FARES block is present may you say fares are live — quote those fares as the flight prices, with the airline name and the price, and say they are live fares from Duffel (test fares in test mode). If NO LIVE FARES block is present, the flight prices are planning estimates from the price table — never write "live estimates via Duffel", never claim the flight prices come from Duffel, and never invent a fare. For the whole-trip totals, still use the price table (planning estimates) and say the flight inside the plan is estimated — the live fare may be lower.',
   'FujinTrip plan prices (1 traveler and 2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
-  'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[], "kids": number[]}. The kids array holds the kids\' ages when the trip is a family trip (empty otherwise).',
+  'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[], "kids": number[], "routeStops": string[], "routeWeights": object, "tier": number}. The kids array holds the kids\' ages when the trip is a family trip (empty otherwise). The routeStops array holds the REVISED ordered list of route cities when the traveler changed the trip in this message (otherwise leave it out or empty); routeWeights holds a city-to-weight map only when they asked for more time in a city; tier is 0/1/2 only when they changed the plan tier or budget.',
   'If the destination is unclear AND the traveler gave no constraints at all, ask which city or country they mean. If they already said they don\'t know or have nothing in mind, recommend instead of asking again.',
 ].join(' ');
 
@@ -132,12 +133,15 @@ const FUJIN_SCHEMA = {
     missing: { type: 'array', items: { type: 'string' } },
     tips: { type: 'array', items: { type: 'string' } },
     kids: { type: 'array', items: { type: 'number' } },
+    routeStops: { type: 'array', items: { type: 'string' } },
+    routeWeights: { type: 'object', additionalProperties: { type: 'number' } },
+    tier: { type: 'number' },
   },
   required: ['destination', 'reply'],
   additionalProperties: false,
 };
 
-type FujinResult = { destination: string; travelers: number; reply: string; missing: string[]; tips: string[]; kids?: number[] };
+type FujinResult = { destination: string; travelers: number; reply: string; missing: string[]; tips: string[]; kids?: number[]; routeStops?: string[]; routeWeights?: Record<string, number>; tier?: number };
 
 // The live fetch needs a destination BEFORE the model runs, so guess it
 // from the request: an explicit destination, or the last place named in
@@ -149,8 +153,8 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null) {
-  const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin);
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride) {
+  const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
   // win the election?" after an Egypt chat came back as an Egypt route).
@@ -188,6 +192,11 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     destination,
     reply,
     missing,
+    // The client reads routeStops / routeWeights / tier — the same shape
+    // the live model returns. The fallback's routeOverride is the same
+    // data under its planner name, so expose it in both shapes.
+    routeStops: parsed.routeOverride?.cities,
+    routeWeights: parsed.routeOverride?.weights,
     voices: voices?.text ?? '',
     voicesSource: voices?.source ?? '',
     voicesDestination: voicesDest,
@@ -215,6 +224,18 @@ function parseModelJson(content: string): FujinResult | null {
       kids: Array.isArray(raw.kids)
         ? raw.kids.filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6)
         : undefined,
+      routeStops: Array.isArray(raw.routeStops)
+        ? raw.routeStops.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).map((s) => s.trim()).slice(0, 8)
+        : undefined,
+      routeWeights:
+        raw.routeWeights && typeof raw.routeWeights === 'object' && !Array.isArray(raw.routeWeights)
+          ? Object.fromEntries(
+              Object.entries(raw.routeWeights as Record<string, unknown>)
+                .filter(([, v]) => typeof v === 'number' && (v as number) > 0 && (v as number) <= 12)
+                .map(([k, v]) => [k, v as number])
+            )
+          : undefined,
+      tier: typeof raw.tier === 'number' && [0, 1, 2].includes(raw.tier) ? raw.tier : undefined,
     };
   } catch {
     return null;
@@ -258,6 +279,28 @@ export async function POST(req: NextRequest) {
   const stateKids = Array.isArray(tripState.kids)
     ? (tripState.kids as unknown[]).filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6)
     : [];
+  // The trip's current route override (from an earlier revision): the
+  // ordered cities + weights, so the model and the fallback keep
+  // building on the revised route instead of the original.
+  const stateRouteOverride: RouteOverride | undefined =
+    tripState.routeOverride && typeof tripState.routeOverride === 'object' && !Array.isArray(tripState.routeOverride)
+      ? (() => {
+          const o = tripState.routeOverride as Record<string, unknown>;
+          const cities = Array.isArray(o.cities)
+            ? (o.cities as unknown[]).filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map((c) => c.trim()).slice(0, 8)
+            : [];
+          if (!cities.length) return undefined;
+          const weights =
+            o.weights && typeof o.weights === 'object' && !Array.isArray(o.weights)
+              ? Object.fromEntries(
+                  Object.entries(o.weights as Record<string, unknown>)
+                    .filter(([, v]) => typeof v === 'number' && (v as number) > 0 && (v as number) <= 12)
+                    .map(([k, v]) => [k, v as number])
+                )
+              : undefined;
+          return { cities, ...(weights && Object.keys(weights).length ? { weights } : {}) };
+        })()
+      : undefined;
 
   // On-trip mode (feature 8): the traveler is already at the destination
   // and wants short, right-now local answers. The trip destination also
@@ -315,7 +358,7 @@ export async function POST(req: NextRequest) {
     systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;
   }
   if (stateDestination) {
-    systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}${stateKids.length ? `, kids ages ${stateKids.join(', ')}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
+    systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}${stateKids.length ? `, kids ages ${stateKids.join(', ')}` : ''}${stateRouteOverride?.cities.length ? `, route stops ${stateRouteOverride.cities.join(' → ')}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
   }
   // Nights per city, from the planner's distribution — injected so the
   // live model never re-splits the route: on the live site turn 5 gave
@@ -326,7 +369,11 @@ export async function POST(req: NextRequest) {
   const routeKey = routeKeyForDestination(voicesDest || stateDestination);
   const tripDays = parseDuration(fullText);
   if (routeKey && tripDays >= 2) {
-    const legs = distributeNights(routeKey, tripDays);
+    // A revised route's nights are its own distribution — the model
+    // must quote the revised nights, not the original route's.
+    const legs = stateRouteOverride?.cities.length
+      ? distributeNightsForStops(stopsForRoute(routeKey, stateRouteOverride), tripDays)
+      : distributeNights(routeKey, tripDays);
     systemPrompt += ` ROUTE NIGHTS — for ${voicesDest || stateDestination} over ${tripDays} days, the nights per city are EXACTLY: ${legs.map((l) => `${l.city} ${l.nights} nights`).join(', ')}. Use exactly these nights, in exactly this order, in every reply — never re-split them, never add filler days, and never change them on a later turn.`;
   }
 
@@ -341,7 +388,8 @@ export async function POST(req: NextRequest) {
       stateDestination,
       message,
       stateOrigin,
-      liveFares
+      liveFares,
+      stateRouteOverride
     );
   }
   const apiKey = provider.apiKey;
@@ -395,14 +443,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride);
     }
 
     return NextResponse.json({
@@ -416,7 +464,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride);
   }
 }
 
