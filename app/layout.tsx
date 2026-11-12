@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
-import { Fraunces } from 'next/font/google';
 import './globals.css';
-
-const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-fraunces' });
+// Modern look, like Layla: the system sans stack — no display serif,
+// no downloaded font. (Fraunces was the old Japanese gold-leaf theme.)
 
 export const metadata: Metadata = {
   title: 'FujinTrip — Ride the wind. Pay less.',
@@ -11,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={fraunces.variable}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

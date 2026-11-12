@@ -29,20 +29,20 @@ function FitBounds({ stops }: { stops: MapStop[] }) {
 function numberedIcon(n: number) {
   return L.divIcon({
     className: 'fujin-map-marker',
-    html: `<div style="background:#b98a1d;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;box-shadow:0 1px 5px rgba(0,0,0,.4)">${n}</div>`,
+    html: `<div style="background:#111;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;box-shadow:0 1px 5px rgba(0,0,0,.4)">${n}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
 }
 
-// Price tag for a bookable leg: colored by kind (flight gold, stay jade,
-// car slate), with the price on it. Selected tags get a dark border;
-// legs already added to the plan get a green border and a check.
+// Price tag for a bookable leg: dark for flights, warm accent for stays,
+// gray for cars. Selected tags get a dark border; legs already added to
+// the plan get a green border and a check.
 const LEG_COLOR: Record<TripLeg['kind'], string> = {
-  flight: '#b98a1d',
-  transport: '#b98a1d',
-  stay: '#1f5c4d',
-  car: '#5b6b7a',
+  flight: '#111',
+  transport: '#111',
+  stay: '#ea580c',
+  car: '#6b7280',
 };
 
 function priceTagIcon(leg: TripLeg, selected: boolean, added: boolean) {
@@ -74,13 +74,13 @@ export default function TripMap({
   const positions: Array<[number, number]> = stops.map((s) => [s.lat, s.lng]);
   const center: [number, number] = stops.length === 1 ? positions[0] : [0, 0];
   return (
-    <div style={{ height: '100%', minHeight: 320, borderRadius: 12, overflow: 'hidden', border: '1px solid #e8e0c8' }}>
+    <div style={{ height: '100%', minHeight: 320, borderRadius: 16, overflow: 'hidden', border: '1px solid #e8e8e6' }}>
       <MapContainer center={center} zoom={3} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {stops.length > 1 && <Polyline positions={positions} color="#b98a1d" weight={3} dashArray="6 6" />}
+        {stops.length > 1 && <Polyline positions={positions} color="#111" weight={3} dashArray="6 6" />}
         {stops.map((s, i) => (
           <Marker key={s.city} position={[s.lat, s.lng]} icon={numberedIcon(i + 1)} />
         ))}
