@@ -3,6 +3,7 @@ import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsF
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from '../../../lib/food';
+import { bestTimeLine } from '../../../lib/bestTime';
 import { visaLine } from '../../../lib/visa';
 import { suggestedStart } from '../../../lib/tripCard';
 
@@ -126,6 +127,7 @@ const SYSTEM_PROMPT = [
   'VISA — when the trip\'s countries are known (see the VISA block below), mention the entry requirements in ONE short sentence in the Trip Summary, for a US passport, and point the traveler to the plan view\'s Visa & entry panel for the official source links. Never invent a visa rule, a fee, or a validity period — only state what the VISA block says. If there is no VISA block, say nothing about visas.',
   'BOOK NOW — when the traveler asks whether to book now or wait, use the PRICE CHECK block below: it compares the cheapest live fares out and back with the plan\'s own flight budget, and says whether the plan still holds or would rise. Quote that read, never add your own forecast, and never say fares will drop or rise — fares move both ways and we never predict them. If a TREND block is present, quote its sentence too — it is the read of the traveler\'s own past fare checks (\"Since you started watching on [date], the cheapest fares out and back went $X → $Y. Confidence: low/medium — based on N checks of your own fares, not a forecast.\"). If there is no TREND block, say there is no price history yet and offer a price watch in My Trips. Never give a confidence level from nothing, never say "high confidence", and never say a forecast is "95% accurate". If there is no PRICE CHECK block, say the live fare is not available for this trip yet and offer a price watch in My Trips.',
   'ON-TRIP FOOD — when a FOOD block is present, the traveler is asking where to eat tonight: name ONLY the places in it, with their open-now status, walk time, price band and dish — quote the Wikivoyage sentence as the review. Only say "open now" when the block says so; when it says "hours not verified", say so. Never invent a name, an opening hour, a dish or a review. If there is no FOOD block, answer from the LOCAL VOICES material and say which places you could not confirm.',
+  'BEST TIME — when the traveler asks when to go, use the BEST TIME block: name the best month and why (price, crowds, weather), and the season for their month if they named one. Everything is a typical season, never a live price and never a forecast — say "typical season" when you quote it.',
   'DISRUPTION — when the traveler says their flight was cancelled, delayed, missed or diverted: first state what is confirmed — ONLY from the FLIGHT STATUS block below (or from the status the traveler quoted in their own message); if there is no status block, say plainly you don\'t have a live status for that flight and point them to the "Check my flight" box. A cancellation counts only when it is confirmed — never call a flight cancelled on a rumor or a single flag. Then list the rebooking options ONLY from the LIVE FARES block (airline, price, times) — never invent an alternate flight, a gate, or a rebooking. If no live fares are available, say so and offer to save a booking request in My Trips for the FujinTrip team. Keep it short and practical: what happened, what to do now, and the options.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
@@ -224,6 +226,13 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
   // appended when the server fetched them for tonight's question.
   if (contextFood?.places.length && !declinedOffTopic) {
     reply += `\n\n${foodReply(contextFood)}`;
+  }
+  // Best time to travel (round 2 #5): when the traveler asks when to
+  // go, the best month and the season for their month. Pure function of
+  // the destination — no fetch, no live data, so it is computed here.
+  if (destination && !declinedOffTopic && /best time|when should (i|we) go|when to go|when is the best|cheapest month|best month to/i.test(message)) {
+    const line = bestTimeLine(destination, findMonth(message));
+    if (line) reply += `\n\n${line}`;
   }
   return NextResponse.json({
     live: false,
@@ -434,6 +443,11 @@ export async function POST(req: NextRequest) {
   // — the model names ONLY these, with their open-now status.
   if (food?.places.length) {
     systemPrompt += ` FOOD — ${foodBlock(food)}`;
+  }
+  // Best time to travel (round 2 #5): the best month and the season for
+  // the trip's own month, when the traveler asks when to go.
+  if (/best time|when should (i|we) go|when to go|when is the best|cheapest month|best month to/i.test(message) && (voicesDest || stateDestination)) {
+    systemPrompt += ` BEST TIME — ${bestTimeLine(voicesDest || stateDestination, tripMonth)}`;
   }
   if (onTrip) {
     systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;

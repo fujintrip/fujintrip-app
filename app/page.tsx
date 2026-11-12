@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
+import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
 import type { TonightResult } from '../lib/food';
@@ -639,6 +640,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     () => (plan ? visaForDestination(plan.destination) : []),
     [plan]
   );
+  // Best time to travel (competitor learning round 2 #5, Kayak): price
+  // + crowds + weather per month for this route, from the curated
+  // seasons and the trip card's own typical temperatures.
+  const bestTime: BestTime | null = useMemo(
+    () => (plan ? bestTimeFor(plan.destination) : null),
+    [plan]
+  );
   // Book now or wait? (competitor learning #4): the live fares for this
   // exact trip, checked once per trip — the key guards against
   // refetching on every chat turn (lastParsed changes identity each
@@ -996,6 +1004,70 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       </p>
                     </div>
                   ))}
+                </div>
+              )}
+              {/* Best time to travel (competitor learning round 2 #5,
+                  Kayak): the 12-month strip for this route — price band,
+                  crowds and typical temperatures per month, with the best
+                  month starred and the trip's own month outlined. Typical
+                  season, not live prices. */}
+              {plan && bestTime && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: '4px 0' }}>Best time to travel</h3>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                    {bestTime.months.map((m) => {
+                      const isBest = m.month === bestTime.bestMonth;
+                      const isTrip = lastParsed?.month === m.month;
+                      const bg = m.season === 'peak' ? '#ea580c' : m.season === 'shoulder' ? '#f0f0ee' : '#e8eef7';
+                      const color = m.season === 'peak' ? '#fff' : '#111';
+                      return (
+                        <div
+                          key={m.month}
+                          title={`${MONTH_NAMES[m.month - 1]} — ${m.season} season, ${m.crowds} crowds, ${m.price} prices${m.tempLow !== null && m.tempHigh !== null ? `, typically ${m.tempLow}–${m.tempHigh}°C` : ''}`}
+                          style={{
+                            flex: 1,
+                            background: bg,
+                            color,
+                            borderRadius: 8,
+                            padding: '8px 0',
+                            textAlign: 'center',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            outline: isTrip ? '2px solid #0a0a0a' : 'none',
+                            outlineOffset: 1,
+                          }}
+                        >
+                          {MONTH_NAMES[m.month - 1].slice(0, 1)}
+                          {isBest ? ' ★' : ''}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: 13, color: '#666', margin: '6px 0' }}>
+                    <span style={{ background: '#ea580c', color: '#fff', borderRadius: 4, padding: '0 6px' }}>Peak</span>{' '}
+                    <span style={{ background: '#f0f0ee', borderRadius: 4, padding: '0 6px' }}>Shoulder</span>{' '}
+                    <span style={{ background: '#e8eef7', borderRadius: 4, padding: '0 6px' }}>Low</span>{' '}
+                    ★ best month · outlined = your month
+                  </p>
+                  <p style={{ fontSize: 14, margin: '4px 0' }}>
+                    <strong>Best month to go: {MONTH_NAMES[bestTime.bestMonth - 1]}</strong> — {bestTime.bestNote};{' '}
+                    {bestTime.months[bestTime.bestMonth - 1].crowds} crowds, {bestTime.months[bestTime.bestMonth - 1].price} prices
+                    {bestTime.months[bestTime.bestMonth - 1].tempLow !== null && bestTime.months[bestTime.bestMonth - 1].tempHigh !== null
+                      ? `, typically ${bestTime.months[bestTime.bestMonth - 1].tempLow}–${bestTime.months[bestTime.bestMonth - 1].tempHigh}°C across ${bestTime.cities.join(', ')}`
+                      : ''}
+                    .
+                  </p>
+                  {lastParsed?.month && lastParsed.month !== bestTime.bestMonth && (
+                    <p style={{ fontSize: 14, margin: '4px 0' }}>
+                      Your month ({MONTH_NAMES[lastParsed.month - 1]}) is {bestTime.months[lastParsed.month - 1].season} season —{' '}
+                      {bestTime.months[lastParsed.month - 1].crowds} crowds, {bestTime.months[lastParsed.month - 1].price} prices
+                      {bestTime.months[lastParsed.month - 1].tempLow !== null && bestTime.months[lastParsed.month - 1].tempHigh !== null
+                        ? `, typically ${bestTime.months[lastParsed.month - 1].tempLow}–${bestTime.months[lastParsed.month - 1].tempHigh}°C`
+                        : ''}
+                      .
+                    </p>
+                  )}
+                  <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Typical season — not live prices, not a weather forecast.</p>
                 </div>
               )}
               {plan && (
