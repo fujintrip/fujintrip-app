@@ -32,6 +32,48 @@ header{border-bottom:1px solid var(--line);background:#fff}
 .msg.user{text-align:right}
 .msg .bubble{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .msg.user .bubble{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* Motion (design #5 — the 2026 baseline: every interactive element has a
+   state change; 150–300ms, ease-out, transform + opacity only, never
+   layout). Buttons lift on hover and press in on click; cards lift and
+   their photo zooms 1.02; chat messages slide/fade in; price tags on the
+   map scale on hover. */
+:root{--ease:cubic-bezier(.25,.1,.25,1);--dur:200ms}
+button{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),background-color var(--dur) var(--ease),border-color var(--dur) var(--ease),opacity var(--dur) var(--ease)}
+button.primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+button.primary:active{transform:translateY(1px);box-shadow:none}
+button.ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
+button.ghost:active{transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.tab{transition:color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
+.tab:hover{color:var(--ink);background:rgba(255,255,255,.7)}
+.card{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.10)}
+.card img{transition:transform 300ms var(--ease)}
+.card:hover img{transform:scale(1.02)}
+.compare .box{transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),transform var(--dur) var(--ease)}
+.compare .box:hover{border-color:#c9c9c6}
+@keyframes msg-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.msg{animation:msg-in 200ms var(--ease)}
+/* Price tags on the map (Leaflet divIcon inner div): scale on hover so
+   the most-tapped surface in the product feels alive. */
+.fujin-price-tag div{transition:transform var(--dur) var(--ease)}
+.fujin-price-tag div:hover{transform:scale(1.06)}
+/* Typing indicator dots (design #2): three dots bounce in sequence while
+   Fujin AI works. */
+.typing-dots{display:inline-flex;gap:4px;align-items:center;padding:4px 0}
+.typing-dots span{width:7px;height:7px;border-radius:50%;background:#999;animation:dot-bounce 1.2s infinite}
+.typing-dots span:nth-child(2){animation-delay:.15s}
+.typing-dots span:nth-child(3){animation-delay:.3s}
+@keyframes dot-bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+/* Skeleton shimmer (design #9): warm gray pulse shaped like the content
+   it replaces — never a full-page spinner. */
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.skeleton{background:linear-gradient(90deg,#f0f0ee 25%,#e8e8e6 50%,#f0f0ee 75%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
+/* Motion must earn its place: anyone who prefers reduced motion gets
+   none of it. Non-negotiable (design §4.5 #5). */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important;scroll-behavior:auto !important}
+}
 .row{display:flex;gap:8px;flex-wrap:wrap}
 input,select,button{font-family:inherit;font-size:15px}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
