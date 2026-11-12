@@ -21,16 +21,9 @@ header{border-bottom:1px solid var(--line);background:#fff}
 .hero{padding:64px 0 32px;text-align:center}
 .hero h1{font-size:clamp(32px,5vw,48px);font-weight:800}
 .hero p{color:var(--muted);margin-top:12px;font-size:18px}
-/* Slim hero strip (Nov 12 layout rebuild): the chat is the product, not
-   the marketing — the hero is one compact row (portrait + headline +
-   tagline) so the chat + map fill the first screen instead of starting
-   ~600px down. The old centred block + "Start planning" CTA are gone;
-   the chat is right there. */
-.hero-slim{display:flex;align-items:center;gap:16px;text-align:left;padding:14px 0}
-.hero-slim .fujin-portrait{width:44px;height:44px;margin:0;flex:0 0 auto}
-.hero-slim .img-fallback.fujin-portrait{width:44px;height:44px;margin:0;font-size:22px}
-.hero-slim h1{font-size:24px}
-.hero-slim p{margin-top:2px;font-size:14px}
+/* The slim hero strip is gone (app shell, Nov 12): it was folded into
+   the app bar — the portrait + one-line tagline there — so it no
+   longer pushes the app down. */
 /* Full-bleed chat shell (Nov 12): the chat section uses the whole
    viewport width (~24px gutters), not the 1080px .wrap the content
    sections keep. The plan below the chat stays capped (see
@@ -228,19 +221,56 @@ html{scroll-padding-bottom:96px}
 .tripsummary-tier.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
 .tripsummary-tier:disabled{cursor:default;opacity:.6}
 
+/* App bar (app shell, Nov 12): the app's own bar on top of the chat
+   shell — the FujinTrip mark (portrait + wordmark + the one-line
+   tagline the slim hero used to carry), the "My Trips" switcher, and
+   the running trip total + Book. It wraps only when a very narrow
+   screen forces it; the tagline hides below 1200px and the total's
+   label hides on phones, so the bar stays one line. */
+.appbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:10px 0 12px}
+.appbar-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.appbar-brand .fujin-portrait{width:32px;height:32px;margin:0;flex:0 0 auto}
+.appbar-brand .img-fallback.fujin-portrait{width:32px;height:32px;margin:0;font-size:16px}
+.appbar-title{font-size:18px;margin:0;white-space:nowrap}
+.appbar-tag{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.appbar-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
+.appbar-trips{white-space:nowrap}
+.appbar-total{font-size:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.appbar-total strong{font-size:18px;color:var(--ink)}
+.appbar-book{min-height:44px}
+.mytrips-menu{position:relative}
+.menu-backdrop{position:fixed;inset:0;background:transparent;border:none;cursor:default;z-index:59;padding:0}
+.mytrips-dropdown{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:280px;max-width:min(320px,calc(100vw - 48px));background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px}
+.mytrips-dropdown button{display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;border-radius:10px}
+.mytrips-dropdown button:hover:not(:disabled){background:var(--surface)}
+.mytrips-dropdown button:disabled{cursor:default;opacity:.55}
+.menu-label{display:block;font-weight:600}
+.menu-sub{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.menu-new{font-weight:700}
+.menu-note{font-size:13px;color:var(--muted);margin:8px 12px}
+.menu-all{display:block;padding:10px 12px;font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;border-radius:10px}
+.menu-all:hover{background:var(--surface)}
+@media (max-width:1200px){.appbar-tag{display:none}}
+@media (max-width:900px){.appbar-total-label{display:none}}
+@media (max-width:600px){.appbar-brand .fujin-portrait{display:none}.appbar{gap:8px}.appbar-actions{gap:8px}}
+
 /* Chat-first split layout (Nov 12 rebuild — the user: "modern layout,
-   wide, use all page space, chat is the main space"). The old map-as-
-   background overlay is gone: the chat floated ON TOP of the map and hid
-   its left half (the map heading clipped mid-word, Prague/Vienna markers
-   under the panel). Now the section is a flex row that fills the first
-   screen below the header: a solid chat panel on the left (~600px, 42%)
-   and the map on the right, both full height of the section. The map
-   fits the whole route in its own visible area — no panel covers any of
-   it. Height is 100dvh minus the compact chrome above it (header +
-   slim hero + tabs); on a narrow screen the panel reverts to the
-   bottom sheet below, so the top of the map stays visible. */
-.chatmap{position:relative;height:calc(100dvh - 256px);min-height:560px;display:flex;gap:16px}
-.chatcol{position:static;width:min(600px,42%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
+   wide, use all page space, chat is the main space") + trip panel
+   (app shell, Nov 12). The old map-as-background overlay is gone: the
+   chat floated ON TOP of the map and hid its left half (the map heading
+   clipped mid-word, Prague/Vienna markers under the panel). Now the
+   section is a flex row that fills the first screen below the header:
+   a solid chat panel on the left, the editable trip panel in the
+   middle, the map on the right, all full height of the section. The
+   map fits the whole route in its own visible area — no panel covers
+   any of it. Height is 100dvh minus the compact chrome above it
+   (header ~57 + tabs ~68 + app bar ~52 + slack ≈ 240px); below 1200px
+   the zones switch one at a time (data-zone) instead of squeezing
+   three columns; on a narrow screen the active zone is the bottom
+   sheet below, so the top of the map stays visible. */
+.chatmap{position:relative;height:calc(100dvh - 240px);min-height:560px;display:flex;gap:16px}
+.chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
+.trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px;overflow-y:auto;min-height:0}
 .chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
 .mapcol{position:relative;flex:1 1 auto;min-width:0;height:100%;z-index:0;display:flex;flex-direction:column}
 .map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed #d9d9d6;border-radius:16px;padding:24px;color:var(--ink);background:var(--surface)}
@@ -250,21 +280,77 @@ html{scroll-padding-bottom:96px}
 .legcard p{margin:6px 0}
 .maphints{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;gap:8px;max-width:340px}
 .maphint{font-size:13px;color:var(--muted);margin:0;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+/* Zone switcher (app shell): hidden on wide screens, where all three
+   zones sit side by side. A floating pill over the map, clear of the
+   leg card (top-right) and the map hints (bottom-right). */
+.zonebar{display:none}
+@media (max-width:1200px){
+  .zonebar{display:flex;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:4;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+  .zonebar-btn{border:none;background:transparent;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;min-height:40px}
+  .zonebar-btn.selected{background:var(--ink);color:#fff}
+  .chatcol{width:min(500px,45%)}
+  /* The trip panel swaps the map zone — the chat always stays. */
+  .chatmap:not([data-zone="trip"]) .trippanel{display:none}
+  .chatmap[data-zone="trip"] .mapcol{display:none}
+  .chatmap[data-zone="trip"] .trippanel{display:flex}
+  /* The Chat button hides here — the chat is always visible, so the
+     switcher is Map / Trip only. */
+  .zonebar-chat{display:none}
+}
 @media (max-width:900px){
-  .chatmap{height:calc(100dvh - 96px);min-height:520px}
+  .chatmap{height:calc(100dvh - 200px);min-height:520px}
   .chatcol{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
+  .trippanel{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
   .chatmap .chat{max-height:none}
   .mapcol{position:absolute;inset:0}
-  .legcard{left:8px;right:8px;top:8px;bottom:auto;width:auto;max-height:38%;overflow-y:auto}
+  /* The leg card drops below the zone switcher pill on a phone, so the
+     two never stack on each other. */
+  .legcard{left:8px;right:8px;top:64px;bottom:auto;width:auto;max-height:38%;overflow-y:auto}
   .maphints{display:none}
-  /* Chat first on mobile (design #7): the hero collapses to the portrait
-     + headline only — the sub-line and the Start-planning anchor are gone
-     on a phone, so the sentence box is the hero and the chat starts
-     immediately below the tabs instead of below the fold. */
-  .hero{padding:24px 0 12px}
-  .hero p{display:none}
-  .hero-cta{display:none}
+  /* One zone at a time: the active zone is the bottom sheet over the
+     map; Map hides the sheet entirely. The Chat button returns — at
+     this width the chat is not always visible. */
+  .zonebar-chat{display:block}
+  .chatmap[data-zone="trip"] .chatcol{display:none}
+  .chatmap[data-zone="map"] .chatcol{display:none}
 }
+
+/* Trip panel (app shell): the live itinerary — header with the running
+   total, tier + travelers + month controls, then the timeline. The
+   steppers are 36px touch targets; the move/remove buttons 32px. */
+.trippanel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.trippanel-title{font-size:18px;margin:0}
+.trippanel-sub{font-size:13px;color:var(--muted);margin:4px 0 0}
+.trippanel-total{text-align:right;flex:0 0 auto}
+.trippanel-total strong{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.trippanel-total span{font-size:12px;color:var(--muted)}
+.panel-tier{display:flex;gap:6px;margin-bottom:12px}
+.panel-tier-btn{flex:1;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:8px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:40px}
+.panel-tier-btn.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.panel-slots{display:flex;gap:12px;margin-bottom:12px}
+.panel-slot{flex:1;display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
+.panel-slot select{border:1px solid #d9d9d6;border-radius:10px;padding:8px;font-size:14px;font-family:inherit;background:#fff;min-height:40px}
+.panel-stepper{display:inline-flex;align-items:center;gap:8px}
+.panel-stepper button{width:36px;height:36px;border:1px solid #d9d9d6;background:#fff;border-radius:50%;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1}
+.panel-stepper button:hover:not(:disabled){border-color:var(--ink)}
+.panel-stepper strong{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}
+.panel-notice{background:#fff7e8;border:1px solid #ead9a8;border-radius:10px;padding:8px 12px;font-size:13px;color:#5c4a12;margin:0 0 12px}
+.panel-timeline{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.panel-stop{border-top:1px solid var(--line-soft);padding:10px 0 4px}
+.panel-stop:first-child{border-top:none;padding-top:2px}
+.panel-stop-row{display:flex;align-items:center;gap:8px}
+.panel-stop-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.panel-stop-city{flex:1 1 auto;min-width:0}
+.panel-stop-city strong{display:block;font-size:15px}
+.panel-stop-city span{font-size:12px;color:var(--muted)}
+.panel-nights strong{min-width:24px}
+.panel-stop-actions{display:flex;gap:4px;flex:0 0 auto}
+.panel-stop-actions button{width:32px;height:32px;border:1px solid #d9d9d6;background:#fff;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
+.panel-stop-actions button:hover:not(:disabled){border-color:var(--ink)}
+.panel-stop-detail{margin-top:6px}
+.panel-transport{font-size:13px;color:var(--muted);margin:8px 0 4px;padding-left:34px}
+.panel-actions{margin-top:12px}
+.panel-actions .primary{width:100%;min-height:48px}
 
 /* --- Portable plan / on-trip "Today" view (community round, design §7) --- */
 /* Offline banner: a slim banner instead of a dead screen. */

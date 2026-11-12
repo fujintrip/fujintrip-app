@@ -249,15 +249,18 @@ test('reels: the strip is empty until a human approves a verified post, and a fl
   assert.ok(queueJson.queue.some((q) => q.id === flaggedJson.post.id), 'a flagged post is in the queue');
 });
 
-test('chat-first layout: full-bleed shell, slim hero, wrapped chips, short placeholders', async () => {
+test('chat-first layout: full-bleed shell, app bar, wrapped chips, short placeholders', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The chat section is full-bleed (chat-shell), not the 1080px .wrap;
-  // the hero is a slim strip and the "Start planning" CTA is gone —
-  // the chat is the first screen.
+  // the app bar is the top strip now — the slim hero was folded into
+  // it (portrait + one-line tagline), so it no longer pushes the app
+  // down. The "Start planning" CTA is gone — the chat is right there.
   assert.ok(html.includes('chat-shell'), 'the chat shell is full-bleed');
-  assert.ok(html.includes('hero-slim'), 'the hero is a slim strip');
+  assert.ok(html.includes('appbar'), 'the app bar renders');
+  assert.ok(!html.includes('hero-slim'), 'the slim hero is gone — folded into the app bar');
+  assert.ok(html.includes('My Trips'), 'the My Trips switcher renders in the app bar');
   assert.ok(html.includes('panel chat-panel'), 'the chat tab drops the bordered card');
   assert.ok(!html.includes('Start planning'), 'the hero CTA is gone — the chat is right there');
   // All four starter chips render (they wrap to two rows now — the old
@@ -271,6 +274,33 @@ test('chat-first layout: full-bleed shell, slim hero, wrapped chips, short place
   assert.ok(!html.includes('next spring, $2,000'), 'the old long placeholder is gone');
   // The empty map placeholder renders with its heading.
   assert.ok(html.includes('Your trip map'), 'the empty map placeholder renders');
+});
+
+test('app shell: three zones (chat | trip | map), zone switcher and Make it yours', async () => {
+  // SSR-visible markers only — the panel's editable timeline, the
+  // switcher menu and the map dialog mount client-side, so they are
+  // covered by the pure-helper unit tests and the build, not by SSR.
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The three zones: the chat column, the live trip panel (empty state
+  // before any trip), and the map column with its placeholder.
+  assert.ok(html.includes('chatcol'), 'the chat zone renders');
+  assert.ok(html.includes('trippanel'), 'the trip panel zone renders');
+  assert.ok(html.includes('No trip yet'), 'the panel shows its empty state before a trip');
+  assert.ok(html.includes('mapcol'), 'the map zone renders');
+  // Zone switcher: Chat / Trip / Map, defaulting to chat.
+  assert.ok(html.includes('zonebar'), 'the zone switcher renders');
+  assert.ok(html.includes('data-zone="chat"'), 'the chat zone is the default');
+  for (const label of ['Chat', 'Trip', 'Map']) {
+    assert.ok(html.includes(`>${label}<`), `zone button "${label}" renders`);
+  }
+  // Templates are one click from the app: every "Plan this trip" has
+  // a "Make it yours" entry that loads it into the app shell.
+  const makeItYours = (html.match(/Make it yours/g) || []).length;
+  assert.ok(makeItYours >= 3, `at least the three template grids offer Make it yours (found ${makeItYours})`);
+  // The app bar's Book action is present but disabled until a plan exists.
+  assert.ok(html.includes('appbar-book'), 'the app bar Book action renders');
 });
 
 test('discovery map: section renders with a priced default pin and a Plan this trip action', async () => {

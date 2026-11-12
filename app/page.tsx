@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type DiscoveryEntry } from '../lib/discovery';
-import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type Plan, type RouteOverride } from '../lib/planner';
+import { askFujin, applyRevision, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type Plan, type Revision, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
@@ -18,6 +18,7 @@ import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInf
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import Expandable from '../components/Expandable';
+import TripPanel, { type PanelStopEdit } from '../components/TripPanel';
 import OfflineBanner from '../components/OfflineBanner';
 import TodayView from '../components/TodayView';
 import ReelsFeed from '../components/ReelsFeed';
@@ -223,8 +224,12 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void }) {
-  const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[] }) {
+  // The opening line — also the line a "New trip" resets to, so the
+  // trip switcher and the plan view's "Start a new trip" restart the
+  // conversation in exactly the same words.
+  const GREETING = 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.';
+  const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: GREETING }]);
   const [input, setInput] = useState('');
   // Chips fill, don't fire (Layla-dynamic round): a chip puts its full
   // prompt in this input and focuses it, so the traveler can edit
@@ -257,6 +262,15 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // short, right-now local answers. WhatsApp delivery is a later step
   // (needs a business number) — this mode works in the chat today.
   const [tripMode, setTripMode] = useState(false);
+  // App shell (Nov 12): which zone the traveler sees on a narrow
+  // screen — side by side above 1200px, one zone at a time below it.
+  // 'chat' is the default; a seeded template opens in the chat.
+  const [mobileZone, setMobileZone] = useState<'chat' | 'trip' | 'map'>('chat');
+  // "My Trips" menu in the app bar, and the trip panel's refusal line
+  // (an impossible edit explains itself in the panel — the chat only
+  // records edits that actually happened).
+  const [tripsOpen, setTripsOpen] = useState(false);
+  const [panelNotice, setPanelNotice] = useState('');
   // On-trip flight check (competitor learning #5): flight number/date
   // the traveler typed, and the last checked status ('loading' while it
   // runs). A live status rides with the "my flight was cancelled"
@@ -403,12 +417,25 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       ...(routeKeyForDestination(seed.destination) ? { routeKey: routeKeyForDestination(seed.destination) } : {}),
       routeOverride: { cities },
     });
+    // A seeded template opens in the chat — on a narrow screen the
+    // chat is the zone the traveler needs to personalize it.
+    setMobileZone('chat');
     onParsed?.({ destination: seed.destination, travelers: 2 });
     setMsgs((m) => [...m, { who: 'ai', text: `Let's plan ${seed.destination}: ${cities.join(' → ')} — for 2 travelers. When are you going, and for how long?` }]);
     onSeedUsed?.();
     // Run on the seed only — onParsed/onSeedUsed are Home's stable setters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed]);
+  // "Make it yours" (app shell): a template button below the fold asks
+  // for the chat input to take focus, so the traveler can start
+  // personalizing the seeded trip right away. A window event keeps the
+  // template (Home) from reaching into the chat's refs.
+  useEffect(() => {
+    const onFocusChat = () => inputRef.current?.focus();
+    window.addEventListener('fujintrip:focus-chat', onFocusChat);
+    return () => window.removeEventListener('fujintrip:focus-chat', onFocusChat);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Confirmation line for the plan actions below (share / watch / hold / human).
   const [actionMsg, setActionMsg] = useState('');
   // PDF download state: the $1 rule is decided by the server route.
@@ -829,13 +856,171 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   };
   // Start a new trip: clears the plan and the saved trip, so the next
   // chat starts fresh.
-  const startNewTrip = () => {
+  // Start over: the panel, the map and the chat all go back to the
+  // greeting together. Used by the plan view's "Start a new trip" and
+  // by the app bar's "My Trips → New trip".
+  const resetToGreeting = () => {
     setPlan(null);
     setLastParsed(null);
     setChoice(1);
+    setChosenLegs(new Set());
+    setSelectedLeg(null);
+    setExpenses([]);
+    setWeatherCheck(null);
+    setTripMode(false);
+    setPanelNotice('');
     setPdfNotice('');
     setPdfPay(false);
+    setMobileZone('chat');
+    setMsgs([{ who: 'ai', text: GREETING }]);
+  };
+  const startNewTrip = () => {
+    resetToGreeting();
     setActionMsg('Started a new trip — ask Fujin AI where to next.');
+  };
+  // Trip switcher (app bar "My Trips"): switch to a saved trip. The
+  // saved entry holds only a destination — the chat, the panel and the
+  // map switch together by seeding that destination's route, exactly
+  // as a template seed does. A saved search request has no destination
+  // and cannot be opened as a trip; the menu disables it. Full
+  // per-trip chat history is not stored yet (it needs accounts +
+  // Postgres — see files/plan-sync-design.md), so switching starts a
+  // fresh conversation for that trip; the old trip stays saved in
+  // My Trips as its label.
+  const switchToTrip = (t: Trip) => {
+    setTripsOpen(false);
+    if (!t.destination) return;
+    const dest = t.destination;
+    const rk = routeKeyForDestination(dest);
+    const cities = rk ? ROUTE_STOPS[rk].map((s) => s.city) : [dest];
+    setPlan(null);
+    setChosenLegs(new Set());
+    setSelectedLeg(null);
+    setExpenses([]);
+    setWeatherCheck(null);
+    setPanelNotice('');
+    setLastParsed({
+      destination: dest,
+      travelers: 2,
+      ...(rk ? { routeKey: rk } : {}),
+      routeOverride: { cities },
+    });
+    setMobileZone('chat');
+    setMsgs([{ who: 'ai', text: `Switched to ${dest}: ${cities.join(' → ')} — for 2 travelers. When are you going, and for how long?` }]);
+    onParsed?.({ destination: dest, travelers: 2 });
+  };
+  // Trip panel edits (app shell): the panel is directly manipulable,
+  // but it never keeps its own copy of the math — every edit runs
+  // through applyRevision, the same function the chat's revision flow
+  // runs on the server, on the same stop list and the same day count
+  // the visible card uses. A successful edit updates lastParsed (the
+  // one trip state), drops the map legs the traveler had picked (they
+  // belonged to the old route, as in handleParsed), and posts the
+  // revision's own note into the chat as the confirmation. An
+  // impossible edit is refused with one plain line in the panel —
+  // never by inventing data, never by silently doing nothing.
+  const panelEditStop = (edit: PanelStopEdit) => {
+    if (!lastParsed?.destination) return;
+    const key = routeKeyForDestination(lastParsed.destination);
+    const stops = stopsForRoute(key, lastParsed.routeOverride);
+    if (!stops.length) return;
+    // The visible card's day count: the built plan uses durationDays
+    // (3 when unknown), the live preview assumes 14.
+    const days = plan ? lastParsed.durationDays ?? 3 : lastParsed.durationDays ?? 14;
+    const currentNights = (city: string) =>
+      distributeNightsForStops(stops, days).find((s) => s.city === city)?.nights ?? 0;
+    const refuse = (reason: string) => setPanelNotice(reason);
+    let revision: Revision | null = null;
+    if (edit.kind === 'nights') {
+      const current = currentNights(edit.city);
+      if (edit.nights === current) return;
+      if (edit.nights < current && current <= 1) {
+        refuse(`${edit.city} is already 1 night — a stop can't have fewer.`);
+        return;
+      }
+      if (edit.nights > current) {
+        const totalNights = Math.max(stops.length, days - 1);
+        if (edit.nights > totalNights - (stops.length - 1)) {
+          refuse(`Can't give ${edit.city} another night — every other stop is already at 1 night.`);
+          return;
+        }
+      }
+      revision = { type: 'nights', city: edit.city, nights: edit.nights };
+    } else if (edit.kind === 'remove') {
+      if (stops.length < 2) {
+        refuse(`Can't remove ${edit.city} — it's the only stop left.`);
+        return;
+      }
+      revision = { type: 'remove', city: edit.city };
+    } else {
+      const idx = stops.findIndex((s) => s.city === edit.city);
+      if (idx === -1) return;
+      if (edit.dir === 'up') {
+        if (idx === 0) return;
+        revision = { type: 'reorder', city: edit.city, before: stops[idx - 1].city };
+      } else {
+        if (idx === stops.length - 1) return;
+        revision = { type: 'reorder', city: edit.city, after: stops[idx + 1].city };
+      }
+    }
+    const applied = revision ? applyRevision(stops, revision, days) : null;
+    if (!applied) {
+      refuse(`Couldn't change that — the route didn't move.`);
+      return;
+    }
+    setLastParsed({ ...lastParsed, routeOverride: applied.override });
+    setChosenLegs(new Set());
+    setSelectedLeg(null);
+    setPanelNotice('');
+    setMsgs((m) => [...m, { who: 'ai', text: applied.note }]);
+  };
+  // Panel tier: the same choice state the plan view's tier boxes use.
+  const panelTier = (i: number) => {
+    if (i === choice || ![0, 1, 2].includes(i)) return;
+    const names = ['Cheapest', 'Best value', 'Premium'];
+    setChoice(i);
+    setMsgs((m) => [
+      ...m,
+      {
+        who: 'ai',
+        text: plan
+          ? `Switched to ${names[i]} — $${plan.options[i].total.toLocaleString()} total for ${plan.travelers} traveler${plan.travelers > 1 ? 's' : ''}.`
+          : `Switched to ${names[i]} — the map and trip prices now show the ${names[i]} tier. Build your plan to see the totals.`,
+      },
+    ]);
+  };
+  // Panel travelers: the plan re-prices from the same base (buildPlan),
+  // and the price comparison below follows through onParsed — the
+  // totals never come from a second copy of the math.
+  const panelTravelers = (n: number) => {
+    if (!lastParsed?.destination) return;
+    const next = Math.max(1, Math.min(12, n));
+    if (next === lastParsed.travelers) return;
+    const dest = lastParsed.destination;
+    const days = lastParsed.durationDays ?? 3;
+    const kids = lastParsed.kids ?? [];
+    const nextPlan = plan ? buildPlan(dest, next, days, { kids }) : null;
+    if (nextPlan) setPlan(nextPlan);
+    setLastParsed({ ...lastParsed, travelers: next });
+    onParsed?.({ destination: dest, travelers: next, ...(kids.length ? { kids } : {}) });
+    setMsgs((m) => [
+      ...m,
+      {
+        who: 'ai',
+        text: nextPlan
+          ? `Now ${next} traveler${next > 1 ? 's' : ''} — ${plan ? plan.options[choice].name : 'Best value'} $${nextPlan.options[choice].total.toLocaleString()} total.`
+          : `Now ${next} traveler${next > 1 ? 's' : ''} — build your plan to see the new total.`,
+      },
+    ]);
+  };
+  // Panel month: the trip card's dates follow the month through
+  // suggestedStart, and the price check / competitor fares refetch
+  // from the new dates (their effect keys include lastParsed).
+  const panelMonth = (m: number) => {
+    if (!lastParsed?.destination || m < 1 || m > 12 || m === lastParsed.month) return;
+    setLastParsed({ ...lastParsed, month: m });
+    const start = suggestedStart(m).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    setMsgs((m2) => [...m2, { who: 'ai', text: `Moved the trip to ${MONTH_NAMES[m - 1]} — it now starts ${start}.` }]);
   };
   // Watch this trip's prices: a real watch now that live fares exist
   // (Duffel test fares). The baseline is the live out+back total from a
@@ -1321,11 +1506,95 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   })();
   return (
     <div>
-      {/* Split screen (Nov 11): the chat stays still on the left, the map
-          fills the right half and changes as the trip changes — the route
-          and the flights, stays and cars as price tags the traveler can
-          click to read more or add to the plan. */}
-      <div className="chatmap">
+      {/* App bar (app-shell round, Nov 12): the app's own bar — the
+          FujinTrip mark (the slim hero folded into one line, so it
+          doesn't push the app down), the "My Trips" switcher, and the
+          running trip total + Book. The first viewport IS the app:
+          chat | live trip | map, with the marketing sections below. */}
+      <div className="appbar">
+        <div className="appbar-brand">
+          <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
+          <h1 className="appbar-title">FujinTrip</h1>
+          <span className="appbar-tag">One complete plan. Cheapest, Best value, or Premium.</span>
+        </div>
+        <div className="appbar-actions">
+          <div className="mytrips-menu">
+            <button type="button" className="ghost appbar-trips" aria-expanded={tripsOpen} aria-haspopup="true" onClick={() => setTripsOpen((o) => !o)}>
+              My Trips ▾
+            </button>
+            {tripsOpen && (
+              <>
+                <button type="button" className="menu-backdrop" aria-label="Close My Trips menu" onClick={() => setTripsOpen(false)} />
+                <div className="mytrips-dropdown" role="menu" aria-label="My Trips — switch trip">
+                  <button type="button" role="menuitem" className="menu-new" onClick={() => { setTripsOpen(false); resetToGreeting(); }}>
+                    ＋ New trip
+                  </button>
+                  {trips.length === 0 ? (
+                    <p className="menu-note">No trips saved yet — a plan you book or watch will appear here.</p>
+                  ) : (
+                    trips.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="menuitem"
+                        disabled={!t.destination}
+                        title={t.destination ? `Switch to ${t.destination}` : 'A search request — no trip to open'}
+                        onClick={() => switchToTrip(t)}
+                      >
+                        <span className="menu-label">{t.label}</span>
+                        <span className="menu-sub">
+                          {t.status} · {t.date}
+                          {lastParsed?.destination === t.destination ? ' · Current' : ''}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                  <a href="#mytrips" className="menu-all" onClick={() => setTripsOpen(false)}>
+                    See all in My Trips ↓
+                  </a>
+                </div>
+              </>
+            )}
+          </div>
+          <span className="appbar-total">
+            {plan ? (
+              <>
+                <strong>${plan.options[choice].total.toLocaleString()}</strong>
+                <span className="appbar-total-label"> total · {plan.options[choice].name}</span>
+              </>
+            ) : (
+              <span className="appbar-total-label">{lastParsed?.destination ? 'Build your plan to see the total' : 'No trip yet'}</span>
+            )}
+          </span>
+          <button className="primary appbar-book" onClick={bookPlan} disabled={!plan} title={plan ? 'Book this plan with FujinTrip' : 'Build your plan first'}>
+            Book
+          </button>
+        </div>
+      </div>
+      {/* Split screen (Nov 11) + trip panel (app shell, Nov 12): the
+          chat stays still on the left, the trip is a live, editable
+          object in the middle, the map fills the right and changes as
+          the trip changes — the route and the flights, stays and cars
+          as price tags the traveler can click to read more or add to
+          the plan. Below 1200px the zones switch one at a time
+          (data-zone); above it all three sit side by side. */}
+      <div className="chatmap" data-zone={mobileZone}>
+        {/* Zone switcher (narrow screens only — CSS hides it above
+            1200px): Chat / Trip / Map. At 901–1200px the chat is always
+            visible, so the Chat button hides and Trip swaps the map
+            zone for the panel; below 900px the active zone is the
+            bottom sheet over the map. */}
+        <div className="zonebar" role="tablist" aria-label="Switch app view">
+          <button type="button" role="tab" aria-selected={mobileZone === 'chat'} className={`zonebar-btn zonebar-chat${mobileZone === 'chat' ? ' selected' : ''}`} onClick={() => setMobileZone('chat')}>
+            Chat
+          </button>
+          <button type="button" role="tab" aria-selected={mobileZone === 'trip'} className={`zonebar-btn${mobileZone === 'trip' ? ' selected' : ''}`} onClick={() => setMobileZone('trip')}>
+            Trip
+          </button>
+          <button type="button" role="tab" aria-selected={mobileZone === 'map'} className={`zonebar-btn${mobileZone === 'map' ? ' selected' : ''}`} onClick={() => setMobileZone('map')}>
+            Map
+          </button>
+        </div>
         <div className={`chatcol${tripMode ? ' tripmode-on' : ''}`}>
           {/* Offline banner (community round, design §7): a slim banner
               instead of a dead screen — the saved plan still works
@@ -1565,6 +1834,26 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </div>
           )}
         </div>
+        {/* Live trip panel (app shell): the middle zone — the itinerary
+            as an editable timeline, fed by the same trip card and plan
+            the map and the plan view use. */}
+        <TripPanel
+          card={mapCard}
+          plan={plan}
+          choice={choice}
+          onTier={panelTier}
+          travelers={lastParsed?.travelers ?? 2}
+          onTravelers={panelTravelers}
+          month={lastParsed?.month ?? 0}
+          onMonth={panelMonth}
+          bestTime={lastParsed?.destination ? bestTimeFor(lastParsed.destination) : null}
+          kids={lastParsed?.kids ?? []}
+          onEditStop={panelEditStop}
+          notice={panelNotice}
+          onBuild={build}
+          onBook={bookPlan}
+          busy={thinking !== null || streamingText !== null}
+        />
         <div className="mapcol no-print">
           {mapCard ? (
             <>
@@ -2284,12 +2573,18 @@ export default function Home() {
   }, []);
   // "Plan this trip": switches to the Fujin AI tab, seeds the chat with
   // the card's route, and scrolls the traveler to the chat.
+  // "Make it yours" is the same seed, plus the chat input takes focus
+  // — the traveler lands in the app with the cursor ready to
+  // personalize the template ("make it cheaper", "3 nights in Prague").
   const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[] } | null>(null);
-  const planThisTrip = (name: string) => {
+  const planThisTrip = (name: string, focusInput = false) => {
     const info = cardInfo[name];
     setTab('Fujin AI');
     setChatSeed({ destination: name, cities: info?.cities ?? [name] });
     document.getElementById('fujin-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (focusInput) {
+      setTimeout(() => window.dispatchEvent(new Event('fujintrip:focus-chat')), 650);
+    }
   };
   // "Where to go" discovery map (design #15): the pins, and the selected
   // trip whose essentials the panel shows. The first pin is selected on
@@ -2347,24 +2642,18 @@ export default function Home() {
     <div>
       <a href="#fujin-chat" className="skip-link">Skip to chat</a>
       <header><div className="topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
-      {/* Chat-first shell (Nov 12 layout rebuild): the chat section is
-          full-bleed — header, slim hero, tabs and chat panel all span
-          the viewport, and the chat + map fill the first screen. The
-          content sections below stay in the capped .wrap. */}
+      {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12): the
+          chat section is full-bleed — header, tabs and chat panel all
+          span the viewport, and the chat + trip panel + map fill the
+          first screen. The slim hero was folded into the app bar (the
+          mark + one-line tagline), so it no longer pushes the app
+          down. The content sections below stay in the capped .wrap. */}
       <div className="chat-shell">
-        <section className="hero hero-slim">
-          <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
-          <div>
-            <h1>One complete plan. Cheapest, Best value, or Premium.</h1>
-            <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, all booked with FujinTrip.</p>
-          </div>
-        </section>
-
         <div className="tabs" role="tablist" aria-label="Search">
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className={tab === 'Fujin AI' ? 'panel chat-panel' : 'panel'} id="fujin-chat">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
         {composerOpen && (
           <div className="panel" id="reel-composer">
@@ -2403,7 +2692,8 @@ export default function Home() {
                     </>
                   )}
                   {!cardInfo[d.name] && <p className="price">{d.priceFrom}</p>}
-                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>
+                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>{' '}
+                  <button className="ghost" onClick={() => planThisTrip(d.name, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
                 </div>
               </article>
             ))}
@@ -2440,7 +2730,8 @@ export default function Home() {
                   ) : (
                     <p className="plan-muted">No planning estimate for this one yet — ask Fujin AI and it will price it.</p>
                   )}
-                  <button className="primary" onClick={() => planThisTrip(selectedDiscovery.destination)}>Plan this trip</button>
+                  <button className="primary" onClick={() => planThisTrip(selectedDiscovery.destination)}>Plan this trip</button>{' '}
+                  <button className="ghost" onClick={() => planThisTrip(selectedDiscovery.destination, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
                 </div>
               </article>
             )}
@@ -2485,7 +2776,8 @@ export default function Home() {
                     <summary>See the days</summary>
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
-                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>
+                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>{' '}
+                  <button className="ghost" onClick={() => planThisTrip(d.name, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
                 </div>
               </article>
             ))}
@@ -2525,7 +2817,7 @@ export default function Home() {
         <section>
           <h2>How FujinTrip works</h2>
           <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — and you book it all with FujinTrip.</p>
-          <h2 style={{ marginTop: 28 }}>My Trips</h2>
+          <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
           <p className="plan-muted">“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
           {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
