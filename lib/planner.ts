@@ -1065,6 +1065,35 @@ function isTravel(text: string): boolean {
 // with a clear pick — so the traveler can choose before asking for the
 // plan. Used by the built-in fallback (route + page local fallback); the
 // live model already quotes the Best value total from its prompt.
+// Per-person split of one tier's total (competitor learning round 2
+// #8): the flight leg splits by adult-equivalents (a kid's flight is
+// childFareFactor × the adult flight), the other legs split evenly per
+// traveler. The split always sums to the tier total exactly — the
+// rounding remainder (a dollar or two) goes to the first person, so the
+// plan view and the chat never disagree about the total.
+export type PassengerTotal = { label: string; age?: number; total: number };
+export function passengerTotals(option: PlanOption, travelers: number, party?: Party): { people: PassengerTotal[]; total: number } {
+  const factor = flightPassengerFactor(travelers, party);
+  const flightPerAdult = factor > 0 ? option.flight / factor : 0;
+  const otherPerTraveler = travelers > 0 ? (option.hotel + option.car + option.activities) / travelers : 0;
+  const ages = (party?.kids ?? []).filter((a) => a >= 0 && a <= 17).slice(0, 6);
+  const unknown = Math.max(0, Math.min(6, party?.kidsUnknown ?? 0));
+  const adults = Math.max(0, travelers - ages.length - unknown);
+  const people: PassengerTotal[] = [];
+  for (let i = 0; i < adults; i++) {
+    people.push({ label: `Adult ${i + 1}`, total: Math.round(flightPerAdult + otherPerTraveler) });
+  }
+  ages.forEach((age, i) => {
+    people.push({ label: `Kid (age ${age})`, age, total: Math.round(flightPerAdult * childFareFactor(age) + otherPerTraveler) });
+  });
+  for (let i = 0; i < unknown; i++) {
+    people.push({ label: `Kid (age not given)`, total: Math.round(flightPerAdult * 0.75 + otherPerTraveler) });
+  }
+  const sum = people.reduce((s, p) => s + p.total, 0);
+  if (people.length && sum !== option.total) people[0].total += option.total - sum;
+  return { people, total: option.total };
+}
+
 export function optionsLine(destination: string, travelers: number, party?: Party): string {
   const opts = buildPlan(destination, travelers, 3, party).options;
   const kids = (party?.kids ?? []).filter((a) => a >= 0 && a <= 17).slice(0, 6);
@@ -1083,7 +1112,25 @@ export function optionsLine(destination: string, travelers: number, party?: Part
       ? ` Flights for this party — ${who} — are priced with child fares (${rate}), $${saving.toLocaleString()} less on flights than pricing all ${travelers} as adults.`
       : ` Flights for this party — ${who} — use child fares (${rate}).`;
   }
-  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}.${childLine} ${fareClassLine(1)} ${allInFlightLine(opts[1].flight)} Tap Build my plan to pick one.`;
+  // Per-person AND total, always both (round 2 #8): for a party of two
+  // or more the reply names what each person pays, not just the total.
+  // A family splits per person by age (never "total ÷ travelers" when
+  // kids are in the party); an adults-only party splits evenly. When
+  // the rounded per-person amounts differ by a dollar, they are listed
+  // — "per person $X" must always multiply back to the total exactly.
+  let perPersonLine = '';
+  if (travelers > 1) {
+    const split = passengerTotals(opts[1], travelers, party);
+    const amounts = split.people.map((p) => p.total);
+    const allEqual = amounts.length > 0 && amounts.every((a) => a === amounts[0]);
+    if ((kids.length || unknown || !allEqual) && split.people.length) {
+      const byPerson = split.people.map((p) => `${p.label} $${p.total.toLocaleString()}`).join(', ');
+      perPersonLine = ` Best value per person: ${byPerson} — $${opts[1].total.toLocaleString()} total for ${travelers} travelers.`;
+    } else if (amounts.length) {
+      perPersonLine = ` Best value is $${amounts[0].toLocaleString()} per person — $${opts[1].total.toLocaleString()} total for ${travelers} travelers.`;
+    }
+  }
+  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}.${childLine}${perPersonLine} ${fareClassLine(1)} ${allInFlightLine(opts[1].flight)} Tap Build my plan to pick one.`;
 }
 
 // Departure city (origin): the flight fare depends on where the traveler

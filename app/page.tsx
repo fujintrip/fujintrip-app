@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
+import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
@@ -279,6 +280,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       setPlan(null);
       setChosenLegs(new Set());
       setSelectedLeg(null);
+      setExpenses([]);
       setLastParsed({
         destination: j.destination,
         travelers: lastParsed?.travelers ?? 2,
@@ -372,6 +374,24 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               if (saved && saved.key === tripKey && Array.isArray(saved.ids)) {
                 const ids = saved.ids.filter((i): i is string => typeof i === 'string').slice(0, 12);
                 if (ids.length) setChosenLegs(new Set(ids));
+              }
+            }
+          } catch {}
+          // Restore the recorded expenses (round 2 #8): only for this
+          // trip — the same key as the bundle. A corrupt or foreign
+          // record is ignored, never rendered.
+          try {
+            const e = localStorage.getItem('fujintrip-expenses');
+            if (e) {
+              const saved = JSON.parse(e) as { key?: unknown; expenses?: unknown };
+              const tripKey = bundleKey(p.destination, p.travelers, typeof p.durationDays === 'number' ? p.durationDays : 0);
+              if (saved && saved.key === tripKey && Array.isArray(saved.expenses)) {
+                const list = (saved.expenses as unknown[]).filter((x): x is Expense => {
+                  if (!x || typeof x !== 'object') return false;
+                  const o = x as Record<string, unknown>;
+                  return typeof o.id === 'string' && typeof o.payer === 'string' && typeof o.amount === 'number' && Array.isArray(o.shares);
+                }).slice(0, 50);
+                if (list.length) setExpenses(list);
               }
             }
           } catch {}
@@ -500,6 +520,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
         setPlan(null);
         setChosenLegs(new Set());
         setSelectedLeg(null);
+        setExpenses([]);
       }
       // A revision (routeOverride/tier from this reply) applies to THIS
       // trip; a new destination starts fresh, with no override. A revised
@@ -804,6 +825,42 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     const el = chatRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [msgs]);
+  // Split the trip (round 2 #8): the per-person split of the chosen
+  // tier, and the expenses the party records so settle-up can be
+  // simplified. No money moves here — the travelers settle up between
+  // themselves. Expenses restore per trip, like the bundle.
+  const splitPeople = useMemo(
+    () => (plan ? passengerTotals(plan.options[choice], plan.travelers, { kids: lastParsed?.kids ?? [] }).people : []),
+    [plan, choice, lastParsed]
+  );
+  const splitTotal = plan ? plan.options[choice].total : 0;
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expPayer, setExpPayer] = useState('');
+  const [expAmount, setExpAmount] = useState('');
+  const [expShares, setExpShares] = useState<string[]>([]);
+  const [expNote, setExpNote] = useState('');
+  const settle = useMemo(
+    () => (splitPeople.length ? settleUp(expenses, splitPeople.map((p) => p.label)) : { balances: [], payments: [] }),
+    [expenses, splitPeople]
+  );
+  const addExpense = () => {
+    const amount = Number(expAmount);
+    if (!splitPeople.length || !Number.isFinite(amount) || amount <= 0) return;
+    const payer = expPayer || splitPeople[0].label;
+    const shares = expShares.length ? expShares.filter((s) => splitPeople.some((p) => p.label === s)) : splitPeople.map((p) => p.label);
+    if (!shares.length) return;
+    setExpenses((prev) => [...prev, { id: `exp-${Date.now()}-${Math.floor(Math.random() * 1000000)}`, payer, amount: Math.round(amount * 100) / 100, shares, ...(expNote.trim() ? { note: expNote.trim() } : {}) }]);
+    setExpAmount('');
+    setExpNote('');
+    setExpShares([]);
+  };
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (!lastParsed || !expenses.length) { localStorage.removeItem('fujintrip-expenses'); return; }
+      localStorage.setItem('fujintrip-expenses', JSON.stringify({ key: bundleKey(lastParsed.destination, lastParsed.travelers, lastParsed.durationDays ?? 0), expenses }));
+    } catch {}
+  }, [hydrated, lastParsed, expenses]);
   // Add to plan: the leg joins the trip plan AND the chat — the traveler
   // sees the pick in the conversation, not just on the map. The chat
   // line carries the bundle total and the last day a leg can still be
@@ -1100,6 +1157,55 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       <button className="ghost" onClick={() => removeLegFromBundle(leg.id)}>Remove</button>
                     </p>
                   ))}
+                </div>
+              )}
+              {/* Split the trip (round 2 #8): per-person + total for the
+                  chosen tier, and the expense record with the simplified
+                  settle-up. No money moves here — the travelers settle
+                  up between themselves. */}
+              {plan && plan.travelers > 1 && (
+                <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+                  <strong>Split the trip — {plan.options[choice].name}</strong>
+                  <p style={{ fontSize: 14, margin: '4px 0' }}>
+                    {splitPeople.map((p) => `${p.label} $${p.total.toLocaleString()}`).join(' · ')} — ${splitTotal.toLocaleString()} total for {plan.travelers} travelers.
+                  </p>
+                  <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Record who paid what on the trip — FujinTrip works out who owes whom. No money moves here; settle up between yourselves.</p>
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <select value={expPayer || splitPeople[0]?.label || ''} onChange={(e) => setExpPayer(e.target.value)} aria-label="Who paid">
+                      {splitPeople.map((p) => <option key={p.label} value={p.label}>{p.label}</option>)}
+                    </select>
+                    <input type="number" min="0.01" step="0.01" value={expAmount} onChange={(e) => setExpAmount(e.target.value)} placeholder="Amount ($)" aria-label="Amount in dollars" />
+                    <input value={expNote} onChange={(e) => setExpNote(e.target.value)} placeholder="What was it? (optional)" aria-label="What the expense was for" />
+                    <button className="ghost" onClick={addExpense} disabled={!expAmount || Number(expAmount) <= 0}>Add expense</button>
+                  </div>
+                  <p style={{ fontSize: 13, margin: '8px 0 4px' }}>Shared by (leave all ticked to split evenly):</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, fontSize: 13 }}>
+                    {splitPeople.map((p) => (
+                      <label key={p.label}>
+                        <input type="checkbox" checked={expShares.length === 0 || expShares.includes(p.label)} onChange={(e) => setExpShares((prev) => {
+                          const all = splitPeople.map((q) => q.label);
+                          const base = prev.length ? prev : all;
+                          return e.target.checked ? [...new Set([...base, p.label])] : base.filter((s) => s !== p.label);
+                        })} /> {p.label}
+                      </label>
+                    ))}
+                  </div>
+                  {expenses.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      {expenses.map((e) => (
+                        <p key={e.id} style={{ fontSize: 14, margin: '4px 0' }}>
+                          {e.payer} paid ${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{e.note ? ` — ${e.note}` : ''} · split between {e.shares.join(', ')}{' '}
+                          <button className="ghost" onClick={() => setExpenses((prev) => prev.filter((x) => x.id !== e.id))}>Remove</button>
+                        </p>
+                      ))}
+                      <p style={{ fontSize: 14, margin: '8px 0 4px' }}><b>Settle up</b></p>
+                      {settle.payments.length ? (
+                        settle.payments.map((s, i) => <p key={i} style={{ fontSize: 14, margin: '3px 0' }}>{settlementLine(s)}</p>)
+                      ) : (
+                        <p style={{ fontSize: 14, margin: '4px 0' }}>All settled — nobody owes anyone.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
