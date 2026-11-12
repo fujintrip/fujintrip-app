@@ -490,6 +490,34 @@ export function buildTripCard(opts: {
   };
 }
 
+// Price-tag stacking (Nov 12 layout rebuild): several legs share one
+// city (Budapest: flight-back + train + stay + car), and tags anchored
+// on the city point stacked into one unreadable pile — fragments of
+// "$6…" overlapping, the city label obscured. Group by city, stack
+// upward in a fixed kind order, 46px apart, so every tag is readable
+// and the numbered city marker stays visible below the stack. The
+// anchor is the Leaflet iconAnchor y: the bottom tag sits 62px above
+// the city point (its bottom edge ~18px clear of the marker), each
+// tag above it 46px higher. Pure function of the legs — unit-tested.
+export const TAG_STACK_STEP = 46;
+export const TAG_STACK_BASE = 62;
+export function priceTagAnchorY(legs: TripLeg[]): Map<string, number> {
+  const groups = new Map<string, TripLeg[]>();
+  for (const leg of legs) {
+    const g = groups.get(leg.city) ?? [];
+    g.push(leg);
+    groups.set(leg.city, g);
+  }
+  const kindOrder: Record<TripLeg['kind'], number> = { flight: 0, transport: 1, stay: 2, car: 3 };
+  const out = new Map<string, number>();
+  for (const group of groups.values()) {
+    const sorted = [...group].sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind] || a.id.localeCompare(b.id));
+    const n = sorted.length;
+    sorted.forEach((leg, i) => out.set(leg.id, TAG_STACK_BASE + (n - 1 - i) * TAG_STACK_STEP));
+  }
+  return out;
+}
+
 // Price comparison for the trip card: FujinTrip vs booking each leg
 // separately (the planner's comparison, single source of truth). A third
 // column — other sites' live prices — stays empty until a live fare feed

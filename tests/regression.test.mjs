@@ -12,7 +12,7 @@ import {
   flightPassengerFactor,
   serviceFee,
 } from '../lib/planner.ts';
-import { buildTripCard } from '../lib/tripCard.ts';
+import { buildTripCard, priceTagAnchorY } from '../lib/tripCard.ts';
 import { settleUp } from '../lib/settle.ts';
 import { addLeg, bundleFromLegs, bundleTotal, hasLeg } from '../lib/bundle.ts';
 import { CLOSURES, CLOSURES_LAST_CHECKED, applySwaps, checkClosures } from '../lib/daySwap.ts';
@@ -123,6 +123,38 @@ test('tripCard: legs sum exactly to the planner totals per kind, for every tier'
   // the per-leg rounding that the $1,500 default never exposed must not
   // break the legs-sum invariant anywhere.
   for (const { display } of Object.values(COUNTRY_ROUTES)) check(display, 2, 10);
+});
+
+test('tripCard: price-tag anchors stack per city, 46px apart, clear of the marker', () => {
+  // Nov 12 layout rebuild: Budapest carries 4 legs (flight-back, train,
+  // stay, car) and the old single anchor piled them into one unreadable
+  // stack. Anchors must be distinct per city, 46px apart, bottom tag
+  // 62px above the city point (clear of the numbered marker).
+  const check = (destination, travelers, days) => {
+    const card = buildTripCard({ destination, travelers, days, month: 0, origin: '' });
+    const anchors = priceTagAnchorY(card.legs);
+    assert.equal(anchors.size, card.legs.length, `${destination}: every leg gets an anchor`);
+    const byCity = new Map();
+    for (const leg of card.legs) {
+      const g = byCity.get(leg.city) ?? [];
+      g.push(anchors.get(leg.id));
+      byCity.set(leg.city, g);
+    }
+    for (const [city, vals] of byCity) {
+      const sorted = [...vals].sort((a, b) => b - a);
+      assert.equal(new Set(vals).size, vals.length, `${destination} ${city}: no two tags share an anchor`);
+      assert.equal(Math.min(...vals), 62, `${destination} ${city}: bottom tag sits 62px above the city`);
+      for (let i = 1; i < sorted.length; i++) {
+        assert.equal(sorted[i - 1] - sorted[i], 46, `${destination} ${city}: tags are 46px apart`);
+      }
+    }
+    // Budapest is the worst case on the Central Europe route: 4 legs.
+    if (destination === 'Central Europe') {
+      assert.equal(byCity.get('Budapest').length, 4, 'Budapest carries 4 legs');
+    }
+  };
+  check('Central Europe', 2, 14);
+  check('Kyoto', 2, 3);
 });
 
 test('daySwap: the verified closures — Louvre Tue, Uffizi Mon, Vatican Sun except last Sunday', () => {

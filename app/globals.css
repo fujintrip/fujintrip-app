@@ -14,28 +14,48 @@ h1,h2,h3{font-weight:700;line-height:1.15;margin:0;letter-spacing:-.02em}
 a{color:var(--ink)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
 header{border-bottom:1px solid var(--line);background:#fff}
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 24px}
 .logo{font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
 .logo span{color:var(--accent)}
 .tag{font-size:13px;color:var(--muted)}
 .hero{padding:64px 0 32px;text-align:center}
 .hero h1{font-size:clamp(32px,5vw,48px);font-weight:800}
 .hero p{color:var(--muted);margin-top:12px;font-size:18px}
+/* Slim hero strip (Nov 12 layout rebuild): the chat is the product, not
+   the marketing — the hero is one compact row (portrait + headline +
+   tagline) so the chat + map fill the first screen instead of starting
+   ~600px down. The old centred block + "Start planning" CTA are gone;
+   the chat is right there. */
+.hero-slim{display:flex;align-items:center;gap:16px;text-align:left;padding:14px 0}
+.hero-slim .fujin-portrait{width:44px;height:44px;margin:0;flex:0 0 auto}
+.hero-slim .img-fallback.fujin-portrait{width:44px;height:44px;margin:0;font-size:22px}
+.hero-slim h1{font-size:24px}
+.hero-slim p{margin-top:2px;font-size:14px}
+/* Full-bleed chat shell (Nov 12): the chat section uses the whole
+   viewport width (~24px gutters), not the 1080px .wrap the content
+   sections keep. The plan below the chat stays capped (see
+   .chat-shell .plan-print) so the tiers don't stretch edge to edge. */
+.chat-shell{padding:0 24px}
+.chat-shell .plan-print{max-width:1080px;margin-left:auto;margin-right:auto}
+/* The chat tab drops the bordered card — the chatmap itself is the
+   frame (chat panel + map). Other tabs keep the normal .panel card. */
+.chat-panel{padding:0;border:0;background:transparent;box-shadow:none;margin-bottom:24px}
 .fujin-portrait{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto 18px;display:block}
 .tabs{display:flex;gap:4px;overflow-x:auto;padding:4px;background:var(--surface);border-radius:999px;margin:0 0 20px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto;border:none;background:transparent;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
 .tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;margin-bottom:40px;box-shadow:0 2px 16px rgba(0,0,0,.04)}
-.chat{border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--surface);min-height:120px;margin:12px 0}
+.chat{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff;min-height:120px;margin:12px 0}
 .msg{margin:10px 0;font-size:15px}
 .msg.user{text-align:right}
 .msg .bubble{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 /* Chips — quick replies (design #1, NN/g prompt controls): tappable
    answers under the input, 3–4 at a time, so the traveler never faces a
-   blank box. Horizontal scroll row; a tapped chip sends as typed text. */
-.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 2px 2px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
+   blank box. They WRAP to two rows — the old one-row scroll hid the 4th
+   chip ("Surprise me" was clipped, not reachable). A tapped chip sends
+   as typed text. */
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:10px 2px 2px}
 .chip{flex:0 0 auto;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-height:40px;font-family:inherit;transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
 .chip:hover{border-color:var(--ink);transform:translateY(-1px)}
 .chip:active{transform:translateY(1px)}
@@ -208,30 +228,33 @@ html{scroll-padding-bottom:96px}
 .tripsummary-tier.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
 .tripsummary-tier:disabled{cursor:default;opacity:.6}
 
-/* Map as the background, chat on top (Nov 11, user: "the map as
-   background and chat on top of it so the map will change based on
-   the chat and draw the route") — Layla-style: the map fills the
-   whole section and draws the route as the chat shapes the trip;
-   the chat is a floating panel on the left. The map column is the
-   background layer (z-index 0); the chat panel floats above it
-   (z-index 2); the leg card and the map hints float above the map
-   (z-index 3, inside the map column's stacking context). On a narrow
-   screen the panel becomes a bottom sheet, so the top of the map
-   (route + price tags) stays visible and tappable. */
-.chatmap{position:relative;height:min(88vh,860px);min-height:560px}
-.chatcol{position:absolute;left:16px;top:16px;bottom:16px;width:min(460px,calc(100% - 32px));z-index:2;display:flex;flex-direction:column;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.9);border-radius:20px;box-shadow:0 16px 48px rgba(0,0,0,.22);padding:16px}
+/* Chat-first split layout (Nov 12 rebuild — the user: "modern layout,
+   wide, use all page space, chat is the main space"). The old map-as-
+   background overlay is gone: the chat floated ON TOP of the map and hid
+   its left half (the map heading clipped mid-word, Prague/Vienna markers
+   under the panel). Now the section is a flex row that fills the first
+   screen below the header: a solid chat panel on the left (~600px, 42%)
+   and the map on the right, both full height of the section. The map
+   fits the whole route in its own visible area — no panel covers any of
+   it. Height is 100dvh minus the compact chrome above it (header +
+   slim hero + tabs); on a narrow screen the panel reverts to the
+   bottom sheet below, so the top of the map stays visible. */
+.chatmap{position:relative;height:calc(100dvh - 256px);min-height:560px;display:flex;gap:16px}
+.chatcol{position:static;width:min(600px,42%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
 .chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
-.mapcol{position:absolute;inset:0;z-index:0;display:flex;flex-direction:column}
-.map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed #d9d9d6;border-radius:16px;padding:24px;color:var(--muted);background:var(--surface)}
+.mapcol{position:relative;flex:1 1 auto;min-width:0;height:100%;z-index:0;display:flex;flex-direction:column}
+.map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed #d9d9d6;border-radius:16px;padding:24px;color:var(--ink);background:var(--surface)}
 .map-placeholder p{max-width:340px}
+.map-placeholder p + p{color:var(--muted)}
 .legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid rgba(255,255,255,.9);border-radius:14px;padding:12px 14px;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 28px rgba(0,0,0,.18)}
 .legcard p{margin:6px 0}
 .maphints{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;gap:8px;max-width:340px}
 .maphint{font-size:13px;color:var(--muted);margin:0;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
 @media (max-width:900px){
   .chatmap{height:calc(100dvh - 96px);min-height:520px}
-  .chatcol{left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
+  .chatcol{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
   .chatmap .chat{max-height:none}
+  .mapcol{position:absolute;inset:0}
   .legcard{left:8px;right:8px;top:8px;bottom:auto;width:auto;max-height:38%;overflow-y:auto}
   .maphints{display:none}
   /* Chat first on mobile (design #7): the hero collapses to the portrait

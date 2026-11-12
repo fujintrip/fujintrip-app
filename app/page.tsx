@@ -1189,7 +1189,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // sentence, and the guided flow's questions become one-tap answers.
   // A chip sends exactly like typed text (the chat history and tripState
   // treat it the same); "Build my plan" runs the build action instead.
-  // Max 4 visible; the row scrolls. Contextual, never the same static set.
+  // Max 4 visible; the row wraps to two rows so all four are seen
+  // (the old one-row scroll clipped the 4th chip). Contextual, never
+  // the same static set.
   type Chip = { label: string; text?: string; action?: 'build' };
   const hasUserMsg = msgs.some((m) => m.who === 'user');
   const lastAi = [...msgs].reverse().find((m) => m.who === 'ai');
@@ -1362,7 +1364,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </p>
           )}
           <div className="row">
-            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
+            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask anything…` : 'Try: Bali, 2 travelers, surf and food'} aria-label="Ask Fujin AI" />
             {/* While Fujin AI is thinking or streaming, Send becomes Stop:
                 the traveler can cut off a wrong or overlong answer instantly
                 and keep the partial text. */}
@@ -1402,7 +1404,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             <strong style={{ fontSize: 13 }}>Start from a link</strong>
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
             <div className="row">
-              <input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startFromLink()} placeholder="https://… or paste the text of an article" aria-label="Link or text to start a trip from" />
+              <input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startFromLink()} placeholder="Paste a link or article text" aria-label="Link or text to start a trip from" />
               <button className="ghost" onClick={startFromLink} disabled={!linkInput.trim() || linkBusy}>{linkBusy ? 'Reading…' : 'Start from this'}</button>
             </div>
           </div>
@@ -2198,19 +2200,24 @@ export default function Home() {
   return (
     <div>
       <a href="#fujin-chat" className="skip-link">Skip to chat</a>
-      <header><div className="wrap topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
-      <main className="wrap">
-        <section className="hero">
+      <header><div className="topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
+      {/* Chat-first shell (Nov 12 layout rebuild): the chat section is
+          full-bleed — header, slim hero, tabs and chat panel all span
+          the viewport, and the chat + map fill the first screen. The
+          content sections below stay in the capped .wrap. */}
+      <div className="chat-shell">
+        <section className="hero hero-slim">
           <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
-          <h1>One complete plan. Cheapest, Best value, or Premium.</h1>
-          <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, all booked with FujinTrip.</p>
-          <p className="hero-cta"><a href="#fujin-chat">Start planning ↓</a></p>
+          <div>
+            <h1>One complete plan. Cheapest, Best value, or Premium.</h1>
+            <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, all booked with FujinTrip.</p>
+          </div>
         </section>
 
         <div className="tabs" role="tablist" aria-label="Search">
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
-        <div className="panel" id="fujin-chat">
+        <div className={tab === 'Fujin AI' ? 'panel chat-panel' : 'panel'} id="fujin-chat">
           {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
         {composerOpen && (
@@ -2218,6 +2225,8 @@ export default function Home() {
             <ReelComposer trips={trips} prefillDestination={composerDest} onPosted={() => {}} onClose={() => setComposerOpen(false)} />
           </div>
         )}
+      </div>
+      <main className="wrap">
 
         <section>
           <h2>Global packages, in one plan</h2>

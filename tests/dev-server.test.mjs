@@ -248,6 +248,30 @@ test('reels: the strip is empty until a human approves a verified post, and a fl
   assert.ok(queueJson.queue.some((q) => q.id === flaggedJson.post.id), 'a flagged post is in the queue');
 });
 
+test('chat-first layout: full-bleed shell, slim hero, wrapped chips, short placeholders', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The chat section is full-bleed (chat-shell), not the 1080px .wrap;
+  // the hero is a slim strip and the "Start planning" CTA is gone —
+  // the chat is the first screen.
+  assert.ok(html.includes('chat-shell'), 'the chat shell is full-bleed');
+  assert.ok(html.includes('hero-slim'), 'the hero is a slim strip');
+  assert.ok(html.includes('panel chat-panel'), 'the chat tab drops the bordered card');
+  assert.ok(!html.includes('Start planning'), 'the hero CTA is gone — the chat is right there');
+  // All four starter chips render (they wrap to two rows now — the old
+  // one-row scroll clipped "Surprise me").
+  for (const label of ['Central Europe in January', 'Warm beach in February', 'Family of 4, $2,000', 'Surprise me']) {
+    assert.ok(html.includes(label), `starter chip "${label}" renders`);
+  }
+  // Short placeholders — the old ones were cut off by the Send button.
+  assert.ok(html.includes('Try: Bali, 2 travelers, surf and food'), 'the chat placeholder is short');
+  assert.ok(html.includes('Paste a link or article text'), 'the link placeholder is short');
+  assert.ok(!html.includes('next spring, $2,000'), 'the old long placeholder is gone');
+  // The empty map placeholder renders with its heading.
+  assert.ok(html.includes('Your trip map'), 'the empty map placeholder renders');
+});
+
 test('discovery map: section renders with a priced default pin and a Plan this trip action', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
