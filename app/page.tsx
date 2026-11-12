@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
+import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type DiscoveryEntry } from '../lib/discovery';
 import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type Plan, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { applySwaps, type DaySwap } from '../lib/daySwap';
@@ -28,6 +29,17 @@ const TripMap = dynamic(() => import('../components/TripMap'), {
   ssr: false,
   loading: () => (
     <div className="map-skeleton" aria-label="Loading the map">
+      <div className="skeleton" style={{ flex: 1, borderRadius: 16 }} />
+      <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Loading the map…</p>
+    </div>
+  ),
+});
+
+// Discovery map (design #15) — same client-only pattern as the trip map.
+const DiscoveryMap = dynamic(() => import('../components/DiscoveryMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="map-skeleton" aria-label="Loading the discovery map">
       <div className="skeleton" style={{ flex: 1, borderRadius: 16 }} />
       <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Loading the map…</p>
     </div>
@@ -2082,16 +2094,24 @@ export default function Home() {
   // A destination the card builder cannot price renders the old card.
   const cardInfo = useMemo(() => {
     const info: Record<string, { cities: string[]; experiences: number; hotels: number; transports: number; total: number } | null> = {};
-    for (const d of [...GLOBAL_DESTINATIONS, ...HIDDEN_GEMS]) {
+    // The discovery map's destinations need card info too — "Plan this
+    // trip" from a map pin must seed the chat with the route's cities,
+    // not the bare destination name (design #15 + #13, one flow).
+    const names = [...new Set([
+      ...GLOBAL_DESTINATIONS.map((d) => d.name),
+      ...HIDDEN_GEMS.map((d) => d.name),
+      ...discoveryDestinations().map((d) => d.destination),
+    ])];
+    for (const name of names) {
       try {
-        const c = buildTripCard({ destination: d.name, travelers: 2, days: 3, month: 0, origin: '' });
+        const c = buildTripCard({ destination: name, travelers: 2, days: 3, month: 0, origin: '' });
         if (!c) {
-          info[d.name] = null;
+          info[name] = null;
           continue;
         }
-        info[d.name] = { cities: c.stops.map((s) => s.city), experiences: c.experiences, hotels: c.hotels, transports: c.transports, total: buildPlan(d.name, 2, 3).options[1].total };
+        info[name] = { cities: c.stops.map((s) => s.city), experiences: c.experiences, hotels: c.hotels, transports: c.transports, total: buildPlan(name, 2, 3).options[1].total };
       } catch {
-        info[d.name] = null;
+        info[name] = null;
       }
     }
     return info;
@@ -2105,6 +2125,13 @@ export default function Home() {
     setChatSeed({ destination: name, cities: info?.cities ?? [name] });
     document.getElementById('fujin-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  // "Where to go" discovery map (design #15): the pins, and the selected
+  // trip whose essentials the panel shows. The first pin is selected on
+  // load so the panel is never an empty "tap a pin" box.
+  const discovery = useMemo(() => discoveryDestinations(), []);
+  const [discoveryKey, setDiscoveryKey] = useState<string | null>(null);
+  const selectedDiscovery: DiscoveryEntry | null =
+    discovery.find((d) => d.key === discoveryKey) ?? discovery[0] ?? null;
   // A shared plan or reel link (/?plan=<destination>) seeds the chat
   // with that trip — the stranger who taps a shared link lands in the
   // chat with the route ready, not on a blank page. Once per load.
@@ -2184,6 +2211,50 @@ export default function Home() {
                   <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>
                 </div>
               </article>
+            ))}
+          </div>
+        </section>
+
+        {/* "Where to go" discovery map (design #15): the destinations
+            FujinTrip can plan, as price bubbles on a world map. Tap a
+            bubble — or a chip below the map — to see what the trip
+            includes; "Plan this trip" is the same flow as the
+            destination cards (design #13), so the chat seeds with the
+            route's cities. Prices are the planner's Best value totals
+            for 2 travelers — planning estimates, never live quotes. */}
+        <section>
+          <h2>Where to go — explore the map</h2>
+          <p className="sub">Not sure where? Tap a price bubble to see what the trip includes, then plan it in the chat. Prices are planning estimates from FujinTrip’s price table, Best value for 2 travelers — not live quotes.</p>
+          <div className="discover">
+            <div className="discover-map">
+              <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setDiscoveryKey(e.key)} />
+            </div>
+            {selectedDiscovery && (
+              <article className="card discover-panel">
+                <div className="body">
+                  <span className="pill">{selectedDiscovery.tag}</span>
+                  <h3>{selectedDiscovery.destination}</h3>
+                  <p>{routeLineFor(selectedDiscovery.stops)}</p>
+                  <p className="plan-muted">{selectedDiscovery.days} days · {selectedDiscovery.nights} nights · {selectedDiscovery.experiences} experiences · {selectedDiscovery.stays} stay{selectedDiscovery.stays !== 1 ? 's' : ''} · {selectedDiscovery.transports} transports</p>
+                  <p className="plan-muted">Best month to go: {MONTH_NAMES[selectedDiscovery.bestMonth - 1]} — {selectedDiscovery.bestNote}. Typical season, not live prices.</p>
+                  {selectedDiscovery.price !== null ? (
+                    <>
+                      <p className="price">{discoveryPriceLabel(selectedDiscovery)}</p>
+                      <p className="plan-muted">Best value · 2 travelers · planning estimate</p>
+                    </>
+                  ) : (
+                    <p className="plan-muted">No planning estimate for this one yet — ask Fujin AI and it will price it.</p>
+                  )}
+                  <button className="primary" onClick={() => planThisTrip(selectedDiscovery.destination)}>Plan this trip</button>
+                </div>
+              </article>
+            )}
+          </div>
+          <div className="discover-chips" role="group" aria-label="Browse destinations">
+            {discovery.map((d) => (
+              <button key={d.key} className={`ghost discover-chip${selectedDiscovery?.key === d.key ? ' selected' : ''}`} aria-pressed={selectedDiscovery?.key === d.key} onClick={() => setDiscoveryKey(d.key)}>
+                {d.destination}{d.price !== null ? ` · $${d.price.toLocaleString()}` : ''}
+              </button>
             ))}
           </div>
         </section>

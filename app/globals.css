@@ -303,3 +303,15 @@ html{scroll-padding-bottom:96px}
 .reel-composer input[type="file"]{border:1px dashed #d9d9d6;border-radius:12px;padding:12px;background:#fff}
 .reel-composer textarea{border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:15px;resize:vertical}
 @media(max-width:640px){.reels-strip .reelcard{flex-basis:240px}}
+/* "Where to go" discovery map (design #15): map beside the essentials
+   on desktop, stacked on a phone. The chips are the keyboard and small-
+   screen way to pick a destination — 44px targets, like the map's
+   bubbles. The selected chip reads as pressed (border + background,
+   never color alone). */
+.discover{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:stretch}
+.discover-map{height:480px}
+.discover-panel{height:100%}
+.discover-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.discover-chip{min-height:44px}
+.discover-chip.selected{border-color:var(--ink);background:#fafafa;font-weight:700}
+@media(max-width:900px){.discover{grid-template-columns:1fr}.discover-map{height:380px}}

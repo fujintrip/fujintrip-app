@@ -247,3 +247,26 @@ test('reels: the strip is empty until a human approves a verified post, and a fl
   const queueJson = await queue.json();
   assert.ok(queueJson.queue.some((q) => q.id === flaggedJson.post.id), 'a flagged post is in the queue');
 });
+
+test('discovery map: section renders with a priced default pin and a Plan this trip action', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // React SSR puts comment separators between literal text and
+  // expressions, so the checks run on the HTML with them stripped.
+  assert.ok(html.includes('Where to go — explore the map'), 'the discovery section renders');
+  // The default-selected pin is the first one (Europe): its essentials
+  // are server-rendered — the route line, the best month, and the
+  // planner's exact Best value total for 2 travelers.
+  assert.ok(html.includes('Lisbon (3 nights)'), 'the default pin shows its route line');
+  assert.ok(html.includes('Best month to go: May'), 'the default pin shows its best month');
+  assert.ok(html.includes('from $3,000 total'), 'the default pin shows the planner price');
+  assert.ok(html.includes('planning estimate'), 'the price is labeled a planning estimate');
+  assert.ok(html.includes('not live quotes'), 'the section says the prices are not live quotes');
+  // The chip list is the keyboard / small-screen way to pick a pin.
+  assert.ok(html.includes('Central Europe · $3,000'), 'the chip list names a route with its price');
+  assert.ok(html.includes('Plan this trip'), 'the essentials panel has the Plan this trip action');
+  // The price bubbles themselves are client-only (Leaflet, ssr:false),
+  // so they are not in the SSR HTML — their rendering needs the live
+  // visual check after Deploy, not this test.
+});
