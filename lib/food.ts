@@ -20,14 +20,16 @@
  *
  * Results are cached 24h per city (real results only — an empty result
  * is never cached, same policy as Local Voices) and the whole fetch is
- * capped at ~9s so a slow source never holds up the chat reply.
+ * capped at ~14s so a slow source never holds up the chat reply. The
+ * district path (main article + 8 district articles + 3 geocodes) is
+ * what makes the budget this wide; a typical fetch takes ~5s.
  */
 
 import { cityCoords } from './tripCard';
 
 const UA = 'FujinTrip/1.0 (fujintrip.com; food-tonight)';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const FETCH_BUDGET_MS = 9000;
+const FETCH_BUDGET_MS = 14000;
 
 // IANA timezone per city in the trip card (51 cities). Intl throws on an
 // unknown zone, so openNow treats a missing zone as "not verified".
@@ -241,7 +243,7 @@ async function fetchEatListings(city: string): Promise<RawListing[]> {
   const page = encodeURIComponent(PAGE_ALIASES[city] ?? city);
   const toc = (await fetchJson(
     `${api}?action=parse&page=${page}&prop=tocdata&format=json&formatversion=2`,
-    2500
+    2000
   )) as { parse?: { tocdata?: { sections?: Array<{ line?: unknown; index?: unknown }> } } } | null;
   const sections = toc?.parse?.tocdata?.sections ?? [];
   const eat = sections.find(
@@ -250,7 +252,7 @@ async function fetchEatListings(city: string): Promise<RawListing[]> {
   if (!eat) return [];
   const data = (await fetchJson(
     `${api}?action=parse&page=${page}&section=${eat.index}&prop=wikitext&format=json&formatversion=2`,
-    3500
+    2500
   )) as { parse?: { wikitext?: unknown } } | null;
   // formatversion=2 returns the wikitext as a plain string; formatversion=1
   // would wrap it in {'*': …} — accept both.
@@ -271,7 +273,7 @@ async function fetchDistrictEatListings(city: string): Promise<RawListing[]> {
   const page = PAGE_ALIASES[city] ?? city;
   const all = (await fetchJson(
     `${api}?action=query&list=allpages&apprefix=${encodeURIComponent(page + '/')}&aplimit=20&apnamespace=0&format=json&formatversion=2`,
-    2500
+    2000
   )) as { query?: { allpages?: Array<{ title?: unknown }> } } | null;
   const titles = (all?.query?.allpages ?? [])
     .map((p) => (typeof p.title === 'string' ? p.title : ''))
@@ -283,7 +285,7 @@ async function fetchDistrictEatListings(city: string): Promise<RawListing[]> {
       try {
         const toc = (await fetchJson(
           `${api}?action=parse&page=${encodeURIComponent(title)}&prop=tocdata&format=json&formatversion=2`,
-          2000
+          1500
         )) as { parse?: { tocdata?: { sections?: Array<{ line?: unknown; index?: unknown }> } } } | null;
         const eat = (toc?.parse?.tocdata?.sections ?? []).find(
           (s) => typeof s.line === 'string' && typeof s.index === 'string' && s.line.trim().toLowerCase() === 'eat'
@@ -291,7 +293,7 @@ async function fetchDistrictEatListings(city: string): Promise<RawListing[]> {
         if (!eat) return [] as RawListing[];
         const data = (await fetchJson(
           `${api}?action=parse&page=${encodeURIComponent(title)}&section=${eat.index}&prop=wikitext&format=json&formatversion=2`,
-          2500
+          2000
         )) as { parse?: { wikitext?: unknown } } | null;
         const wt = data?.parse?.wikitext;
         const text = typeof wt === 'string' ? wt : typeof wt === 'object' && wt !== null && typeof (wt as { '*'?: unknown })['*'] === 'string' ? ((wt as { '*'?: string })['*'] as string) : '';
@@ -432,7 +434,7 @@ export function openNow(hours: string | undefined, tz: string | null, now: Date 
 // center simply omits the walk time.
 async function geocodePlace(name: string, city: string): Promise<{ lat: number; lng: number } | null> {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(`${name}, ${city}`)}`;
-  const data = (await fetchJson(url, 2000)) as Array<{ lat?: unknown; lon?: unknown }> | null;
+  const data = (await fetchJson(url, 1500)) as Array<{ lat?: unknown; lon?: unknown }> | null;
   const hit = Array.isArray(data) ? data[0] : null;
   const lat = typeof hit?.lat === 'string' ? Number(hit.lat) : NaN;
   const lng = typeof hit?.lon === 'string' ? Number(hit.lon) : NaN;
@@ -507,7 +509,7 @@ export async function fetchTonight(city: string, now: Date = new Date()): Promis
       // lookup just omits the walk time.
       if (center) {
         const geo = await geocodePlace(s.l.name, city).catch(() => null);
-        await new Promise((r) => setTimeout(r, 250));
+        await new Promise((r) => setTimeout(r, 200));
         if (geo) {
           const km = haversineKm(center, geo);
           // Near you means a walk: beyond ~45 minutes it is a taxi or
