@@ -1181,6 +1181,16 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </div>
             )}
           </div>
+          {/* Running total (design #8): "In your plan so far" lived in
+              .maphints, which is display:none on phones — the one number
+              that tells a phone traveler what they have built was hidden
+              exactly where it matters most. It now sits in the chat
+              panel, visible on every viewport. */}
+          {chosenLegs.size > 0 && mapCard && (
+            <p className="no-print" style={{ fontSize: 13, color: '#666', margin: '0 0 8px' }}>
+              In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${bundleTotal(bundle).toLocaleString()}
+            </p>
+          )}
           <div className="row">
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
             {/* While Fujin AI is thinking or streaming, Send becomes Stop:
@@ -1333,7 +1343,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     <strong>
                       {selectedLeg.icon} {selectedLeg.label}
                     </strong>
-                    <button className="ghost" aria-label="Close" onClick={() => setSelectedLeg(null)} style={{ padding: '2px 10px' }}>
+                    <button className="ghost" aria-label="Close" onClick={() => setSelectedLeg(null)} style={{ padding: '6px 12px', minHeight: 44, minWidth: 44 }}>
                       ×
                     </button>
                   </div>
@@ -1368,11 +1378,6 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               <div className="maphints">
                 {!selectedLeg && (
                   <p className="maphint">Click a price tag on the map to see the flight, stay or car — then read more or add it to your plan.</p>
-                )}
-                {chosenLegs.size > 0 && (
-                  <p className="maphint">
-                    In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${bundleTotal(bundle).toLocaleString()} — the full plan is below.
-                  </p>
                 )}
               </div>
             </>
