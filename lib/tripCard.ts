@@ -154,6 +154,10 @@ export type TripCardStop = {
   stayEstimate: number;
   days: TripCardDay[];
   transportIn: { mode: string; from: string; price: number };
+  // Start Anywhere (round 2 #6): the sentence from the traveler's own
+  // link or pasted text that named this stop — quoted verbatim, shown
+  // under the stop's intro so the trip keeps its source attached.
+  sourceTip?: string;
 };
 export type TripLeg = {
   id: string;
@@ -220,6 +224,9 @@ export function buildTripCard(opts: {
   // override's weights, so the card, the map and the summary all show
   // the same revised route.
   routeOverride?: RouteOverride;
+  // Start Anywhere (round 2 #6): the source tips per city, from the
+  // traveler's own link or pasted text — attached to the matching stop.
+  sourceTips?: Record<string, string>;
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -278,6 +285,7 @@ export function buildTripCard(opts: {
       startDate: stopStart,
       endDate: stopEnd,
       intro: info?.intro ?? '',
+      ...(opts.sourceTips?.[s.city] ? { sourceTip: opts.sourceTips[s.city] } : {}),
       stayEstimate: Math.round((best.hotel * s.nights) / totalNights),
       days: stopDays,
       transportIn,

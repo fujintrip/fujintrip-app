@@ -225,8 +225,9 @@ const TRAVEL_WORDS = [
 // Each route is 1–3 warm sentences with real places and transport/stay
 // guidance. Prices come from the planner (Other-destinations row, base
 // 1500) via optionsLine() — never invented here. A proposal is a
-// suggestion the traveler can change, never a silent default.
-const COUNTRY_ROUTES: Record<string, { display: string; route: string }> = {
+// suggestion the traveler can change, never a silent default. Exported
+// so the extract module can match country names to their routes.
+export const COUNTRY_ROUTES: Record<string, { display: string; route: string }> = {
   europe: {
     display: 'Europe',
     route:

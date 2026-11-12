@@ -178,7 +178,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride } | null>(null);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string> } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
@@ -247,6 +247,58 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       setTonight({ city: foodCity, tz: null, places: [], checkedAt: new Date().toISOString() });
     }
   };
+  // Start Anywhere (competitor learning round 2 #6, Mindtrip): paste a
+  // link to a travel article, or paste the text of one, and the trip is
+  // drafted from the places it names. A link the server cannot read
+  // (PDF, image, dead link) returns the honest reason — the trip is
+  // never invented from an unreadable input. Screenshots cannot be
+  // pasted here; the box says so.
+  const [linkInput, setLinkInput] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const startFromLink = async () => {
+    const raw = linkInput.trim();
+    if (!raw || linkBusy) return;
+    setLinkBusy(true);
+    const isUrl = /^https?:\/\//i.test(raw);
+    setMsgs((m) => [...m, { who: 'user', text: isUrl ? `Start from this link: ${raw}` : `Start from this text: ${raw.length > 120 ? `${raw.slice(0, 120)}…` : raw}` }]);
+    try {
+      const r = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isUrl ? { url: raw } : { text: raw }),
+      });
+      const j = (await r.json()) as { destination?: string; cities?: string[]; stops?: { city: string; tip: string }[]; note?: string };
+      if (!j.destination || !j.cities?.length) {
+        setMsgs((m) => [...m, { who: 'ai', text: j.note ?? 'I couldn’t find any places I know in that link or text — try a link to a travel article, or paste text naming the cities (for example Kyoto, Bangkok, Lisbon).' }]);
+        return;
+      }
+      const cities = j.cities.slice(0, 8);
+      const sourceTips: Record<string, string> = {};
+      for (const s of j.stops ?? []) if (s.city && s.tip) sourceTips[s.city] = s.tip;
+      setPlan(null);
+      setChosenLegs(new Set());
+      setSelectedLeg(null);
+      setLastParsed({
+        destination: j.destination,
+        travelers: lastParsed?.travelers ?? 2,
+        ...(lastParsed?.origin ? { origin: lastParsed.origin } : {}),
+        ...(lastParsed?.month ? { month: lastParsed.month } : {}),
+        ...(lastParsed?.durationDays ? { durationDays: lastParsed.durationDays } : {}),
+        ...(routeKeyForDestination(j.destination) ? { routeKey: routeKeyForDestination(j.destination) } : {}),
+        ...(lastParsed?.kids?.length ? { kids: lastParsed.kids } : {}),
+        routeOverride: { cities },
+        sourceTips,
+      });
+      onParsed?.({ destination: j.destination, travelers: lastParsed?.travelers ?? 2, ...(lastParsed?.kids?.length ? { kids: lastParsed.kids } : {}) });
+      const days = lastParsed?.durationDays ? ` for ${lastParsed.durationDays} days` : '';
+      setMsgs((m) => [...m, { who: 'ai', text: `Started from your link — ${j.destination}${days}: ${cities.join(' → ')}. I kept the notes from your link on each stop. Tap Build my plan to see prices and the day-by-day.` }]);
+      setLinkInput('');
+    } catch {
+      setMsgs((m) => [...m, { who: 'ai', text: 'I couldn’t load that link right now — check it and try again, or paste the text of the article instead.' }]);
+    } finally {
+      setLinkBusy(false);
+    }
+  };
   // "Leave now" hint for a flight that is still on the ground and
   // departs within 4 hours — general advice, not a per-flight fact.
   const leaveNow = (s: FlightStatusData): string | null => {
@@ -269,7 +321,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     try {
       const t = localStorage.getItem('fujintrip-current-trip');
       if (t) {
-        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown; routeOverride?: unknown };
+        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown; routeOverride?: unknown; sourceTips?: unknown };
         if (typeof p.destination === 'string' && typeof p.travelers === 'number') {
           // Restore the revised route (if any) — same validation as the
           // server reply, so a stale or corrupt value never breaks the page.
@@ -287,6 +339,15 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             }
             return { cities, ...(weights ? { weights } : {}) };
           })();
+          // Restore the source tips (Start Anywhere, round 2 #6) —
+          // same validation as the server reply: string values only.
+          const restoredSourceTips: Record<string, string> | undefined = (() => {
+            if (!p.sourceTips || typeof p.sourceTips !== 'object' || Array.isArray(p.sourceTips)) return undefined;
+            const tips = Object.fromEntries(
+              Object.entries(p.sourceTips as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string')
+            );
+            return Object.keys(tips).length ? tips : undefined;
+          })();
           setLastParsed({
             destination: p.destination,
             travelers: p.travelers,
@@ -296,6 +357,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             ...(typeof p.routeKey === 'string' && p.routeKey ? { routeKey: p.routeKey } : {}),
             ...(Array.isArray(p.kids) ? { kids: p.kids.filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6) } : {}),
             ...(restoredOverride ? { routeOverride: restoredOverride } : {}),
+            ...(restoredSourceTips ? { sourceTips: restoredSourceTips } : {}),
           });
           onParsed?.({ destination: p.destination, travelers: p.travelers });
         }
@@ -449,6 +511,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
         ...(routeKeyForDestination(parsed.destination) ? { routeKey: routeKeyForDestination(parsed.destination) } : {}),
         ...(kidsOut.length ? { kids: kidsOut } : {}),
         ...(routeOverrideOut ? { routeOverride: routeOverrideOut } : {}),
+        // A new destination starts fresh; a follow-up keeps the source
+        // tips from the link the trip started from.
+        ...(isNewTrip ? {} : lastParsed?.sourceTips ? { sourceTips: lastParsed.sourceTips } : {}),
       });
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers, ...(kidsOut.length ? { kids: kidsOut } : {}) });
@@ -600,6 +665,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             tier: choice,
             kids: lastParsed?.kids ?? [],
             routeOverride: lastParsed?.routeOverride,
+            sourceTips: lastParsed?.sourceTips,
           })
         : null,
     [plan, lastParsed, choice]
@@ -624,6 +690,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             tier: choice,
             kids: lastParsed?.kids ?? [],
             routeOverride: lastParsed?.routeOverride,
+            sourceTips: lastParsed?.sourceTips,
           })
         : null,
     [lastParsed, choice]
@@ -751,6 +818,17 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </button>
             )}
           </p>
+          {/* Start Anywhere (competitor learning round 2 #6, Mindtrip):
+              paste a link to a travel article, or paste the text of
+              one — the trip is drafted from the places it names. */}
+          <div className="no-print" style={{ border: '1px solid #e5e5e5', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+            <strong style={{ fontSize: 13 }}>Start from a link</strong>
+            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
+            <div className="row">
+              <input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startFromLink()} placeholder="https://… or paste the text of an article" aria-label="Link or text to start a trip from" />
+              <button className="ghost" onClick={startFromLink} disabled={!linkInput.trim() || linkBusy}>{linkBusy ? 'Reading…' : 'Start from this'}</button>
+            </div>
+          </div>
           {tripMode && lastParsed && (
             <div className="no-print" style={{ marginTop: 8 }}>
               <p style={{ fontSize: 13, color: '#666' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
@@ -941,6 +1019,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 <div key={stop.city} style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
                   <strong>Days {stop.days[0]?.day ?? si + 1}{stop.days.length > 1 ? `-${stop.days[stop.days.length - 1].day}` : ''} · {fmtDate(stop.startDate)} – {fmtDate(stop.endDate)} · {stop.city}</strong>
                   <p style={{ margin: '4px 0' }}>{stop.intro}</p>
+                  {/* Start Anywhere (round 2 #6): the sentence from the
+                      traveler's own link that named this stop — kept with
+                      the plan so the trip remembers where it came from. */}
+                  {stop.sourceTip && (
+                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>From your link: “{stop.sourceTip}”</p>
+                  )}
                   <p style={{ fontSize: 14, margin: '4px 0' }}>
                     <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: '#666' }}>(estimate)</span>
                   </p>
