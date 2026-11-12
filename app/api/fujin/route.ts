@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, distributeNights, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, routeKeyForDestination } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, findMonth, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, routeKeyForDestination, ROUTE_STOPS } from '../../../lib/planner';
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
+import { fetchLiveFares, faresPromptBlock, faresSummaryLine, type LiveFares } from '../../../lib/duffel';
+import { suggestedStart } from '../../../lib/tripCard';
 
 /**
  * Fujin AI — live model, server-side only. TRAVEL-ONLY scope: the system
@@ -28,6 +30,17 @@ import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
  * returned as `voices` so the plan view can show a "What travelers say"
  * block. A fetch failure never breaks the chat — the model just answers
  * from its own knowledge.
+ *
+ * Live fares (Duffel, urgent Nov 11): before the model runs, the server
+ * asks Duffel for the real fares for this exact trip — origin to the
+ * first city of the route and back, on the trip's suggested dates — via
+ * lib/duffel, and appends them as a LIVE FARES block, so the model quotes
+ * API prices instead of the planner's estimates. In test mode Duffel
+ * returns test fares (not real bookable fares); live mode makes them
+ * real. A missing key, missing airport code, missing slot, or a failed
+ * or slow Duffel call means no LIVE FARES block, and the model falls
+ * back to the planner's price table. The fares are also returned as
+ * `liveFares` so the trip card can use them later.
  */
 
 type Provider = {
@@ -101,7 +114,8 @@ const SYSTEM_PROMPT = [
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
   'Traveler count: "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'List anything missing as short questions in the missing array.',
-  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
+  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
+  'LIVE FARES — before the model runs, the server asks Duffel for the real fares for this exact trip (origin to the first city of the route, and back) on the trip\'s suggested dates, and appends them as a LIVE FARES block below. When a LIVE FARES block is present, quote those fares as the flight prices — with the airline name and the price — and say they are live fares from Duffel (test fares in test mode). For the whole-trip totals, still use the price table (planning estimates) and say the flight inside the plan is estimated — the live fare may be lower. Never invent a fare; if no LIVE FARES block is present, use the price table only.',
   'FujinTrip plan prices (1 traveler and 2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
   'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[]}.',
@@ -133,7 +147,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '') {
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -160,6 +174,11 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
   // but never on a decline, where it would read as an answer, and never on
   // a guided question, where a long excerpt would bury the one question.
   if (voices?.text && destination && !parsed.needsMore) reply += `\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`;
+  // Same for the live fares: the offline fallback quotes them too, so the
+  // traveler still sees the real Duffel price when the model is down.
+  if (liveFares?.live && destination && !parsed.needsMore && !declinedOffTopic) {
+    reply += `\n\n${faresSummaryLine(liveFares)}`;
+  }
   return NextResponse.json({
     live: false,
     label,
@@ -170,6 +189,7 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     voices: voices?.text ?? '',
     voicesSource: voices?.source ?? '',
     voicesDestination: voicesDest,
+    liveFares: liveFares ?? null,
   });
 }
 
@@ -236,8 +256,41 @@ export async function POST(req: NextRequest) {
   // drives the live fetch below.
   const onTrip = typeof raw.tripContext === 'string' && raw.tripContext.trim() ? raw.tripContext.trim() : '';
   const voicesDest = onTrip || guessDestination(raw, fullText) || stateDestination;
-  // Best-effort and capped (~4s inside): never let the fetch break the chat.
-  const voices: LocalVoices = voicesDest ? await fetchLocalVoices(voicesDest).catch(() => ({ text: '', source: '' })) : { text: '', source: '' };
+  const voicesPromise: Promise<LocalVoices> = voicesDest
+    ? fetchLocalVoices(voicesDest).catch(() => ({ text: '', source: '' }))
+    : Promise.resolve({ text: '', source: '' });
+  // Live fares from Duffel (urgent, Nov 11): once the trip is known —
+  // destination, origin, month and length — ask Duffel for the real fares
+  // for the exact trip, so the model quotes API prices instead of the
+  // planner's estimates. The fare destination is the first city of the
+  // route (Prague for Central Europe, Lisbon for the Europe route); the
+  // dates are the trip card's suggested dates, so the chat and the card
+  // always agree on the trip. Skipped for on-trip/food questions (no
+  // flight to price) and whenever a slot or airport code is missing.
+  // Best-effort and capped (~10s inside, plus a 10-minute cache): never
+  // let a slow Duffel call break the chat.
+  const stateMonth =
+    typeof tripState.month === 'number' && tripState.month >= 1 && tripState.month <= 12 ? tripState.month : 0;
+  const stateDays =
+    typeof tripState.durationDays === 'number' && tripState.durationDays >= 2 ? tripState.durationDays : 0;
+  const tripMonth = stateMonth || findMonth(fullText);
+  const tripDaysKnown = stateDays || parseDuration(fullText);
+  const fareRouteKey = routeKeyForDestination(voicesDest || stateDestination);
+  const fareDestCity = fareRouteKey ? ROUTE_STOPS[fareRouteKey][0].city : voicesDest || stateDestination;
+  const departDate = tripMonth ? suggestedStart(tripMonth) : null;
+  const returnDate =
+    departDate && tripDaysKnown >= 2 ? new Date(departDate.getTime() + (tripDaysKnown - 1) * 86400000) : null;
+  const faresPromise: Promise<LiveFares | null> =
+    !onTrip && fareDestCity && stateOrigin && departDate && returnDate
+      ? fetchLiveFares({
+          origin: stateOrigin,
+          destCity: fareDestCity,
+          departDate: departDate.toISOString().slice(0, 10),
+          returnDate: returnDate.toISOString().slice(0, 10),
+          travelers: stateTravelers || 2,
+        }).catch(() => null)
+      : Promise.resolve(null);
+  const [voices, liveFares] = await Promise.all([voicesPromise, faresPromise]);
 
   // System prompt for this request: base prompt + fresh traveler material
   // + on-trip framing when applicable.
@@ -246,6 +299,9 @@ export async function POST(req: NextRequest) {
     systemPrompt +=
       ' LOCAL VOICES — fresh traveler material for this destination, fetched just now from traveler guides. Prefer naming the real places, dishes and tips from it in your reply and in tips. Never invent a reviewer name, quote, or review score; if a place in this material contradicts your own knowledge, trust the material. ' +
       voices.text;
+  }
+  if (liveFares?.live) {
+    systemPrompt += ' ' + faresPromptBlock(liveFares);
   }
   if (onTrip) {
     systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;
@@ -276,7 +332,8 @@ export async function POST(req: NextRequest) {
       stateTravelers || 2,
       stateDestination,
       message,
-      stateOrigin
+      stateOrigin,
+      liveFares
     );
   }
   const apiKey = provider.apiKey;
@@ -330,14 +387,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares);
     }
 
     return NextResponse.json({
@@ -347,10 +404,11 @@ export async function POST(req: NextRequest) {
       voices: voices.text,
       voicesSource: voices.source,
       voicesDestination: voicesDest,
+      liveFares: liveFares ?? null,
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares);
   }
 }
 
