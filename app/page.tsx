@@ -2,12 +2,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type Plan, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
-import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
+import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard, type TripLeg } from '../lib/tripCard';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
 import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
 import type { TonightResult } from '../lib/food';
@@ -1096,6 +1096,33 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const fmtDateYear = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Trip Summary as a persistent, editable card (design #14, Layla): the
+  // summary used to live inside a chat bubble, and a revision was a
+  // sentence the traveler had to compose. Now the trip is a thing you
+  // can see and edit — route with nights, dates, travelers, origin and
+  // tier — and tapping a line asks Fujin AI to change that slot (the
+  // revision flow confirms what changed and what did not). The nights
+  // use the same distribution as the trip card, so the card and the
+  // map always agree.
+  const summaryRoute = useMemo(() => {
+    if (!lastParsed?.destination) return '';
+    const key = routeKeyForDestination(lastParsed.destination);
+    const days = lastParsed.durationDays ?? 14;
+    try {
+      if (lastParsed.routeOverride?.cities.length) {
+        const stops = stopsForRoute(key, lastParsed.routeOverride);
+        return distributeNightsForStops(stops, days).map((l) => `${l.city} ${l.nights}n`).join(' → ');
+      }
+      if (key) return distributeNights(key, days).map((l) => `${l.city} ${l.nights}n`).join(' → ');
+    } catch {}
+    return lastParsed.destination;
+  }, [lastParsed]);
+  const summaryDates = useMemo(() => {
+    if (!lastParsed?.month) return 'Not set yet';
+    const start = mapCard ? mapCard.startDate : suggestedStart(lastParsed.month);
+    const end = mapCard ? mapCard.endDate : start;
+    return `${MONTH_NAMES[lastParsed.month - 1]} · ${fmtDate(start)} – ${fmtDate(end)}`;
+  }, [lastParsed, mapCard]);
   // Tier radiogroup (design #6): arrows move between the three tiers and
   // select as they go (the ARIA radiogroup pattern); Space/Enter on a
   // focused tier selects it too.
@@ -1201,6 +1228,48 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           click to read more or add to the plan. */}
       <div className="chatmap">
         <div className="chatcol">
+          {/* Trip Summary card (design #14): pinned above the messages,
+              always visible once the chat knows a destination. Tap a line
+              to change that slot; the tier row switches the plan tier
+              through the revision flow. */}
+          {lastParsed?.destination && (
+            <div className="tripsummary" role="group" aria-label="Trip summary — tap a line to change it">
+              <div className="tripsummary-title">Your trip</div>
+              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the route')} title="Tap to change the route">
+                <span className="tripsummary-label">Route</span>
+                <span>{summaryRoute}</span>
+              </button>
+              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the dates')} title="Tap to change the dates">
+                <span className="tripsummary-label">Dates</span>
+                <span>{summaryDates}</span>
+              </button>
+              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the party size')} title="Tap to change the party size">
+                <span className="tripsummary-label">Travelers</span>
+                <span>
+                  {lastParsed.travelers} traveler{lastParsed.travelers > 1 ? 's' : ''}
+                  {lastParsed.kids?.length ? ` · kids ${lastParsed.kids.join(', ')}` : ''}
+                </span>
+              </button>
+              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change where I fly from')} title="Tap to change the departure city">
+                <span className="tripsummary-label">From</span>
+                <span>{lastParsed.origin || 'Not set yet'}</span>
+              </button>
+              <div className="tripsummary-tiers" role="group" aria-label="Plan tier">
+                {(['Cheapest', 'Best value', 'Premium'] as const).map((name, i) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`tripsummary-tier ${i === choice ? 'selected' : ''}`}
+                    aria-pressed={i === choice}
+                    disabled={thinking !== null || streamingText !== null}
+                    onClick={() => send(i === 0 ? 'Make it cheaper' : i === 1 ? 'Best value' : 'Upgrade to Premium')}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="chat" ref={chatRef} aria-live="polite" aria-label="Conversation with Fujin AI">
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>

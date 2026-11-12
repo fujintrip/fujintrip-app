@@ -193,6 +193,21 @@ html{scroll-padding-bottom:96px}
 .stickybar button{min-height:48px}
 @media(min-width:901px){.stickybar{left:auto;right:24px;bottom:24px;width:auto;border:1px solid var(--line);border-radius:999px;padding:8px 8px 8px 20px;box-shadow:0 8px 28px rgba(0,0,0,.14)}}
 
+/* Trip Summary card (design #14): the trip as a thing you can see and
+   edit, pinned above the chat messages. A tapped line asks Fujin AI to
+   change that slot; the tier row switches the plan tier. */
+.tripsummary{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;background:#fff;flex:0 0 auto}
+.tripsummary-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.tripsummary-line{display:flex;gap:8px;width:100%;text-align:left;background:none;border:none;padding:6px 4px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;border-radius:8px}
+.tripsummary-line:hover{background:var(--surface)}
+.tripsummary-line:disabled{cursor:default;opacity:.6}
+.tripsummary-label{flex:0 0 72px;color:var(--muted);font-size:13px}
+.tripsummary-tiers{display:flex;gap:6px;margin-top:8px}
+.tripsummary-tier{flex:1;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:6px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.tripsummary-tier:hover{border-color:var(--ink)}
+.tripsummary-tier.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tripsummary-tier:disabled{cursor:default;opacity:.6}
+
 /* Map as the background, chat on top (Nov 11, user: "the map as
    background and chat on top of it so the map will change based on
    the chat and draw the route") — Layla-style: the map fills the
