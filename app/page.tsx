@@ -5,6 +5,7 @@ import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '.
 import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
+import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
 import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
@@ -360,6 +361,20 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             ...(restoredSourceTips ? { sourceTips: restoredSourceTips } : {}),
           });
           onParsed?.({ destination: p.destination, travelers: p.travelers });
+          // Restore the bundle (round 2 #7): only when the saved bundle
+          // is for THIS trip (same destination, travelers, length) — a
+          // bundle from another trip never restores onto this one.
+          try {
+            const b = localStorage.getItem('fujintrip-bundle');
+            if (b) {
+              const saved = JSON.parse(b) as { key?: unknown; ids?: unknown };
+              const tripKey = bundleKey(p.destination, p.travelers, typeof p.durationDays === 'number' ? p.durationDays : 0);
+              if (saved && saved.key === tripKey && Array.isArray(saved.ids)) {
+                const ids = saved.ids.filter((i): i is string => typeof i === 'string').slice(0, 12);
+                if (ids.length) setChosenLegs(new Set(ids));
+              }
+            }
+          } catch {}
         }
       }
       const pl = localStorage.getItem('fujintrip-current-plan');
@@ -758,10 +773,26 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const [chosenLegs, setChosenLegs] = useState<Set<string>>(new Set());
   const [selectedLeg, setSelectedLeg] = useState<TripLeg | null>(null);
   const [legExpanded, setLegExpanded] = useState(false);
-  const chosenTotal = useMemo(
-    () => (mapCard ? mapCard.legs.filter((l) => chosenLegs.has(l.id)).reduce((s, l) => s + l.price, 0) : 0),
+  // Add-to-bundle-later (round 2 #7, Expedia One Key): the bundle is the
+  // legs the traveler picked, snapshotted from the current card — the
+  // total is the exact sum of those legs, and the bundle stays open
+  // until the trip's last travel day.
+  const bundle = useMemo(
+    () => bundleFromLegs(mapCard?.legs ?? [], chosenLegs),
     [mapCard, chosenLegs]
   );
+  const bundleEnd = mapCard?.stops[mapCard.stops.length - 1]?.endDate ?? null;
+  const lockedUntil = bundleEnd ? bundleLockedUntil(bundleEnd) : '';
+  // Bundle persistence: the picked legs survive a reload, keyed by trip;
+  // a new trip clears them (send() clears chosenLegs, and this effect
+  // then removes the stored bundle).
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (!lastParsed || !chosenLegs.size) { localStorage.removeItem('fujintrip-bundle'); return; }
+      localStorage.setItem('fujintrip-bundle', JSON.stringify({ key: bundleKey(lastParsed.destination, lastParsed.travelers, lastParsed.durationDays ?? 0), ids: [...chosenLegs] }));
+    } catch {}
+  }, [hydrated, lastParsed, chosenLegs]);
   // Chat auto-scroll (Nov 11, user: "the chat doesn't update as i send
   // messages and reply i have to scroll to read"): the messages area
   // scrolls inside the split screen, but nothing scrolled it to the
@@ -774,10 +805,25 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [msgs]);
   // Add to plan: the leg joins the trip plan AND the chat — the traveler
-  // sees the pick in the conversation, not just on the map.
+  // sees the pick in the conversation, not just on the map. The chat
+  // line carries the bundle total and the last day a leg can still be
+  // added, so the traveler knows the bundle stays open (round 2 #7).
   const addLegToPlan = (leg: TripLeg) => {
-    setChosenLegs((prev) => new Set(prev).add(leg.id));
-    setMsgs((m) => [...m, { who: 'ai', text: `Added to your plan: ${leg.label} — from $${leg.price.toLocaleString()}.` }]);
+    const next = new Set(chosenLegs).add(leg.id);
+    setChosenLegs(next);
+    const nextBundle = bundleFromLegs(mapCard?.legs ?? [], next);
+    const line = lockedUntil ? ` ${bundleLine(nextBundle, lockedUntil)}` : '';
+    setMsgs((m) => [...m, { who: 'ai', text: `Added to your plan: ${leg.label} — from $${leg.price.toLocaleString()}.${line}` }]);
+  };
+  // Remove a leg from the bundle (round 2 #7): from the plan view's
+  // bundle section — the total updates exactly, and the leg can be added
+  // again from the map at the same price.
+  const removeLegFromBundle = (id: string) => {
+    setChosenLegs((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
   const fmtDate = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -974,7 +1020,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 )}
                 {chosenLegs.size > 0 && (
                   <p className="maphint">
-                    In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${chosenTotal.toLocaleString()} — the full plan is below.
+                    In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${bundleTotal(bundle).toLocaleString()} — the full plan is below.
                   </p>
                 )}
               </div>
@@ -1039,6 +1085,23 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   ))}
                 </div>
               ))}
+              {/* Add-to-bundle-later (round 2 #7): the legs picked from
+                  the map, with the exact total and the last day a leg
+                  can still be added at the same bundled price. */}
+              {bundle.legs.length > 0 && (
+                <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+                  <strong>Your bundle — {bundle.legs.length} item{bundle.legs.length > 1 ? 's' : ''} · ${bundleTotal(bundle).toLocaleString()}</strong>
+                  {lockedUntil && (
+                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Locked until {lockedUntil} — you can add your hotel, car or activities any time before then, at the same bundled price.</p>
+                  )}
+                  {bundle.legs.map((leg) => (
+                    <p key={leg.id} style={{ fontSize: 14, margin: '4px 0' }}>
+                      {leg.label} · ${leg.price.toLocaleString()}{' '}
+                      <button className="ghost" onClick={() => removeLegFromBundle(leg.id)}>Remove</button>
+                    </p>
+                  ))}
+                </div>
+              )}
               <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
                 <p style={{ fontSize: 14, margin: '4px 0' }}>
                   <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: '#666' }}>(estimate)</span>
