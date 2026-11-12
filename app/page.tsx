@@ -11,7 +11,7 @@ import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard, type TripLeg } from '../lib/tripCard';
 import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
-import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
+import { appendObservation, parseLiveFares, trendLine, type LiveFares, type TrendObservation } from '../lib/duffel';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
@@ -258,6 +258,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
   const [voices, setVoices] = useState<Voices>(null);
+  // Live Duffel fares for the current trip (route returns them as
+  // `liveFares`) — the trip card and the map show these same fares, so
+  // the chat, the card and the map never quote different flight prices.
+  // Null means no live fares: the card falls back to the planner
+  // estimate. Validated by parseLiveFares; the card itself also checks
+  // the fares match its own trip (travelers, origin, first city, dates).
+  const [liveFares, setLiveFares] = useState<LiveFares | null>(null);
   // On-trip mode: the traveler is already at the destination and wants
   // short, right-now local answers. WhatsApp delivery is a later step
   // (needs a business number) — this mode works in the chat today.
@@ -686,6 +693,15 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
         setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
       }
     };
+    // Keep the live fares the server fetched for this trip (or clear
+    // them when the fetch ran and failed, so the card falls back). A
+    // null/missing liveFares means this turn did not fetch fares at all
+    // (a food question, an on-trip question) — the last fares stay, and
+    // the card only uses them while they still match its own trip.
+    const keepFares = (j: Record<string, unknown>) => {
+      if (j.liveFares === null || j.liveFares === undefined) return;
+      setLiveFares(parseLiveFares(j.liveFares));
+    };
     // Stream first: the reply appears as it arrives. A stopped stream
     // keeps its partial text; any stream failure falls back to the atomic
     // request below (the same reply, in one piece).
@@ -736,6 +752,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       streamAbortRef.current = null;
       if (doneResult && typeof doneResult.reply === 'string' && typeof doneResult.destination === 'string') {
         keepVoices(doneResult);
+        keepFares(doneResult);
         const { parsed, live } = parseServerReply(doneResult);
         handleParsed(parsed, live, origin, month, durationDays, kids);
         return;
@@ -768,6 +785,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       const j = await r.json();
       if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
         keepVoices(j);
+        keepFares(j);
         const out = parseServerReply(j);
         parsed = out.parsed;
         live = out.live;
@@ -1086,9 +1104,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             kids: lastParsed?.kids ?? [],
             routeOverride: lastParsed?.routeOverride,
             sourceTips: lastParsed?.sourceTips,
+            // The same live fares the chat quotes for this trip — the
+            // card validates them against its own trip before using them.
+            liveFares,
           })
         : null,
-    [plan, lastParsed, choice]
+    [plan, lastParsed, choice, liveFares]
   );
   // Live map preview (Nov 11, user: "the map doesn't reflect as i'm
   // talking to the ai like lyla"): the map used to appear only after
@@ -1111,9 +1132,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             kids: lastParsed?.kids ?? [],
             routeOverride: lastParsed?.routeOverride,
             sourceTips: lastParsed?.sourceTips,
+            liveFares,
           })
         : null,
-    [lastParsed, choice]
+    [lastParsed, choice, liveFares]
   );
   const mapCard = tripCard ?? previewCard;
   // Live trip panel (Layla-dynamic round): the map's props are stable
@@ -2018,13 +2040,21 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     className="plan-row"
                     summary={
                       <>
-                        <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
+                        <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{si === 0 && (displayCard ?? tripCard).flight.out.live ? `(Duffel test fare — ${(displayCard ?? tripCard).flight.out.airline})` : '(estimate)'}</span>
                       </>
                     }
                   >
                     <p className="plan-line">Mode: {stop.transportIn.mode} · {stop.transportIn.from} → {stop.city}</p>
-                    <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · from ${stop.transportIn.price.toLocaleString()} (planning estimate)</p>
-                    <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                    {si === 0 && (displayCard ?? tripCard).flight.out.live ? (
+                      <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · {(displayCard ?? tripCard).flight.out.airline} ${stop.transportIn.price.toLocaleString()} (Duffel test fare, {stop.transportIn.from} → {stop.city})</p>
+                    ) : (
+                      <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · from ${stop.transportIn.price.toLocaleString()} (planning estimate)</p>
+                    )}
+                    {si === 0 && (displayCard ?? tripCard).flight.out.live ? (
+                      <p className="plan-note">Duffel test fare — fetched from Duffel, not a live quote and not bookable yet. Real bookable fares need Duffel live mode.</p>
+                    ) : (
+                      <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                    )}
                   </Expandable>
                   <Expandable
                     className="plan-row"
@@ -2165,14 +2195,39 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 className="plan-section"
                 summary={
                   <>
-                    <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
+                    <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{tripCard.flight.back.live ? `(Duffel test fare — ${tripCard.flight.back.airline})` : '(estimate)'}</span>
                   </>
                 }
               >
                 <p className="plan-line">Mode: ✈️ Flight · {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'}</p>
-                <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · from ${tripCard.returnTransport.price.toLocaleString()} (planning estimate)</p>
-                <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                {tripCard.flight.back.live ? (
+                  <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · {tripCard.flight.back.airline} ${tripCard.returnTransport.price.toLocaleString()} (Duffel test fare, {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'})</p>
+                ) : (
+                  <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · from ${tripCard.returnTransport.price.toLocaleString()} (planning estimate)</p>
+                )}
+                {tripCard.flight.back.live ? (
+                  <p className="plan-note">Duffel test fare — fetched from Duffel, not a live quote and not bookable yet. Real bookable fares need Duffel live mode.</p>
+                ) : (
+                  <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                )}
               </Expandable>
+              {/* Live fares, reconciled (finish-the-web-version round):
+                  the card's flight legs are the Duffel test fares the
+                  chat quoted — one total with them, the planning
+                  estimate beside it, and the service fee on its own
+                  line. The comparison table below stays planner-based
+                  (FujinTrip vs booking separately); this line is what
+                  keeps the two from looking like three different
+                  totals. */}
+              {(displayCard ?? tripCard).flight.live && (
+                <p className="plan-note" style={{ marginTop: 12 }}>
+                  ✈️ Flights on this trip use the same Duffel test fares as the chat —{' '}
+                  {(displayCard ?? tripCard).flight.out.live ? `${(displayCard ?? tripCard).flight.out.airline} $${(displayCard ?? tripCard).flight.out.price.toLocaleString()} out (test fare)` : `$${(displayCard ?? tripCard).flight.out.price.toLocaleString()} out (planning estimate)`}{' '}
+                  ·{' '}
+                  {(displayCard ?? tripCard).flight.back.live ? `${(displayCard ?? tripCard).flight.back.airline} $${(displayCard ?? tripCard).flight.back.price.toLocaleString()} back (test fare)` : `$${(displayCard ?? tripCard).flight.back.price.toLocaleString()} back (planning estimate)`}.{' '}
+                  Total with live fares ${(displayCard ?? tripCard).total.toLocaleString()} (planning estimate ${(displayCard ?? tripCard).plannerTotal.toLocaleString()}) · + ${(displayCard ?? tripCard).flight.serviceFee.toLocaleString()} service fee per flight order, shown separately at checkout, never hidden in the fare. Test fares are not live quotes and not bookable yet.
+                </p>
+              )}
               {comparison && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: '4px 0' }}>Our rate vs other options</h3>

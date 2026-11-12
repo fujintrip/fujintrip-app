@@ -5,11 +5,16 @@
 // hotel names, ratings or review counts are invented. Stays are shown as
 // planning estimates ("hostel / guesthouse estimate"), never as a named
 // hotel with a fake price: real named stays arrive with a hotel supplier
-// (Expedia / Duffel Stays, Phase 3). The same honesty rule covers the
-// flights: the card shows the planner's estimated fare split, labeled as
-// an estimate, until Duffel live fares connect.
+// (Expedia / Duffel Stays, Phase 3). The flights take the live Duffel
+// fares the chat already fetched (same trip, same dates, same
+// travelers) when they are passed in — out and back at the cheapest
+// fare, with the airline name, labeled Duffel test fares; between
+// cities stays a planner estimate, because Duffel never fetched it.
+// Without live fares the card falls back to the planner's estimated
+// fare split, labeled as an estimate.
 
-import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, fareClassForTier, fareClassLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, stopsForRoute, type Party, type RouteOverride } from './planner';
+import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, fareClassForTier, fareClassLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, serviceFee, stopsForRoute, type Party, type RouteOverride } from './planner';
+import type { DuffelFareOffer, LiveFares } from './duffel';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -204,6 +209,36 @@ export type TripCard = {
   routeLine: string;
   budgetTip: string;
   budgetSaving: number;
+  // Live Duffel fares (finish-the-web-version round, Nov 12, 2026):
+  // the flight leg of THIS card — out and back at the cheapest live
+  // Duffel fare when the chat fetched them, the planner split when it
+  // did not. `total` is the card's own total for the chosen tier: the
+  // plan total with the planner flight leg swapped for the flight total
+  // below. `plannerTotal` is the plan total untouched, so the card can
+  // show both numbers side by side and never pretend the live fares
+  // are the plan. The legs always sum to `total - activities`
+  // (activities have no leg), in both modes.
+  flight: CardFlight;
+  total: number;
+  plannerTotal: number;
+};
+
+// The flight leg, split the way a traveler reads it: out, back, and the
+// between-city part. Duffel only ever prices origin → first city and
+// back on the trip's dates — the intercity part is never a live fare,
+// it stays the planner estimate and says so. The service fee is the
+// tiered per-order fee from serviceFee(), on the flight total the card
+// shows (in fallback mode that total IS the planner flight leg, so the
+// fee is byte-identical to the old all-in line).
+export type CardFlightLeg = { airline: string; price: number; live: boolean };
+export type CardFlight = {
+  out: CardFlightLeg;
+  back: CardFlightLeg;
+  intercity: { price: number; live: boolean };
+  total: number;
+  plannerFlight: number;
+  serviceFee: number;
+  live: boolean;
 };
 
 // Build the Layla-style trip card. Prices come from buildPlan() (the same
@@ -227,6 +262,12 @@ export function buildTripCard(opts: {
   // Start Anywhere (round 2 #6): the source tips per city, from the
   // traveler's own link or pasted text — attached to the matching stop.
   sourceTips?: Record<string, string>;
+  // Live Duffel fares (finish-the-web-version round): the fares the
+  // chat already fetched for this trip — the card shows the same fares
+  // the chat quotes, never a second number. Validated below (same
+  // travelers, origin, first city, dates) so a stale fare for another
+  // trip is never shown; anything else falls back to the estimate.
+  liveFares?: LiveFares | null;
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -256,10 +297,55 @@ export function buildTripCard(opts: {
   // for a $1,092 flight leg). With stops, 40% out / 40% back / 20%
   // between cities; the nudge below absorbs the ±$1 rounding drift.
   const singleStop = nightPlan.length <= 1;
-  const legFlightOut = singleStop ? Math.round(best.flight / 2) : Math.round(best.flight * 0.4);
-  const legFlightBack = singleStop ? best.flight - legFlightOut : Math.round(best.flight * 0.4);
-  const legIntercity =
-    nightPlan.length > 1 ? Math.round((best.flight * 0.2) / (nightPlan.length - 1)) : 0;
+  // Live fares for THIS trip only: the chat fetched origin → first city
+  // and back on the card's own suggested dates, for this party. A fare
+  // for other travelers, another origin, another first city or other
+  // dates is not this trip's fare — it is ignored and the leg falls
+  // back to the planner split. Partial live is fine: one direction can
+  // be a live fare while the other stays the estimate, and each leg
+  // says which it is.
+  // Local calendar date, not UTC: suggestedStart builds midnight local
+  // time, and the server's departDate string is that same local date —
+  // toISOString() would shift it a day back for a browser east of UTC,
+  // and the fares would never match the card there.
+  const fmtIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const firstCity = nightPlan[0]?.city ?? '';
+  const faresForThisTrip =
+    !!opts.liveFares && opts.liveFares.live === true &&
+    opts.liveFares.travelers === opts.travelers &&
+    opts.liveFares.origin === opts.origin &&
+    opts.liveFares.destCity === firstCity &&
+    opts.liveFares.departDate === fmtIso(startDate) &&
+    opts.liveFares.returnDate === fmtIso(endDate);
+  const validOffer = (o: unknown): o is DuffelFareOffer =>
+    !!o && typeof o === 'object' && typeof (o as DuffelFareOffer).airline === 'string' && (o as DuffelFareOffer).airline.length > 0 &&
+    typeof (o as DuffelFareOffer).price === 'number' && Number.isFinite((o as DuffelFareOffer).price) && (o as DuffelFareOffer).price > 0;
+  const liveOut = faresForThisTrip && Array.isArray(opts.liveFares!.out) ? (opts.liveFares!.out.find(validOffer) ?? null) : null;
+  const liveBack = faresForThisTrip && Array.isArray(opts.liveFares!.back) ? (opts.liveFares!.back.find(validOffer) ?? null) : null;
+  const plannerOut = singleStop ? Math.round(best.flight / 2) : Math.round(best.flight * 0.4);
+  const plannerBack = singleStop ? best.flight - plannerOut : Math.round(best.flight * 0.4);
+  const legFlightOut = liveOut ? liveOut.price : plannerOut;
+  const legFlightBack = liveBack ? liveBack.price : plannerBack;
+  const intercityTotal = nightPlan.length > 1 ? Math.round(best.flight * 0.2) : 0;
+  const legIntercity = nightPlan.length > 1 ? Math.round(intercityTotal / (nightPlan.length - 1)) : 0;
+  // The flight total the card shows — live fares where they exist, the
+  // planner split where they don't. In fallback mode this IS the
+  // planner flight leg, so the card total below equals the plan total
+  // and not one number changes from before this round.
+  const flightTotal = liveOut || liveBack ? legFlightOut + legFlightBack + intercityTotal : best.flight;
+  const flight: CardFlight = {
+    out: { airline: liveOut ? liveOut.airline : '', price: legFlightOut, live: !!liveOut },
+    back: { airline: liveBack ? liveBack.airline : '', price: legFlightBack, live: !!liveBack },
+    intercity: { price: intercityTotal, live: false },
+    total: flightTotal,
+    plannerFlight: best.flight,
+    serviceFee: serviceFee(flightTotal),
+    live: !!(liveOut || liveBack),
+  };
+  // The card's own total for the chosen tier: the plan total with the
+  // planner flight leg swapped for the flight total above. Hotels,
+  // cars and activities are untouched planner numbers.
+  const cardTotal = best.total - best.flight + flightTotal;
 
   let dayCursor = 1;
   let dateCursor = startDate;
@@ -339,14 +425,24 @@ export function buildTripCard(opts: {
   // estimates, so the honest line is that the terms are confirmed at
   // booking — never "free cancellation available" without a deadline.
   const legTerms = 'Cancellation terms are confirmed at booking — refundable options are available on request; nothing is booked until you confirm it.';
-  const flightAllIn = allInFlightLine(best.flight);
+  // The all-in flight line on the flight total the card shows — in
+  // fallback mode that total is the planner flight leg, so this line is
+  // byte-identical to before this round.
+  const flightAllIn = allInFlightLine(flightTotal);
+  // The live-fare line for a flight leg: airline, price, what was
+  // fetched and when — and the test-mode label, every time. A test fare
+  // is a fetched Duffel fare; it is not a live quote and not bookable.
+  const liveFareLine = (o: { airline: string; price: number; stops: number; duration: string }, from: string, to: string, date: string) =>
+    `Duffel test fare — fetched for ${from} → ${to} on ${date}: ${o.airline} $${o.price.toLocaleString()}${o.stops === 0 ? ' nonstop' : `, ${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.duration ? `, ${o.duration}` : ''}. Not a live quote and not bookable yet — real bookable fares need Duffel live mode.`;
   legs.push({
     id: 'flight-out',
     kind: 'flight',
     icon: '✈️',
     label: `Flight ${opts.origin || 'Your city'} → ${cardStops[0].city}`,
-    detail: `${fareClassName} · planning estimate`,
-    more: `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
+    detail: flight.out.live ? `${liveOut!.airline} · Duffel test fare` : `${fareClassName} · planning estimate`,
+    more: flight.out.live
+      ? `${fareClass} ${flightAllIn} ${liveFareLine(liveOut!, opts.origin || 'Your city', cardStops[0].city, fmtIso(startDate))}`
+      : `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
     fareClass,
     terms: legTerms,
     price: legFlightOut,
@@ -360,8 +456,14 @@ export function buildTripCard(opts: {
     const to = cardStops[i];
     // Between cities the route flies on domestic flights (Southeast Asia,
     // Turkey, Mexico, USA) — those legs carry the fare class too. Trains
-    // and ferries carry only the terms.
+    // and ferries carry only the terms. These legs are NEVER live fares:
+    // Duffel priced only origin → first city and back, so between cities
+    // stays a planning estimate — and when live fares exist the leg says
+    // exactly that, instead of letting the live label leak onto it.
     const isFlightLeg = legMode.includes('flight');
+    const intercityLiveNote = flight.live
+      ? `Duffel's test fares price only ${opts.origin || 'your city'} → ${cardStops[0].city} and back — this leg between cities stays a planning estimate. `
+      : '';
     legs.push({
       id: `leg-${i}`,
       kind: 'transport',
@@ -369,8 +471,8 @@ export function buildTripCard(opts: {
       label: `${legMode} ${from.city} → ${to.city}`,
       detail: 'Planning estimate',
       more: isFlightLeg
-        ? `${fareClass} ${flightAllIn} Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.`
-        : 'Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.',
+        ? `${fareClass} ${flightAllIn} ${intercityLiveNote}Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.`
+        : `${intercityLiveNote}Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.`,
       ...(isFlightLeg ? { fareClass } : {}),
       terms: legTerms,
       price: legIntercity,
@@ -386,8 +488,10 @@ export function buildTripCard(opts: {
     kind: 'flight',
     icon: '✈️',
     label: `Flight ${lastStop.city} → ${opts.origin || 'Your city'}`,
-    detail: `${fareClassName} · planning estimate`,
-    more: `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
+    detail: flight.back.live ? `${liveBack!.airline} · Duffel test fare` : `${fareClassName} · planning estimate`,
+    more: flight.back.live
+      ? `${fareClass} ${flightAllIn} ${liveFareLine(liveBack!, lastStop.city, opts.origin || 'Your city', fmtIso(endDate))}`
+      : `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
     fareClass,
     terms: legTerms,
     price: legFlightBack,
@@ -437,7 +541,20 @@ export function buildTripCard(opts: {
   // above, and as fixLegs in planner). Exposed Nov 12, 2026 by the
   // per-route bases: Cheapest Central Europe ($1,800 base) split its $90
   // car leg 28 + 21 + 42 = $91, so the legs summed $1 over the plan total.
+  // With live fares the nudge NEVER touches the out/back legs — those are
+  // fetched Duffel prices, not estimates to fudge. Only the intercity
+  // (planner-estimate) legs absorb the drift, up to the intercity total;
+  // a single-stop trip has no intercity legs and needs no nudge at all.
   for (const kind of ['car', 'flight'] as const) {
+    if (kind === 'flight' && flight.live) {
+      const intercityLegs = legs.filter((l) => l.kind === 'transport');
+      const diff = intercityTotal - intercityLegs.reduce((s, l) => s + l.price, 0);
+      if (diff !== 0 && intercityLegs.length > 0) {
+        const biggest = intercityLegs.reduce((a, b) => (b.price > a.price ? b : a));
+        biggest.price += diff;
+      }
+      continue;
+    }
     const kindLegs = legs.filter((l) => (kind === 'flight' ? l.kind === 'flight' || l.kind === 'transport' : l.kind === kind));
     const target = kind === 'flight' ? best.flight : best.car;
     const diff = target - kindLegs.reduce((s, l) => s + l.price, 0);
@@ -445,6 +562,14 @@ export function buildTripCard(opts: {
       const biggest = kindLegs.reduce((a, b) => (b.price > a.price ? b : a));
       biggest.price += diff;
     }
+  }
+  // Keep each stop's "Arrive" price on the nudged leg price (the nudge
+  // above can move an intercity leg by a dollar; the stop row and the
+  // map tag must show the same number). Out/back are never nudged, so
+  // the first stop and the return transport need no sync.
+  for (let i = 1; i < cardStops.length; i++) {
+    const leg = legs.find((l) => l.id === `leg-${i}`);
+    if (leg) cardStops[i].transportIn.price = leg.price;
   }
 
   const experiences = cardStops.reduce((s, st) => s + st.days.reduce((a, d) => a + d.experiences, 0), 0);
@@ -487,6 +612,9 @@ export function buildTripCard(opts: {
         ? `Swap private rooms for social hostels in ${cardStops.map((s) => s.city).join(' & ')} — the Best value plan books private rooms, and hostels would slash about $${saving.toLocaleString()} off the stay total while making meeting fellow travelers effortless.`
         : 'Book the Cheapest option for hostel dorms and the lowest stay total.',
     budgetSaving: saving,
+    flight,
+    total: cardTotal,
+    plannerTotal: best.total,
   };
 }
 

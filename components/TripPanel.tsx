@@ -87,6 +87,19 @@ export default function TripPanel({
         )}
       </div>
 
+      {/* Live Duffel fares (finish-the-web-version round): the card's
+          flight legs are the same test fares the chat quoted — one line
+          naming them, with the live-fare total beside the planning
+          estimate and the service fee on its own. The header total
+          above stays the planner total; this line is what reconciles
+          the two. */}
+      {card?.flight.live && (
+        <p className="plan-note">
+          ✈️ Flights are Duffel test fares — {card.flight.out.live ? `${card.flight.out.airline} $${card.flight.out.price.toLocaleString()} out` : `$${card.flight.out.price.toLocaleString()} out (estimate)`} ·{' '}
+          {card.flight.back.live ? `${card.flight.back.airline} $${card.flight.back.price.toLocaleString()} back` : `$${card.flight.back.price.toLocaleString()} back (estimate)`} · + ${card.flight.serviceFee.toLocaleString()} service fee · total with live fares ${card.total.toLocaleString()} (planning estimate ${card.plannerTotal.toLocaleString()}). Test fares are not live quotes.
+        </p>
+      )}
+
       {notice && (
         <p className="panel-notice" role="status">
           {notice}
@@ -239,9 +252,14 @@ export default function TripPanel({
                   {stop.sourceTip && <p className="plan-note">From your link: “{stop.sourceTip}”</p>}
                   <p className="plan-line">
                     <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · {fmtDate(stop.startDate)} · from $
-                    {stop.transportIn.price.toLocaleString()} (planning estimate)
+                    {stop.transportIn.price.toLocaleString()}{' '}
+                    {si === 0 && card.flight.out.live ? `(Duffel test fare — ${card.flight.out.airline})` : '(planning estimate)'}
                   </p>
-                  <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                  {si === 0 && card.flight.out.live ? (
+                    <p className="plan-note">Duffel test fare — fetched from Duffel, not a live quote and not bookable yet.</p>
+                  ) : (
+                    <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                  )}
                   <p className="plan-line">
                     <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()}
                   </p>
@@ -262,6 +280,7 @@ export default function TripPanel({
                 {si === stops.length - 1 && card.returnTransport && (
                   <p className="panel-transport">
                     {card.returnTransport.mode} {card.returnTransport.from} → home · from ${card.returnTransport.price.toLocaleString()}
+                    {card.flight.back.live ? ` · Duffel test fare — ${card.flight.back.airline}` : ''}
                   </p>
                 )}
               </li>

@@ -43,6 +43,39 @@ export type LiveFares = {
   reason?: string;
 };
 
+// Validate a live-fares payload before the trip card trusts it (the
+// client gets this JSON from /api/fujin, and the card must never show a
+// fare for the wrong trip). Only a live payload with well-formed offers
+// passes; anything else — null, live:false, a missing direction, a
+// non-numeric price — returns null and the card falls back to the
+// planner estimate.
+export function parseLiveFares(value: unknown): LiveFares | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  if (v.live !== true) return null;
+  const okOffer = (o: unknown): o is DuffelFareOffer =>
+    !!o && typeof o === 'object' && typeof (o as DuffelFareOffer).airline === 'string' && (o as DuffelFareOffer).airline.length > 0 &&
+    typeof (o as DuffelFareOffer).price === 'number' && Number.isFinite((o as DuffelFareOffer).price) && (o as DuffelFareOffer).price > 0;
+  const okOffers = (arr: unknown): arr is DuffelFareOffer[] =>
+    Array.isArray(arr) && arr.every(okOffer);
+  const okDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  if (typeof v.origin !== 'string' || !v.origin || typeof v.destCity !== 'string' || !v.destCity) return null;
+  if (!okDate(v.departDate) || !okDate(v.returnDate)) return null;
+  if (typeof v.travelers !== 'number' || !Number.isFinite(v.travelers) || v.travelers < 1) return null;
+  if (!okOffers(v.out) || !okOffers(v.back)) return null;
+  return {
+    live: true,
+    origin: v.origin as string,
+    destCity: v.destCity as string,
+    departDate: v.departDate as string,
+    returnDate: v.returnDate as string,
+    travelers: v.travelers as number,
+    out: v.out as DuffelFareOffer[],
+    back: v.back as DuffelFareOffer[],
+    ...(typeof v.reason === 'string' ? { reason: v.reason as string } : {}),
+  };
+}
+
 // City name → IATA airport code. Only well-known commercial airports;
 // a city missing here (or a region name) simply gets no live fare.
 export const CITY_IATA: Record<string, string> = {

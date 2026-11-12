@@ -345,6 +345,24 @@ test('competitor fares: without a token the route stays honestly empty', async (
   assert.equal((await bad.json()).available, false);
 });
 
+test('fujin: every reply carries liveFares (null here — no key, no trip slots), so the card can thread it', async () => {
+  // No DUFFEL_API_KEY in this environment and no departure city in the
+  // message, so no fares are fetched — but the key must be present in
+  // the reply shape either way, because the client threads liveFares
+  // into the trip card from every /api/fujin response. A missing key
+  // would silently leave the card on planner estimates forever.
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: 'Central Europe in January' }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(typeof j.reply, 'string');
+  assert.ok('liveFares' in j, 'liveFares key present in the reply');
+  assert.equal(j.liveFares, null);
+});
+
 test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and motion CSS are served', async () => {
   // SSR-visible markers only — the plan view's expandable rows and the
   // map dialog render client-side (after "Build my plan"), so they are
