@@ -235,3 +235,65 @@ export function faresSummaryLine(f: LiveFares): string {
   if (!parts.length) return '';
   return `Live fares (Duffel, test fares): ${parts.join('; ')}.`;
 }
+
+// --- Whole-trip price check (competitor learning, Nov 11: Mindtrip /
+// Kayak) ---------------------------------------------------------------
+// "Book now or wait" as an honest read, not a forecast: the cheapest
+// live out+back fares against the plan's own flight budget (the
+// Best-value flight leg — a planning estimate). The comparison says
+// whether the plan still holds at its quoted total, or whether the
+// live fare would push it over. It never predicts where fares go next:
+// "fares move both ways" is the whole point, and the plan's totals are
+// static — only the live fare moves. A drop is only ever measured
+// against the fare the traveler was watching (the watch baseline),
+// never against the estimate.
+export type PriceCheck = {
+  live: boolean;
+  // Cheapest live out + cheapest live back, for the same travelers.
+  liveTotal: number;
+  // The plan's Best-value flight leg for the same trip (an estimate).
+  plannerFlight: number;
+  // liveTotal - plannerFlight: negative means under the plan's budget.
+  diff: number;
+  verdict: 'under' | 'over' | 'same' | 'no_fare';
+  // The one-line read for the chat reply and the plan view.
+  line: string;
+};
+
+export function priceCheck(f: LiveFares, plannerFlight: number): PriceCheck {
+  const none: PriceCheck = { live: false, liveTotal: 0, plannerFlight, diff: 0, verdict: 'no_fare', line: '' };
+  if (!f.live || (!f.out.length && !f.back.length)) return none;
+  const liveTotal = (f.out[0]?.price ?? 0) + (f.back[0]?.price ?? 0);
+  const diff = liveTotal - plannerFlight;
+  // Within 5% (or $10) counts as "about the same" — a $4 wobble is not
+  // a reason to book or to wait.
+  const band = Math.max(10, Math.round(plannerFlight * 0.05));
+  if (Math.abs(diff) <= band) {
+    return {
+      live: true,
+      liveTotal,
+      plannerFlight,
+      diff,
+      verdict: 'same',
+      line: `Book-now read: the cheapest live fares out and back total $${liveTotal.toLocaleString()} — about the same as the plan's flight budget ($${plannerFlight.toLocaleString()}). The plan holds at its quoted total. Fares move both ways; this is a snapshot, not a forecast.`,
+    };
+  }
+  if (diff < 0) {
+    return {
+      live: true,
+      liveTotal,
+      plannerFlight,
+      diff,
+      verdict: 'under',
+      line: `Book-now read: the cheapest live fares out and back total $${liveTotal.toLocaleString()} — $${Math.abs(diff).toLocaleString()} under the plan's flight budget ($${plannerFlight.toLocaleString()}). The plan holds at its quoted total, and the fare is on your side right now. Fares move both ways; this is a snapshot, not a forecast.`,
+    };
+  }
+  return {
+    live: true,
+    liveTotal,
+    plannerFlight,
+    diff,
+    verdict: 'over',
+    line: `Book-now read: the cheapest live fares out and back total $${liveTotal.toLocaleString()} — $${diff.toLocaleString()} over the plan's flight budget ($${plannerFlight.toLocaleString()}). The plan's total would rise by about $${diff.toLocaleString()} if you booked these fares today. Waiting may help or hurt — fares move both ways and we never predict them. Watch the price and we'll tell you when it drops.`,
+  };
+}

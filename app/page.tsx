@@ -13,6 +13,43 @@ import AdSlot from '../components/AdSlot';
 const TripMap = dynamic(() => import('../components/TripMap'), { ssr: false });
 
 type Trip = { id: string; label: string; status: string; date: string; destination?: string };
+
+// Whole-trip price check (competitor learning #4, Mindtrip / Kayak):
+// the /api/price-check response, and a price watch. A watch measures a
+// DROP against the live fare when the watch started (the baseline) —
+// never against the planner estimate, which is static and never moves.
+type PriceCheckOffer = { airline: string; price: number; currency: string; stops: number; duration: string };
+type PriceCheckData = {
+  live: boolean;
+  reason?: string;
+  origin: string;
+  destination: string;
+  destCity: string;
+  departDate: string;
+  returnDate: string;
+  travelers: number;
+  out: PriceCheckOffer[];
+  back: PriceCheckOffer[];
+  liveTotal: number;
+  plannerFlight: number;
+  diff: number;
+  verdict: 'under' | 'over' | 'same' | 'no_fare';
+  line: string;
+};
+type PriceWatch = {
+  id: string;
+  destination: string;
+  travelers: number;
+  origin: string;
+  month: number;
+  durationDays: number;
+  // Live out+back total when the watch started (null = no live fare
+  // yet — the watch waits for one instead of inventing a baseline).
+  baseline: number | null;
+  baselineAt: string;
+  lastTotal: number | null;
+  lastCheckedAt: string | null;
+};
 type Voices = { destination: string; text: string; source: string } | null;
 // Local copy of the Ogata Korin Wind God (public domain) — the Wikimedia
 // Commons URL this used to point at 404s (the file is not on Commons under
@@ -96,7 +133,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; bookedDestinations: string[] }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[] }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -379,14 +416,34 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     setPdfPay(false);
     setActionMsg('Started a new trip — ask Fujin AI where to next.');
   };
-  // Watch this price: the whole-package price-drop alert. Honest label —
-  // planner prices are static estimates, so no alert can fire until live
-  // fares connect; the watch is saved now and switches on then.
-  const watchPrice = () => {
+  // Watch this trip's prices: a real watch now that live fares exist
+  // (Duffel test fares). The baseline is the live out+back total from a
+  // fresh check — a drop is measured against that, never against the
+  // planner estimate, which is static and never moves. Without a live
+  // fare yet, the watch is saved with no baseline and waits for one.
+  const watchPrice = async () => {
     if (!plan) return;
-    const best = plan.options[1];
-    onSaveTrip(`${plan.destination} plan — Best value $${best.total.toLocaleString()}`, 'Price watch — alerts start when live fares connect', plan.destination);
-    setActionMsg('Watching this price. You’ll be alerted when the whole trip price drops — alerts switch on once live fares are connected; planner prices don’t move until then.');
+    const slots = { destination: plan.destination, travelers: plan.travelers, origin: lastParsed?.origin ?? '', month: lastParsed?.month ?? 0, durationDays: lastParsed?.durationDays ?? 0 };
+    let baseline: number | null = null;
+    if (priceCheck && priceCheck !== 'loading' && priceCheck.live) {
+      baseline = priceCheck.liveTotal;
+    } else {
+      try {
+        const r = await fetch('/api/price-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(slots),
+        });
+        const j = (await r.json()) as PriceCheckData;
+        if (j.live) baseline = j.liveTotal;
+      } catch {}
+    }
+    onWatchPrices({ ...slots, baseline, lastTotal: baseline });
+    setActionMsg(
+      baseline !== null
+        ? `Watching ${plan.destination} prices — baseline $${baseline.toLocaleString()} for the cheapest live fares out and back (Duffel test fares). We'll tell you in My Trips when they drop below that.`
+        : `Watching ${plan.destination} prices — no live fare for this trip yet, so there's no baseline to drop from. The watch is saved in My Trips and starts the moment a live fare appears.`
+    );
   };
   // Hold my price: a request for the FujinTrip team, not a guaranteed hold
   // — there is no live inventory to freeze a price against yet.
@@ -462,6 +519,40 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     () => (plan ? visaForDestination(plan.destination) : []),
     [plan]
   );
+  // Book now or wait? (competitor learning #4): the live fares for this
+  // exact trip, checked once per trip — the key guards against
+  // refetching on every chat turn (lastParsed changes identity each
+  // turn, even when the trip hasn't).
+  const [priceCheck, setPriceCheck] = useState<PriceCheckData | 'loading' | null>(null);
+  const priceCheckKeyRef = useRef('');
+  const fetchPriceCheck = async () => {
+    if (!plan) return;
+    const key = `${plan.destination}|${plan.travelers}|${lastParsed?.origin ?? ''}|${lastParsed?.month ?? 0}|${lastParsed?.durationDays ?? 0}`;
+    priceCheckKeyRef.current = key;
+    setPriceCheck('loading');
+    try {
+      const r = await fetch('/api/price-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: lastParsed?.origin ?? '', destination: plan.destination, travelers: plan.travelers, month: lastParsed?.month ?? 0, durationDays: lastParsed?.durationDays ?? 0 }),
+      });
+      const j = await r.json();
+      if (priceCheckKeyRef.current === key) setPriceCheck(j as PriceCheckData);
+    } catch {
+      if (priceCheckKeyRef.current === key) setPriceCheck(null);
+    }
+  };
+  useEffect(() => {
+    if (!plan) {
+      setPriceCheck(null);
+      priceCheckKeyRef.current = '';
+      return;
+    }
+    const key = `${plan.destination}|${plan.travelers}|${lastParsed?.origin ?? ''}|${lastParsed?.month ?? 0}|${lastParsed?.durationDays ?? 0}`;
+    if (key === priceCheckKeyRef.current) return;
+    void fetchPriceCheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, lastParsed]);
   // Map inventory (split-screen, Nov 11): the legs the traveler picked
   // from the map's price tags, and the leg whose card is open. A new
   // destination clears the picks — they belonged to the old trip.
@@ -695,6 +786,29 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
                   ))}
                 </div>
               )}
+              {plan && (
+                <div style={{ marginTop: 16, background: '#f7f7f5', border: '1px solid #e8e8e6', borderRadius: 10, padding: '10px 14px' }}>
+                  <strong style={{ fontSize: 14 }}>Book now or wait?</strong>
+                  {priceCheck === 'loading' && <p style={{ fontSize: 14, margin: '4px 0' }}>Checking the live fares for this trip…</p>}
+                  {priceCheck && priceCheck !== 'loading' && priceCheck.live && (
+                    <>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}>{priceCheck.line}</p>
+                      <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+                        Cheapest live fares: {priceCheck.out[0] ? `${priceCheck.out[0].airline} $${priceCheck.out[0].price.toLocaleString()} out` : 'no outbound fare'} · {priceCheck.back[0] ? `${priceCheck.back[0].airline} $${priceCheck.back[0].price.toLocaleString()} back` : 'no return fare'} · {priceCheck.departDate} → {priceCheck.returnDate}. Live Duffel fares (test fares in test mode).
+                      </p>
+                    </>
+                  )}
+                  {priceCheck && priceCheck !== 'loading' && !priceCheck.live && (
+                    <p style={{ fontSize: 14, margin: '4px 0' }}>
+                      Live fares aren&apos;t available for this trip yet{priceCheck.reason === 'missing_slots' ? ' — we still need the departure city and dates' : ' — no live fare was returned'} — the plan&apos;s flight budget is ${priceCheck.plannerFlight.toLocaleString()} (estimate). Watch the price and we&apos;ll tell you when a live fare drops.
+                    </p>
+                  )}
+                  <p style={{ margin: '8px 0 0' }}>
+                    <button className="ghost" onClick={watchPrice}>Watch this trip&apos;s prices</button>{' '}
+                    <button className="ghost" onClick={() => { priceCheckKeyRef.current = ''; void fetchPriceCheck(); }}>Check again</button>
+                  </p>
+                </div>
+              )}
               <p style={{ fontSize: 15, margin: '12px 0 0' }}>
                 From <strong>${plan.options[choice].total.toLocaleString()}</strong> total ({plan.options[choice].name}){' '}
                 <button className="primary no-print" onClick={bookPlan} style={{ marginLeft: 8 }}>Book</button>
@@ -817,6 +931,47 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
 export default function Home() {
   const [tab, setTab] = useState<Tab>('Fujin AI');
   const [trips, setTrips] = useState<Trip[]>([]);
+  // Price watches (competitor learning #4): a drop is measured against
+  // the live fare when the watch started — never against the planner
+  // estimate. Stored in localStorage, like the trips.
+  const [watches, setWatches] = useState<PriceWatch[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-watches');
+      if (raw) setWatches(JSON.parse(raw));
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem('fujintrip-watches', JSON.stringify(watches)); } catch {} }, [watches]);
+  const addWatch = (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => {
+    setWatches((all) => {
+      // One watch per trip — the existing one keeps its baseline.
+      if (all.some((x) => x.destination === w.destination && x.origin === w.origin && x.month === w.month && x.durationDays === w.durationDays && x.travelers === w.travelers)) return all;
+      return [{ id: String(Date.now()), ...w, baselineAt: new Date().toISOString(), lastCheckedAt: w.lastTotal !== null ? new Date().toISOString() : null }, ...all];
+    });
+  };
+  const checkWatch = async (id: string) => {
+    const w = watches.find((x) => x.id === id);
+    if (!w) return;
+    try {
+      const r = await fetch('/api/price-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin: w.origin, destination: w.destination, travelers: w.travelers, month: w.month, durationDays: w.durationDays }),
+      });
+      const j = (await r.json()) as PriceCheckData;
+      setWatches((all) =>
+        all.map((x) => {
+          if (x.id !== id) return x;
+          // A watch with no baseline yet starts the moment a live fare
+          // appears — the first live fare becomes the baseline.
+          if (x.baseline === null && j.live) {
+            return { ...x, baseline: j.liveTotal, baselineAt: new Date().toISOString(), lastTotal: j.liveTotal, lastCheckedAt: new Date().toISOString() };
+          }
+          return { ...x, lastTotal: j.live ? j.liveTotal : x.lastTotal, lastCheckedAt: new Date().toISOString() };
+        })
+      );
+    } catch {}
+  };
   // The trip Fujin AI most recently understood — the price-comparison
   // section below follows it. Null until the user chats: Kyoto example.
   const [aiTrip, setAiTrip] = useState<{ destination: string; travelers: number } | null>(null);
@@ -859,7 +1014,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} bookedDestinations={bookedDestinations} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 
         <section>
@@ -928,6 +1083,30 @@ export default function Home() {
           {trips.length === 0 ? <p style={{ color: '#666' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button></span></li>))}
+            </ul>
+          )}
+          <h3 style={{ marginTop: 20 }}>Price watches</h3>
+          <p style={{ fontSize: 13, color: '#666' }}>A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
+          {watches.length === 0 ? <p style={{ color: '#666' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (
+            <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
+              {watches.map((w) => {
+                const dropped = w.baseline !== null && w.lastTotal !== null && w.lastTotal < w.baseline ? w.baseline - w.lastTotal : 0;
+                return (
+                  <li key={w.id}>
+                    <span>
+                      {w.destination} · {w.travelers} traveler{w.travelers > 1 ? 's' : ''} · from {w.origin || '—'}{' · '}
+                      {w.baseline !== null ? `watching from $${w.baseline.toLocaleString()}` : 'no live fare yet — waiting for one'}
+                      {w.lastTotal !== null ? ` · now $${w.lastTotal.toLocaleString()}` : ''}
+                      {dropped > 0 ? ` · ↓ Price dropped $${dropped.toLocaleString()} since you started watching` : ''}
+                      {w.lastCheckedAt ? ` · checked ${new Date(w.lastCheckedAt).toLocaleDateString()}` : ''}
+                    </span>
+                    <span>
+                      <button className="ghost" onClick={() => void checkWatch(w.id)}>Check now</button>{' '}
+                      <button className="ghost" onClick={() => setWatches((x) => x.filter((y) => y.id !== w.id))}>Remove</button>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
