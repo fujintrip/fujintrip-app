@@ -518,6 +518,16 @@ export function priceTagAnchorY(legs: TripLeg[]): Map<string, number> {
   return out;
 }
 
+// Map view stability (Layla-dynamic round, Nov 12, 2026): the live
+// trip panel must refit the map only when the ROUTE changes. The page
+// re-renders on every keystroke, and a fresh stops array each time
+// made FitBounds re-run and the map jump constantly. The key is the
+// ordered city list — equal routes share it, different routes don't.
+// Pure function of the stops — unit-tested.
+export function mapStopsKey(stops: Array<{ city: string }>): string {
+  return stops.map((s) => s.city).join(' → ');
+}
+
 // Price comparison for the trip card: FujinTrip vs booking each leg
 // separately (the planner's comparison, single source of truth). A third
 // column — other sites' live prices — stays empty until a live fare feed

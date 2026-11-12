@@ -12,7 +12,7 @@ import {
   flightPassengerFactor,
   serviceFee,
 } from '../lib/planner.ts';
-import { buildTripCard, priceTagAnchorY } from '../lib/tripCard.ts';
+import { buildTripCard, mapStopsKey, priceTagAnchorY } from '../lib/tripCard.ts';
 import { settleUp } from '../lib/settle.ts';
 import { addLeg, bundleFromLegs, bundleTotal, hasLeg } from '../lib/bundle.ts';
 import { CLOSURES, CLOSURES_LAST_CHECKED, applySwaps, checkClosures } from '../lib/daySwap.ts';
@@ -259,4 +259,37 @@ test('duffel trend: same-day same-total dedupes; confidence low then medium', ()
   assert.equal(trendLine(obs).confidence, 'medium');
   assert.equal(trendLine([]).confidence, 'none');
   assert.equal(trendLine(obs.slice(0, 1)).confidence, 'none');
+});
+
+test('live panel: mapStopsKey is stable for the same route, different for a revision', () => {
+  // The map refits only when this key changes — a re-render with the
+  // same stops must not refit (typing the chat would otherwise jump
+  // the map), and a revision must refit to the new route.
+  const base = [{ city: 'Prague' }, { city: 'Vienna' }, { city: 'Budapest' }];
+  assert.equal(mapStopsKey(base), mapStopsKey([...base]));
+  assert.equal(mapStopsKey(base), 'Prague → Vienna → Budapest');
+  assert.notEqual(mapStopsKey(base), mapStopsKey([{ city: 'Prague' }, { city: 'Krakow' }, { city: 'Vienna' }]));
+  assert.notEqual(mapStopsKey(base), mapStopsKey([{ city: 'Vienna' }, { city: 'Prague' }, { city: 'Budapest' }]));
+  assert.equal(mapStopsKey([]), '');
+});
+
+test('live panel: a route revision re-cards the trip — buildTripCard follows routeOverride', () => {
+  // Layla-dynamic round: the live panel re-renders on revision, and
+  // the card underneath is this — same destination, new stops, nights
+  // still summing to the trip length.
+  const base = { destination: 'Central Europe', travelers: 2, days: 14, month: 0, origin: 'New York' };
+  const original = buildTripCard(base);
+  assert.deepEqual(original.stops.map((s) => s.city), ['Prague', 'Vienna', 'Budapest']);
+  const revised = buildTripCard({ ...base, routeOverride: { cities: ['Prague', 'Krakow', 'Vienna'], label: 'Prague → Krakow → Vienna' } });
+  assert.deepEqual(revised.stops.map((s) => s.city), ['Prague', 'Krakow', 'Vienna']);
+  assert.equal(revised.stops.reduce((n, s) => n + s.nights, 0), 13); // days - 1
+  // The revised card still covers the same trip length — the totals
+  // the panel shows never drift from the plan. (13 itinerary day
+  // entries: the 14th day is the departure day, which belongs to no
+  // stop — it is the return flight, shown separately.)
+  assert.equal(revised.stops.reduce((n, s) => n + s.days.length, 0), 13);
+  assert.deepEqual(revised.stops.flatMap((s) => s.days.map((d) => d.day)), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+  // And the trip signature the panel keys on differs between the two.
+  const sig = (override) => [base.destination, base.travelers, base.origin, base.month, base.days, JSON.stringify(override ?? null), 1].join('|');
+  assert.notEqual(sig(null), sig({ cities: ['Prague', 'Krakow', 'Vienna'], label: 'Prague → Krakow → Vienna' }));
 });

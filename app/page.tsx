@@ -9,6 +9,7 @@ import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard, type TripLeg } from '../lib/tripCard';
+import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
 import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
 import type { CompetitorFares } from '../lib/travelpayouts';
@@ -16,6 +17,7 @@ import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
+import Expandable from '../components/Expandable';
 import OfflineBanner from '../components/OfflineBanner';
 import TodayView from '../components/TodayView';
 import ReelsFeed from '../components/ReelsFeed';
@@ -224,6 +226,11 @@ function formatReply(text: string): ReactNode {
 function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
+  // Chips fill, don't fire (Layla-dynamic round): a chip puts its full
+  // prompt in this input and focuses it, so the traveler can edit
+  // before sending — Layla's chips behave the same way. Sending still
+  // happens only via Send/Enter (or the "Build my plan" chip action).
+  const inputRef = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
   const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string> } | null>(null);
@@ -924,6 +931,18 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     [lastParsed, choice]
   );
   const mapCard = tripCard ?? previewCard;
+  // Live trip panel (Layla-dynamic round): the map's props are stable
+  // references keyed on the card — before, the stops array was rebuilt
+  // on every render (every keystroke), so FitBounds re-ran and the map
+  // jumped while the traveler typed. Now the card, the map and the
+  // totals re-render only when a slot actually changes (destination,
+  // route override, nights, travelers, tier — including revisions),
+  // and the map glides to the new route instead of snapping.
+  const mapStops = useMemo(
+    () => (mapCard ? mapCard.stops.filter((s) => CITY_INFO[s.city]).map((s) => ({ city: s.city, lat: CITY_INFO[s.city].lat, lng: CITY_INFO[s.city].lng })) : []),
+    [mapCard]
+  );
+  const mapLegs = useMemo(() => mapCard?.legs ?? [], [mapCard]);
   const comparison = useMemo(
     () => (plan ? cardComparison(plan.destination, plan.travelers, { kids: lastParsed?.kids ?? [] }) : null),
     [plan, lastParsed]
@@ -1012,6 +1031,20 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const [chosenLegs, setChosenLegs] = useState<Set<string>>(new Set());
   const [selectedLeg, setSelectedLeg] = useState<TripLeg | null>(null);
   const [legExpanded, setLegExpanded] = useState(false);
+  // Full-screen map (Layla-dynamic round): the trip card's map opens as
+  // a dialog — same route, numbered stops and price tags, reusing
+  // TripMap. Esc closes it; the page behind doesn't scroll while it
+  // is open. The inline map stays put — the dialog is a second,
+  // larger view, not a replacement.
+  const [mapOpen, setMapOpen] = useState(false);
+  useEffect(() => {
+    if (!mapOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMapOpen(false); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [mapOpen]);
   // Add-to-bundle-later (round 2 #7, Expedia One Key): the bundle is the
   // legs the traveler picked, snapshotted from the current card — the
   // total is the exact sum of those legs, and the bundle stays open
@@ -1140,6 +1173,14 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const fmtDateYear = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Live trip panel (Layla-dynamic round): the Trip Summary remounts
+  // — and replays its entrance — only when a trip slot actually
+  // changes (destination, travelers, origin, month, length, revised
+  // route, tier). The signature is the trip's slots, so a re-render
+  // with the same trip (typing, a stream chunk) leaves it still.
+  const tripSignature = lastParsed
+    ? [lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0, JSON.stringify(lastParsed.routeOverride ?? null), choice].join('|')
+    : '';
   // Trip Summary as a persistent, editable card (design #14, Layla): the
   // summary used to live inside a chat bubble, and a revision was a
   // sentence the traveler had to compose. Now the trip is a thing you
@@ -1183,15 +1224,27 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     radios[next].focus();
     setChoice(next);
   };
+  // Chips fill, don't fire (Layla-dynamic round): a chip puts its
+  // full prompt in the input and focuses it — the traveler edits, then
+  // sends with Send/Enter. Only the "Build my plan" chip still acts
+  // immediately (it runs the build, like the button below); the
+  // destination-card "Plan this trip" seeding is untouched and still
+  // starts the trip. data-fill on the button carries the same text so
+  // the behavior is visible (and testable) in the markup.
+  const fillChip = (c: Chip) => {
+    if (c.action === 'build') { build(); return; }
+    setInput(c.text ?? c.label);
+    inputRef.current?.focus();
+  };
   // Starter + follow-up chips (design #1, NN/g prompt controls): the
   // highest-impact chat element in the 2026 consensus — a first-time
   // visitor can start a trip in one tap instead of inventing a perfect
   // sentence, and the guided flow's questions become one-tap answers.
-  // A chip sends exactly like typed text (the chat history and tripState
-  // treat it the same); "Build my plan" runs the build action instead.
   // Max 4 visible; the row wraps to two rows so all four are seen
   // (the old one-row scroll clipped the 4th chip). Contextual, never
-  // the same static set.
+  // the same static set. A chip FILLS the input (Layla-dynamic round)
+  // instead of sending — the traveler edits, then sends; "Build my
+  // plan" runs the build action instead.
   type Chip = { label: string; text?: string; action?: 'build' };
   const hasUserMsg = msgs.some((m) => m.who === 'user');
   const lastAi = [...msgs].reverse().find((m) => m.who === 'ai');
@@ -1283,7 +1336,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               to change that slot; the tier row switches the plan tier
               through the revision flow. */}
           {lastParsed?.destination && (
-            <div className="tripsummary" role="group" aria-label="Trip summary — tap a line to change it">
+            <div key={tripSignature} className="tripsummary panel-update" role="group" aria-label="Trip summary — tap a line to change it">
               <div className="tripsummary-title">Your trip</div>
               <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the route')} title="Tap to change the route">
                 <span className="tripsummary-label">Route</span>
@@ -1364,7 +1417,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </p>
           )}
           <div className="row">
-            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask anything…` : 'Try: Bali, 2 travelers, surf and food'} aria-label="Ask Fujin AI" />
+            <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask anything…` : 'Try: Bali, 2 travelers, surf and food'} aria-label="Ask Fujin AI" />
             {/* While Fujin AI is thinking or streaming, Send becomes Stop:
                 the traveler can cut off a wrong or overlong answer instantly
                 and keep the partial text. */}
@@ -1378,7 +1431,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           </div>
           <div className="chips no-print" role="group" aria-label="Quick replies">
             {chips.map((c) => (
-              <button key={c.label} type="button" className="chip" disabled={thinking !== null || streamingText !== null} onClick={() => (c.action === 'build' ? build() : send(c.text ?? c.label))}>
+              <button key={c.label} type="button" className="chip" disabled={thinking !== null || streamingText !== null} data-fill={c.action === 'build' ? undefined : (c.text ?? c.label)} onClick={() => fillChip(c)}>
                 {c.label}
               </button>
             ))}
@@ -1515,12 +1568,16 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
         <div className="mapcol no-print">
           {mapCard ? (
             <>
+              <div className="mapdialog-bar" style={{ marginBottom: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>{mapCard.stops.length} stop{mapCard.stops.length !== 1 ? 's' : ''} · {mapCard.legs.length} price tags</span>
+                <button type="button" className="ghost" onClick={() => setMapOpen(true)} aria-label="Open the full-screen map" style={{ minHeight: 44 }}>
+                  ⤢ Open the map
+                </button>
+              </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <TripMap
-                  stops={mapCard.stops
-                    .filter((s) => CITY_INFO[s.city])
-                    .map((s) => ({ city: s.city, lat: CITY_INFO[s.city].lat, lng: CITY_INFO[s.city].lng }))}
-                  legs={mapCard.legs}
+                  stops={mapStops}
+                  legs={mapLegs}
                   selectedLegId={selectedLeg?.id ?? null}
                   onSelectLeg={(leg) => {
                     setSelectedLeg(leg);
@@ -1572,6 +1629,34 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   <p className="maphint">Click a price tag on the map to see the flight, stay or car — then read more or add it to your plan.</p>
                 )}
               </div>
+              {/* Full-screen map dialog (Layla-dynamic round): the same
+                  route, numbered stops and price tags, on the whole
+                  screen. The inline map stays mounted behind it — the
+                  dialog is a second, larger view, not a replacement —
+                  and it only mounts while open. Esc closes it. */}
+              {mapOpen && (
+                <div className="mapdialog panel-update" role="dialog" aria-modal="true" aria-label={`Full-screen map — ${mapCard.title}`}>
+                  <div className="mapdialog-bar">
+                    <strong>{mapCard.title}</strong>
+                    <button type="button" className="ghost" onClick={() => setMapOpen(false)} autoFocus aria-label="Close the full-screen map" style={{ minHeight: 44 }}>
+                      × Close
+                    </button>
+                  </div>
+                  <div className="mapdialog-map">
+                    <TripMap
+                      stops={mapStops}
+                      legs={mapLegs}
+                      selectedLegId={selectedLeg?.id ?? null}
+                      onSelectLeg={(leg) => {
+                        setSelectedLeg(leg);
+                        setLegExpanded(false);
+                      }}
+                      addedLegIds={[...chosenLegs]}
+                    />
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Click a price tag to read more or add it to your plan — the same tags as on the map beside the chat. Esc closes this view.</p>
+                </div>
+              )}
             </>
           ) : (
             <div className="map-placeholder">
@@ -1579,6 +1664,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 <strong>Your trip map</strong>
               </p>
               <p>Tell Fujin AI where you want to go, then build the plan — the map fills in with your route, and the flights, stays and cars appear as price tags you can click.</p>
+              <p><button type="button" className="ghost" disabled title="Build a trip to open the full map">⤢ Open the map</button></p>
             </div>
           )}
         </div>
@@ -1613,8 +1699,17 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   when a weather/closure swap applies, the two days'
                   activities exchange places — the dates stay put. */}
               {(displayCard ?? tripCard).stops.map((stop, si) => (
-                <div key={stop.city} className="plan-section">
-                  <strong>Days {stop.days[0]?.day ?? si + 1}{stop.days.length > 1 ? `-${stop.days[stop.days.length - 1].day}` : ''} · {fmtDate(stop.startDate)} – {fmtDate(stop.endDate)} · {stop.city}</strong>
+                <Expandable
+                  key={stop.city}
+                  className="plan-section"
+                  defaultOpen={si === 0}
+                  summary={
+                    <>
+                      <strong>Days {stop.days[0]?.day ?? si + 1}{stop.days.length > 1 ? `-${stop.days[stop.days.length - 1].day}` : ''} · {fmtDate(stop.startDate)} – {fmtDate(stop.endDate)} · {stop.city}</strong>
+                      {' '}· {stop.nights} night{stop.nights > 1 ? 's' : ''} · stay from ${stop.stayEstimate.toLocaleString()}
+                    </>
+                  }
+                >
                   <p style={{ margin: '4px 0' }}>{stop.intro}</p>
                   {/* Start Anywhere (round 2 #6): the sentence from the
                       traveler's own link that named this stop — kept with
@@ -1622,20 +1717,55 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   {stop.sourceTip && (
                     <p className="plan-note">From your link: “{stop.sourceTip}”</p>
                   )}
-                  <p className="plan-line">
-                    <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
-                  </p>
-                  <p className="plan-line">
-                    <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(planning estimate — real named stays arrive with a hotel supplier)</span>
-                  </p>
+                  {/* Stay + transport rows expand inline (Layla-dynamic
+                      round — Layla's hotel cards expand the same way):
+                      the summary carries the price, the detail carries
+                      the nights, the mode and the honest note. The
+                      transport row shows the travel day — no per-leg
+                      duration exists in the data (only one prose mention,
+                      Prague → Vienna "about 4 hours"), so no hours are
+                      invented; live times arrive with live inventory. */}
+                  <Expandable
+                    className="plan-row"
+                    summary={
+                      <>
+                        <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
+                      </>
+                    }
+                  >
+                    <p className="plan-line">Mode: {stop.transportIn.mode} · {stop.transportIn.from} → {stop.city}</p>
+                    <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · from ${stop.transportIn.price.toLocaleString()} (planning estimate)</p>
+                    <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+                  </Expandable>
+                  <Expandable
+                    className="plan-row"
+                    summary={
+                      <>
+                        <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(planning estimate)</span>
+                      </>
+                    }
+                  >
+                    <p className="plan-line">{stop.nights} night{stop.nights > 1 ? 's' : ''} in {stop.city} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()}</p>
+                    <p className="plan-note">Planning estimate — real named stays with ratings arrive with a hotel supplier (Expedia / Duffel Stays). Nothing is booked until you confirm it.</p>
+                  </Expandable>
                   <p style={{ fontSize: 14, margin: '8px 0 4px' }}><b>Itinerary</b></p>
                   {stop.days.map((d) => (
-                    <p key={d.day} style={{ fontSize: 14, margin: '3px 0' }}>
-                      Day {d.day} · {fmtDate(d.date)}{d.weatherF ? ` · ${d.weatherF}°F typical` : ''} · {d.experiences} experiences — {d.title}
-                      {swappedDays.get(`${stop.city}|${d.day}`) ? ` ↔ swapped with Day ${swappedDays.get(`${stop.city}|${d.day}`)}` : ''}
-                    </p>
+                    <Expandable
+                      key={d.day}
+                      className="plan-row plan-day"
+                      summary={
+                        <>
+                          Day {d.day} · {fmtDate(d.date)}{d.weatherF ? ` · ${d.weatherF}°F typical` : ''} · {d.experiences} experiences — {d.title}
+                          {swappedDays.get(`${stop.city}|${d.day}`) ? ` ↔ swapped with Day ${swappedDays.get(`${stop.city}|${d.day}`)}` : ''}
+                        </>
+                      }
+                    >
+                      <p className="plan-line">{d.experiences} experience{d.experiences !== 1 ? 's' : ''} planned — {d.title}</p>
+                      {d.weatherF ? <p className="plan-line">Typical high {d.weatherF}°F in {MONTH_NAMES[d.date.getMonth()]} — a seasonal average, not a forecast.</p> : null}
+                      {swappedDays.get(`${stop.city}|${d.day}`) ? <p className="plan-line">Swapped with Day {swappedDays.get(`${stop.city}|${d.day}`)} by the weather / closure check.</p> : null}
+                    </Expandable>
                   ))}
-                </div>
+                </Expandable>
               ))}
               {/* Weather / closure day-swap (round 2 #10): the Plan
                   updates box — what changed and why, with the check
@@ -1742,11 +1872,18 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   )}
                 </div>
               )}
-              <div className="plan-section">
-                <p className="plan-line">
-                  <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
-                </p>
-              </div>
+              <Expandable
+                className="plan-section"
+                summary={
+                  <>
+                    <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
+                  </>
+                }
+              >
+                <p className="plan-line">Mode: ✈️ Flight · {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'}</p>
+                <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · from ${tripCard.returnTransport.price.toLocaleString()} (planning estimate)</p>
+                <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
+              </Expandable>
               {comparison && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: '4px 0' }}>Our rate vs other options</h3>
@@ -2197,6 +2334,15 @@ export default function Home() {
     );
   };
   const local = useMemo(() => LOCAL_TRIPS[loc] ?? LOCAL_TRIPS.default, [loc]);
+  // Template filters (Layla-dynamic round): layla.ai's template library
+  // has category pills — ours filter the Global packages the same way,
+  // with honest categories from lib/tripCategories (each card's own
+  // itinerary) and real counts. Categories with no cards get no pill,
+  // so a filter can never lead to an empty grid.
+  const [packageFilter, setPackageFilter] = useState<PackageFilter>('All');
+  const packageNames = useMemo(() => GLOBAL_DESTINATIONS.map((d) => d.name), []);
+  const packageFilterCounts = useMemo(() => categoryCounts(packageNames), [packageNames]);
+  const shownPackages = useMemo(() => filterByCategory(packageNames, packageFilter), [packageNames, packageFilter]);
   return (
     <div>
       <a href="#fujin-chat" className="skip-link">Skip to chat</a>
@@ -2231,13 +2377,26 @@ export default function Home() {
         <section>
           <h2>Global packages, in one plan</h2>
           <p className="sub">Flights, hotels, car rental, sightseeing and more — gathered into a single customized trip, not seven separate bookings.</p>
+          <div className="filter-pills" role="group" aria-label="Filter packages by kind">
+            <button type="button" className={`chip${packageFilter === 'All' ? ' selected' : ''}`} aria-pressed={packageFilter === 'All'} onClick={() => setPackageFilter('All')}>
+              All ({packageNames.length})
+            </button>
+            {packageFilterCounts.map(({ category, count }) => (
+              <button key={category} type="button" className={`chip${packageFilter === category ? ' selected' : ''}`} aria-pressed={packageFilter === category} onClick={() => setPackageFilter(category as TripCategory)}>
+                {category} ({count})
+              </button>
+            ))}
+          </div>
           <div className="grid">
-            {GLOBAL_DESTINATIONS.map((d) => (
+            {GLOBAL_DESTINATIONS.filter((d) => shownPackages.includes(d.name)).map((d) => (
               <article className="card" key={d.name}>
                 <SafeImg src={d.image} alt={d.name} label={d.name} />
                 <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p>
                   {cardInfo[d.name] && (
                     <>
+                      {(cardInfo[d.name]?.cities.length ?? 0) > 1 && (
+                        <p className="plan-muted">{cardInfo[d.name]?.cities.join(' → ')}</p>
+                      )}
                       <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
                       <p className="price">from ${cardInfo[d.name]?.total.toLocaleString()} total</p>
                       <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>

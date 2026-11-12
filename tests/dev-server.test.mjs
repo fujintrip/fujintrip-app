@@ -6,6 +6,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { buildTripCard } from '../lib/tripCard.ts';
 import { snapshotFor } from '../lib/today.ts';
 
@@ -312,4 +313,45 @@ test('competitor fares: without a token the route stays honestly empty', async (
   const bad = await fetch(`${BASE}/api/competitor-fares?origin=New%20York&destination=Central%20Europe&depart=soon&return=later&travelers=2`);
   assert.equal(bad.status, 200);
   assert.equal((await bad.json()).available, false);
+});
+
+test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and motion CSS are served', async () => {
+  // SSR-visible markers only — the plan view's expandable rows and the
+  // map dialog render client-side (after "Build my plan"), so they are
+  // covered by the pure-helper unit tests and the build, not by SSR.
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const rawHtml = await r.text();
+  // React SSR separates JSX text from expressions with comment markers
+  // ("All (<!-- -->6<!-- -->)"), so strip them before matching text.
+  const html = rawHtml.replace(/<!-- -->/g, '');
+  // Template filters (item 4): honest pills with real counts, no
+  // Mountains & nature pill on the Global grid (0 of 6 fit it).
+  assert.ok(html.includes('Filter packages by kind'), 'filter pills group renders');
+  assert.ok(html.includes('All (6)'), 'All pill counts the six Global packages');
+  assert.ok(html.includes('Cities &amp; culture (4)') || html.includes('Cities & culture (4)'), 'Cities & culture pill with real count');
+  assert.ok(html.includes('Beach &amp; islands (4)') || html.includes('Beach & islands (4)'), 'Beach & islands pill with real count');
+  assert.ok(html.includes('Food (4)'), 'Food pill with real count');
+  assert.ok(!html.includes('Mountains &amp; nature (0)') && !html.includes('Mountains & nature (0)'), 'no empty category pill is rendered');
+  // Chips fill, don't fire (item 5): the starter chips carry their full
+  // prompt as data-fill, and the input is what receives it.
+  assert.ok(html.includes('data-fill="Surprise me"'), 'Surprise me chip carries data-fill');
+  assert.ok(html.includes('data-fill="I want a warm beach in February"'), 'a starter chip carries its full prompt as data-fill');
+  // Full-screen map (item 3): the hook is in the markup even before a
+  // trip exists (disabled, with the reason) — the dialog mounts on click.
+  assert.ok(html.includes('Open the map'), 'Open the map action renders');
+  // Motion (item 6): the served stylesheet carries the panel entrance
+  // and the expandable-row transition — read it from the page's own
+  // stylesheet link, falling back to the source file.
+  const cssHref = html.match(/href="([^"]+\.css[^"]*)"/)?.[1];
+  let css = '';
+  if (cssHref) {
+    css = await (await fetch(cssHref.startsWith('http') ? cssHref : `${BASE}${cssHref}`)).text();
+  }
+  if (!css.includes('expandable-body')) {
+    css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  }
+  assert.ok(css.includes('expandable-body'), 'stylesheet has the expandable-row styles');
+  assert.ok(css.includes('panel-in'), 'stylesheet has the panel-entrance keyframes');
+  assert.ok(css.includes('.mapdialog'), 'stylesheet has the full-screen map dialog styles');
 });

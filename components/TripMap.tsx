@@ -6,27 +6,40 @@
 // page.tsx imports this with next/dynamic ssr:false. Tiles are
 // OpenStreetMap (free, no API key).
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { TripLeg } from '../lib/tripCard';
-import { priceTagAnchorY } from '../lib/tripCard';
+import { mapStopsKey, priceTagAnchorY } from '../lib/tripCard';
 
 export type MapStop = { city: string; lat: number; lng: number };
 
 function FitBounds({ stops }: { stops: MapStop[] }) {
   const map = useMap();
+  // Refit only when the route itself changes (mapStopsKey) — the parent
+  // re-renders on every keystroke, and refitting on every render made
+  // the map jump while the traveler typed. The move is animated
+  // (flyToBounds) so a revised route glides into view instead of
+  // snapping; reduced-motion gets an instant fitBounds instead.
+  const key = mapStopsKey(stops);
+  const prevKeyRef = useRef('');
   useEffect(() => {
+    if (key === prevKeyRef.current) return;
+    prevKeyRef.current = key;
     if (stops.length > 1) {
+      const bounds = L.latLngBounds(stops.map((s) => [s.lat, s.lng] as [number, number]));
       // Top padding is generous (210px): the price tags stack upward
       // from each city (up to ~200px above the northernmost stop), so
       // the route must sit low enough that no tag is clipped.
-      map.fitBounds(L.latLngBounds(stops.map((s) => [s.lat, s.lng] as [number, number])), { paddingTopLeft: [48, 210], paddingBottomRight: [48, 48] });
+      const opts = { paddingTopLeft: [48, 210] as [number, number], paddingBottomRight: [48, 48] as [number, number] };
+      const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (reduced) map.fitBounds(bounds, opts);
+      else map.flyToBounds(bounds, { ...opts, duration: 0.8 });
     } else if (stops.length === 1) {
       map.setView([stops[0].lat, stops[0].lng], 5);
     }
-  }, [map, stops]);
+  }, [map, stops, key]);
   return null;
 }
 

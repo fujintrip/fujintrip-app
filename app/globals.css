@@ -338,3 +338,40 @@ html{scroll-padding-bottom:96px}
 .discover-chip{min-height:44px}
 .discover-chip.selected{border-color:var(--ink);background:#fafafa;font-weight:700}
 @media(max-width:900px){.discover{grid-template-columns:1fr}.discover-map{height:380px}}
+
+/* --- Layla-dynamic round (Nov 12): flexible, not static --- */
+/* Live trip panel: the Trip Summary replays this entrance only when a
+   trip slot actually changes (its React key is the trip signature), so
+   a revision visibly lands instead of silently swapping text. The
+   map glides instead of snapping — see TripMap's flyToBounds. Both
+   are killed by the prefers-reduced-motion rule above. */
+@keyframes panel-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.panel-update{animation:panel-in 250ms var(--ease)}
+/* Expandable rows (plan view): the summary is a real button
+   (keyboard: Tab reaches it, Space/Enter toggles, aria-expanded
+   reports the state) and the body opens with a grid-rows transition
+   — smooth motion in small increments, no layout jumps. Print forces
+   every body open so the PDF plan never loses the day-by-day. */
+.expandable-summary{display:flex;gap:8px;align-items:baseline;width:100%;background:none;border:none;padding:0;text-align:left;cursor:pointer;font:inherit;color:var(--ink)}
+.expandable-summary:hover .expandable-summary-text{text-decoration:underline}
+.expandable-chevron{flex:0 0 auto;font-weight:700;transition:transform var(--dur) var(--ease)}
+.expandable.open .expandable-chevron{transform:rotate(90deg)}
+.expandable-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows 250ms var(--ease)}
+.expandable.open .expandable-body{grid-template-rows:1fr}
+.expandable-body-inner{overflow:hidden;min-height:0}
+.plan-row{padding:2px 0 2px 18px}
+.plan-day{padding-top:2px;padding-bottom:2px}
+@media print{.expandable-body{grid-template-rows:1fr !important}}
+/* Full-screen map dialog: the whole screen is the map, same route and
+   price tags as the inline map. Fixed above everything (the sticky
+   bar is z-50); the inline map stays mounted behind it. */
+.mapdialog{position:fixed;inset:0;z-index:200;background:#fff;display:flex;flex-direction:column;padding:16px 24px}
+.mapdialog-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.mapdialog-bar strong{font-size:16px}
+.mapdialog-map{flex:1;min-height:0}
+.mapdialog-map > div{height:100%}
+/* Template filter pills (Global packages): same pill as the chat
+   chips, selected reads as pressed (ink fill + aria-pressed, never
+   color alone). Counts are the real number of cards in the category. */
+.filter-pills{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+.chip.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
