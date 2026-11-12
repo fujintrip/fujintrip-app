@@ -1043,6 +1043,22 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const fmtDateYear = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // Tier radiogroup (design #6): arrows move between the three tiers and
+  // select as they go (the ARIA radiogroup pattern); Space/Enter on a
+  // focused tier selects it too.
+  const tierGroupRef = useRef<HTMLDivElement>(null);
+  const tierKeys = (e: React.KeyboardEvent) => {
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) return;
+    const group = tierGroupRef.current;
+    if (!group) return;
+    const radios = Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]'));
+    const idx = radios.indexOf(document.activeElement as HTMLElement);
+    if (idx === -1) return;
+    e.preventDefault();
+    const next = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (idx + 1) % radios.length : (idx - 1 + radios.length) % radios.length;
+    radios[next].focus();
+    setChoice(next);
+  };
   // Starter + follow-up chips (design #1, NN/g prompt controls): the
   // highest-impact chat element in the 2026 consensus — a first-time
   // visitor can start a trip in one tap instead of inventing a perfect
@@ -1678,11 +1694,31 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </p>
             </div>
           )}
-          <div className="compare" style={{ marginTop: 12 }}>
+          <div className="compare" style={{ marginTop: 12 }} role="radiogroup" aria-label="Choose your plan tier" ref={tierGroupRef} onKeyDown={tierKeys}>
             {plan.options.map((o, i) => (
-              <div key={o.name} className={`box ${i === choice ? 'best chosen' : ''}`} onClick={() => setChoice(i)} style={{ cursor: 'pointer' }}>
-                <strong>{o.name}{i === 1 ? ' ★ Best value' : ''}</strong>
-                <p style={{ fontSize: 26, margin: '8px 0' }}>${o.total.toLocaleString()}</p>
+              <div
+                key={o.name}
+                className={`box tier ${i === choice ? 'best chosen' : ''}`}
+                role="radio"
+                aria-checked={i === choice}
+                aria-label={`${o.name} — $${o.total.toLocaleString()} total`}
+                tabIndex={0}
+                onClick={() => setChoice(i)}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    setChoice(i);
+                  }
+                }}
+              >
+                {i === choice && (
+                  <span className="tier-check" aria-hidden="true">
+                    ✓
+                  </span>
+                )}
+                <strong>{o.name}</strong>
+                {i === 1 && <span className="tier-badge">★ Best value</span>}
+                <p className="tier-price">${o.total.toLocaleString()}</p>
                 <table><tbody>
                   <tr><td>Flights</td><td>${o.flight}</td></tr>
                   <tr><td>Hotel</td><td>${o.hotel}</td></tr>
