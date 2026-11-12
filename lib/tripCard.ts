@@ -106,6 +106,14 @@ const LEG_MODE: Record<string, string> = {
   usa: '✈️ Domestic flight',
 };
 
+// City center coordinates from the trip card's data — shared with the
+// food module so walk times are measured from the same center as the
+// map pins. 'NYC' is the planner's alias for New York.
+export function cityCoords(name: string): { lat: number; lng: number } | null {
+  const info = CITY_INFO[name === 'NYC' ? 'New York' : name];
+  return info ? { lat: info.lat, lng: info.lng } : null;
+}
+
 // Typical daytime high for a city in a month, by interpolating January
 // and July. A seasonal average for planning, never a forecast — the card
 // labels it as typical.
@@ -288,7 +296,7 @@ export function buildTripCard(opts: {
     }
   }
 
-  // Map inventory (split-screen redesign, Nov 11): every bookable leg as
+    // Map inventory (split-screen redesign, Nov 11): every bookable leg as
   // a marker with a price tag — flights, stays, car rental. The traveler
   // clicks a tag to read more, then Add to plan. Prices are the chosen
   // tier's legs; stays and cars split by nights like the hotel leg.

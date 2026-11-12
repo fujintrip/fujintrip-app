@@ -2,9 +2,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, type Plan, type RouteOverride } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
+import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -224,6 +225,26 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       ? ` (checked status: ${checked.status ?? ''}${checked.cancellationConfirmed ? ', cancellation confirmed' : ''}${checked.cancellationUnconfirmed ? ', cancellation NOT confirmed' : ''}${checked.estimatedDeparture ? `, now due ${new Date(checked.estimatedDeparture).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : ''})`
       : '';
     void send(`My flight${ident ? ` ${ident}` : ''} was cancelled${statusLine} — what are my options?`, checked);
+  };
+  // "Tonight near you" (competitor learning round 2 #4): the city the
+  // traveler is in is the route's first city (the trip's starting
+  // point); the 3 places open now come from /api/food on demand.
+  const foodCity = lastParsed ? (routeKeyForDestination(lastParsed.destination) ? ROUTE_STOPS[routeKeyForDestination(lastParsed.destination)][0].city : lastParsed.destination) : '';
+  const [tonight, setTonight] = useState<TonightResult | 'loading' | null>(null);
+  const fetchTonightPlaces = async () => {
+    if (!foodCity) return;
+    setTonight('loading');
+    try {
+      const r = await fetch('/api/food', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city: foodCity }),
+      });
+      const j = (await r.json()) as TonightResult;
+      setTonight(j);
+    } catch {
+      setTonight({ city: foodCity, tz: null, places: [], checkedAt: new Date().toISOString() });
+    }
   };
   // "Leave now" hint for a flight that is still on the ground and
   // departs within 4 hours — general advice, not a per-flight fact.
@@ -773,6 +794,35 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 <button className="ghost" style={{ marginTop: 10 }} onClick={reportCancellation}>
                   ✈ My flight was cancelled — what are my options?
                 </button>
+              </div>
+              {/* Tonight near you (competitor learning round 2 #4): the 3
+                  places open now in the city the traveler is in — name,
+                  price band, open-now, walk time, dish and one Wikivoyage
+                  quote. Fetched on demand; a place whose hours cannot be
+                  verified says so, never guessed open. */}
+              <div style={{ border: '1px solid #e5e5e5', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+                <strong style={{ fontSize: 13 }}>Tonight near you</strong>
+                <div className="row" style={{ marginTop: 8 }}>
+                  <button className="ghost" onClick={fetchTonightPlaces} disabled={tonight === 'loading'}>
+                    {tonight === 'loading' ? 'Finding places open now…' : `Where to eat tonight in ${foodCity}?`}
+                  </button>
+                </div>
+                {tonight && tonight !== 'loading' && tonight.places.length > 0 && (
+                  <ul style={{ margin: '10px 0 0', padding: 0, listStyle: 'none', fontSize: 13, textAlign: 'left' }}>
+                    {tonight.places.map((p) => (
+                      <li key={p.name} style={{ marginBottom: 10 }}>
+                        <strong>{p.name}</strong>
+                        {p.priceBand ? ` · ${p.priceBand}` : ''} · {p.openNow === true ? 'Open now' : p.openNow === false ? 'Closed now' : 'Hours not verified'}
+                        {p.walkMinutes ? ` · about ${p.walkMinutes}-min walk from the city center (estimate)` : ''}
+                        {p.dish ? <div style={{ marginTop: 2 }}>{p.dish}</div> : null}
+                        {p.quote ? <div style={{ marginTop: 2, color: '#666' }}>Wikivoyage says: “{p.quote}”</div> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {tonight && tonight !== 'loading' && tonight.places.length === 0 && (
+                  <p style={{ marginTop: 10, fontSize: 13, color: '#666' }}>I couldn&apos;t confirm anywhere open tonight in {foodCity} — the guide has no Eat listings I could verify. Try asking Fujin AI, or check back later.</p>
+                )}
               </div>
             </div>
           )}
