@@ -1919,18 +1919,20 @@ export default function Home() {
   const local = useMemo(() => LOCAL_TRIPS[loc] ?? LOCAL_TRIPS.default, [loc]);
   return (
     <div>
+      <a href="#fujin-chat" className="skip-link">Skip to chat</a>
       <header><div className="wrap topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
       <main className="wrap">
         <section className="hero">
           <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
           <h1>One complete plan. Cheapest, Best value, or Premium.</h1>
           <p>Ask Fujin AI once — flights, hotels, cars and sightseeing, all booked with FujinTrip.</p>
+          <p className="hero-cta"><a href="#fujin-chat">Start planning ↓</a></p>
         </section>
 
         <div className="tabs" role="tablist" aria-label="Search">
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
-        <div className="panel">
+        <div className="panel" id="fujin-chat">
           {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 

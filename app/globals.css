@@ -127,6 +127,13 @@ td:last-child{text-align:right;font-weight:600}
 footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px;background:#fff}
 .adslot{margin:32px 0;text-align:center}
 .mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f0f0ee;font-size:14px}
+/* Skip link: keyboard users jump straight to the chat, past the
+   header and hero. Visually hidden until focused. */
+.skip-link{position:absolute;left:-9999px;top:0;background:var(--ink);color:#fff;padding:10px 16px;border-radius:0 0 12px 0;z-index:100;font-size:14px;font-weight:600;text-decoration:none}
+.skip-link:focus{left:0}
+.hero-cta{margin-top:18px}
+.hero-cta a{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.hero-cta a:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
 @media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}}
 /* Screen only: .print-only lines (your choice, full booking URLs) are
    hidden until printing. */
@@ -187,4 +194,11 @@ html{scroll-padding-bottom:96px}
   .chatmap .chat{max-height:none}
   .legcard{left:8px;right:8px;top:8px;bottom:auto;width:auto;max-height:38%;overflow-y:auto}
   .maphints{display:none}
+  /* Chat first on mobile (design #7): the hero collapses to the portrait
+     + headline only — the sub-line and the Start-planning anchor are gone
+     on a phone, so the sentence box is the hero and the chat starts
+     immediately below the tabs instead of below the fold. */
+  .hero{padding:24px 0 12px}
+  .hero p{display:none}
+  .hero-cta{display:none}
 }
