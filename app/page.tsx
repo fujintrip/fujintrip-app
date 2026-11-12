@@ -488,11 +488,16 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
                   addedLegIds={[...chosenLegs]}
                 />
               </div>
-              {selectedLeg ? (
+              {selectedLeg && (
                 <div className="legcard">
-                  <strong>
-                    {selectedLeg.icon} {selectedLeg.label}
-                  </strong>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <strong>
+                      {selectedLeg.icon} {selectedLeg.label}
+                    </strong>
+                    <button className="ghost" aria-label="Close" onClick={() => setSelectedLeg(null)} style={{ padding: '2px 10px' }}>
+                      ×
+                    </button>
+                  </div>
                   <p>
                     from <strong>${selectedLeg.price.toLocaleString()}</strong> · {selectedLeg.detail}
                   </p>
@@ -512,14 +517,17 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
                     )}
                   </div>
                 </div>
-              ) : (
-                <p className="maphint">Click a price tag on the map to see the flight, stay or car — then read more or add it to your plan.</p>
               )}
-              {chosenLegs.size > 0 && (
-                <p className="maphint">
-                  In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${chosenTotal.toLocaleString()} — the full plan is below.
-                </p>
-              )}
+              <div className="maphints">
+                {!selectedLeg && (
+                  <p className="maphint">Click a price tag on the map to see the flight, stay or car — then read more or add it to your plan.</p>
+                )}
+                {chosenLegs.size > 0 && (
+                  <p className="maphint">
+                    In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${chosenTotal.toLocaleString()} — the full plan is below.
+                  </p>
+                )}
+              </div>
             </>
           ) : (
             <div className="map-placeholder">
