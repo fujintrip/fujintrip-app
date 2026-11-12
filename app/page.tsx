@@ -1972,6 +1972,10 @@ export default function Home() {
     for (const d of [...GLOBAL_DESTINATIONS, ...HIDDEN_GEMS]) {
       try {
         const c = buildTripCard({ destination: d.name, travelers: 2, days: 3, month: 0, origin: '' });
+        if (!c) {
+          info[d.name] = null;
+          continue;
+        }
         info[d.name] = { cities: c.stops.map((s) => s.city), experiences: c.experiences, hotels: c.hotels, transports: c.transports, total: buildPlan(d.name, 2, 3).options[1].total };
       } catch {
         info[d.name] = null;
