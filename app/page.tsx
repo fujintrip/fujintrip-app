@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, routeKeyForDestination, type Plan } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, type Plan } from '../lib/planner';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -100,7 +100,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string } | null>(null);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[] } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
@@ -123,7 +123,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     try {
       const t = localStorage.getItem('fujintrip-current-trip');
       if (t) {
-        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown };
+        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown };
         if (typeof p.destination === 'string' && typeof p.travelers === 'number') {
           setLastParsed({
             destination: p.destination,
@@ -132,6 +132,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
             ...(typeof p.month === 'number' ? { month: p.month } : {}),
             ...(typeof p.durationDays === 'number' ? { durationDays: p.durationDays } : {}),
             ...(typeof p.routeKey === 'string' && p.routeKey ? { routeKey: p.routeKey } : {}),
+            ...(Array.isArray(p.kids) ? { kids: p.kids.filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6) } : {}),
           });
           onParsed?.({ destination: p.destination, travelers: p.travelers });
         }
@@ -188,8 +189,11 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     // carried forward like the origin so they survive follow-ups.
     const month = findMonth(contextText) || lastParsed?.month || 0;
     const durationDays = parseDuration(contextText) || lastParsed?.durationDays || 0;
+    // Kids' ages, from everything said so far — the pace depends on them,
+    // and they ride along in tripState like the origin.
+    const kids = parseKidAges(contextText).length ? parseKidAges(contextText) : lastParsed?.kids ?? [];
     // Live AI first (server route); any failure falls back to the built-in planner.
-    let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[] };
+    let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[]; kids?: number[] };
     let live = false;
     try {
       const r = await fetch('/api/fujin', {
@@ -212,7 +216,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
       });
       const j = await r.json();
       if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
-        parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [], tips: Array.isArray(j.tips) ? j.tips.filter((t: unknown): t is string => typeof t === 'string').slice(0, 3) : [] };
+        parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [], tips: Array.isArray(j.tips) ? j.tips.filter((t: unknown): t is string => typeof t === 'string').slice(0, 3) : [], kids: Array.isArray(j.kids) ? j.kids.filter((k: unknown): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6) : undefined };
         live = j.live === true;
         // Keep the fresh traveler material the server fetched for this trip.
         if (typeof j.voices === 'string' && j.voices && typeof j.voicesDestination === 'string' && j.voicesDestination) {
@@ -234,6 +238,9 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
         setChosenLegs(new Set());
         setSelectedLeg(null);
       }
+      // Kids' ages: the server's answer wins, else what the page parsed
+      // from the conversation, else what the trip already had.
+      const kidsOut = parsed.kids?.length ? parsed.kids : kids.length ? kids : lastParsed?.kids ?? [];
       setLastParsed({
         destination: parsed.destination,
         travelers: parsed.travelers,
@@ -241,6 +248,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
         ...(month ? { month } : {}),
         ...(durationDays ? { durationDays } : {}),
         ...(routeKeyForDestination(parsed.destination) ? { routeKey: routeKeyForDestination(parsed.destination) } : {}),
+        ...(kidsOut.length ? { kids: kidsOut } : {}),
       });
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
@@ -370,6 +378,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
             origin: lastParsed?.origin ?? '',
             // The map's price tags show the tier the traveler picked.
             tier: choice,
+            kids: lastParsed?.kids ?? [],
           })
         : null,
     [plan, lastParsed, choice]
@@ -392,6 +401,7 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
             month: lastParsed.month ?? 0,
             origin: lastParsed.origin ?? '',
             tier: choice,
+            kids: lastParsed?.kids ?? [],
           })
         : null,
     [lastParsed, choice]
@@ -548,6 +558,11 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
               <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
                 {tripCard.days} days · {tripCard.stops.length} {tripCard.stops.length > 1 ? 'cities' : 'city'} · {tripCard.experiences} experiences · {tripCard.hotels} {tripCard.hotels > 1 ? 'stays' : 'stay'} · {tripCard.transports} transports
               </p>
+              {tripCard.familyNote && (
+                <p style={{ fontSize: 14, margin: '8px 0', background: '#fff1e8', border: '1px solid #ead9c8', borderRadius: 10, padding: '10px 14px' }}>
+                  <strong>Family pace</strong> — {tripCard.familyNote}
+                </p>
+              )}
               <p style={{ fontSize: 14, margin: '4px 0' }}>
                 <strong>{fmtDateYear(tripCard.startDate)} – {fmtDateYear(tripCard.endDate)}</strong>{' '}
                 <span style={{ color: '#666', fontSize: 13 }}>(Suggested dates — change anytime.)</span>

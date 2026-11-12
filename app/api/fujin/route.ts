@@ -112,13 +112,14 @@ const SYSTEM_PROMPT = [
   'ROUTE STICKINESS — once you propose a route, KEEP IT across turns unless the traveler asks to change it. Never silently swap cities on the next reply: if turn 1 proposed Lisbon → Madrid → Barcelona → Paris → Rome → Athens, turn 2 must build on that same route, not propose a different one. A changed route confuses the traveler — the route they were just given disappeared.',
   'ALL THREE PRICES — every plan reply shows all three totals: Cheapest, Best value AND Premium. Never show only two of them.',
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
-  'Traveler count: "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
+  'TRAVELER COUNT — "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
+  'FAMILY — when the traveler mentions kids, children or a family trip, ask how many kids and their ages (one question, right after the party size is known) and remember them in the kids array of your JSON answer. "2 adults, 3 kids" is 5 travelers, not 2. Adjust the plan to the YOUNGEST kid: under 5 — slow days, 2 major activities a day, a nap or downtime after lunch, kid-friendly restaurants near each stop; ages 5–11 — 2–3 activities a day with buffers and realistic walking distances; 12+ — full days are fine with a mix of sights and something active. Never suggest late-night bars or nightlife for a family with young kids. Mention the family pace in the Trip Summary.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
   'LIVE FARES — before the model runs, the server asks Duffel for the real fares for this exact trip (origin to the first city of the route, and back) on the trip\'s suggested dates, and appends them as a LIVE FARES block below. ONLY when a LIVE FARES block is present may you say fares are live — quote those fares as the flight prices, with the airline name and the price, and say they are live fares from Duffel (test fares in test mode). If NO LIVE FARES block is present, the flight prices are planning estimates from the price table — never write "live estimates via Duffel", never claim the flight prices come from Duffel, and never invent a fare. For the whole-trip totals, still use the price table (planning estimates) and say the flight inside the plan is estimated — the live fare may be lower.',
   'FujinTrip plan prices (1 traveler and 2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
-  'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[]}.',
+  'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[], "kids": number[]}. The kids array holds the kids\' ages when the trip is a family trip (empty otherwise).',
   'If the destination is unclear AND the traveler gave no constraints at all, ask which city or country they mean. If they already said they don\'t know or have nothing in mind, recommend instead of asking again.',
 ].join(' ');
 
@@ -130,12 +131,13 @@ const FUJIN_SCHEMA = {
     reply: { type: 'string' },
     missing: { type: 'array', items: { type: 'string' } },
     tips: { type: 'array', items: { type: 'string' } },
+    kids: { type: 'array', items: { type: 'number' } },
   },
   required: ['destination', 'reply'],
   additionalProperties: false,
 };
 
-type FujinResult = { destination: string; travelers: number; reply: string; missing: string[]; tips: string[] };
+type FujinResult = { destination: string; travelers: number; reply: string; missing: string[]; tips: string[]; kids?: number[] };
 
 // The live fetch needs a destination BEFORE the model runs, so guess it
 // from the request: an explicit destination, or the last place named in
@@ -210,6 +212,9 @@ function parseModelJson(content: string): FujinResult | null {
       tips: Array.isArray(raw.tips)
         ? raw.tips.filter((t): t is string => typeof t === 'string' && t.trim().length > 0).slice(0, 3)
         : [],
+      kids: Array.isArray(raw.kids)
+        ? raw.kids.filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6)
+        : undefined,
     };
   } catch {
     return null;
@@ -250,6 +255,9 @@ export async function POST(req: NextRequest) {
   const stateTravelers =
     typeof tripState.travelers === 'number' && tripState.travelers >= 1 && tripState.travelers <= 9 ? tripState.travelers : 0;
   const stateOrigin = typeof tripState.origin === 'string' && tripState.origin.trim() ? tripState.origin.trim() : '';
+  const stateKids = Array.isArray(tripState.kids)
+    ? (tripState.kids as unknown[]).filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6)
+    : [];
 
   // On-trip mode (feature 8): the traveler is already at the destination
   // and wants short, right-now local answers. The trip destination also
@@ -307,7 +315,7 @@ export async function POST(req: NextRequest) {
     systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;
   }
   if (stateDestination) {
-    systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
+    systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}${stateKids.length ? `, kids ages ${stateKids.join(', ')}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
   }
   // Nights per city, from the planner's distribution — injected so the
   // live model never re-splits the route: on the live site turn 5 gave

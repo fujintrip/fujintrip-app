@@ -9,7 +9,7 @@
 // flights: the card shows the planner's estimated fare split, labeled as
 // an estimate, until Duffel live fares connect.
 
-import { buildPlan, comparisonFor, distributeNights, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from './planner';
+import { buildPlan, comparisonFor, distributeNights, familyPaceLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from './planner';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -172,6 +172,10 @@ export type TripCard = {
   month: number;
   origin: string;
   travelers: number;
+  // Family pace (competitor learning, Nov 11: Yopki) — the pace line for
+  // the plan view, derived from the kids' ages, never invented venues.
+  kids: number[];
+  familyNote: string;
   stops: TripCardStop[];
   legs: TripLeg[];
   returnTransport: { mode: string; from: string; price: number };
@@ -195,6 +199,7 @@ export function buildTripCard(opts: {
   month: number;
   origin: string;
   tier?: number;
+  kids?: number[];
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -377,8 +382,9 @@ export function buildTripCard(opts: {
     .join(' ');
   const saving = best.hotel - cheapest.hotel;
   const routeName = opts.destination;
+  const kids = (opts.kids ?? []).filter((a) => a >= 0 && a <= 17).slice(0, 6);
   return {
-    title: `${days}-Day ${routeName} ${opts.travelers === 1 ? 'Budget Solo' : 'Budget'} Trip`,
+    title: `${days}-Day ${routeName} ${kids.length ? 'Family' : opts.travelers === 1 ? 'Budget Solo' : 'Budget'} Trip`,
     destination: opts.destination,
     routeKey,
     days,
@@ -388,6 +394,8 @@ export function buildTripCard(opts: {
     month: opts.month,
     origin: opts.origin,
     travelers: opts.travelers,
+    kids,
+    familyNote: familyPaceLine(kids),
     stops: cardStops,
     legs,
     returnTransport: {

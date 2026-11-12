@@ -129,7 +129,8 @@ const TRAVEL_WORDS = [
   // reach the plan, not a decline.
   'eat', 'eating', 'restaurant', 'dinner', 'lunch', 'cuisine', 'dish',
   'traveler', 'travelers', 'traveller', 'travellers', 'adult', 'adults',
-  'person', 'people', 'family', 'weekend', 'road trip', 'staycation',
+  'person', 'people', 'family', 'kid', 'kids', 'child', 'children',
+  'weekend', 'road trip', 'staycation',
 ];
 
 // Country route map — the fallback's recommend rule. When the traveler
@@ -592,6 +593,82 @@ function parseTravelers(lower: string): number {
   return Math.min(9, Math.max(1, signals[signals.length - 1].value));
 }
 
+// --- Family / kids (competitor learning, Nov 11: Yopki) ----------------
+// Kids' ages from the conversation: "kids ages 4, 7, 11", "aged 5 and 8",
+// "a 4-year-old", "kids 4 and 7". Returns the ages in order, 0–17 only,
+// max 6 — never more than a family can plausibly name.
+export function parseKidAges(text: string): number[] {
+  const lower = text.toLowerCase();
+  const ages: number[] = [];
+  const push = (n: number) => {
+    if (Number.isInteger(n) && n >= 0 && n <= 17 && ages.length < 6 && !ages.includes(n)) ages.push(n);
+  };
+  const listRe = /\bages?\s*(?:of\s*)?(\d{1,2}(?:\s*(?:,|and|&)\s*\d{1,2})*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = listRe.exec(lower))) {
+    for (const part of m[1].split(/,|and|&/)) push(parseInt(part.trim(), 10));
+  }
+  const yearOldRe = /(\d{1,2})\s*(?:-|–)?\s*year[ -]?olds?\b/g;
+  while ((m = yearOldRe.exec(lower))) push(parseInt(m[1], 10));
+  const kidsListRe = /\bkids?\s+(?:aged\s+)?(\d{1,2}(?:\s*(?:,|and|&)\s*\d{1,2})*)/g;
+  while ((m = kidsListRe.exec(lower))) {
+    for (const part of m[1].split(/,|and|&/)) push(parseInt(part.trim(), 10));
+  }
+  return ages.sort((a, b) => a - b);
+}
+
+// Party composition: adults + kids. "2 adults, 3 kids" is 5 travelers,
+// not 2 — parseTravelers alone only sees the "2 adults" signal. Ages win
+// when given ("kids ages 4, 7, 11" is 3 kids); a bare count ("3 kids")
+// gives the count with ages unknown (the chat then asks for the ages).
+// "family of 5" with no breakdown is 5. Everything else falls back to
+// parseTravelers, so solo/couple/bare-number behavior is unchanged.
+export function parseParty(text: string): { adults: number; kids: number; kidAges: number[] } {
+  const lower = text.toLowerCase();
+  const kidAges = parseKidAges(lower);
+  const kidCountM = lower.match(/(\d+)\s*(?:kids?|children)\b/);
+  const kids = kidAges.length > 0 ? kidAges.length : kidCountM ? Math.min(6, parseInt(kidCountM[1], 10)) : 0;
+  const adultM = lower.match(/(\d+)\s*adults?\b/);
+  const adults = adultM ? Math.min(9, parseInt(adultM[1], 10)) : 0;
+  const familyOfM = lower.match(/\bfamily of\s+(\d+)\b/);
+  return {
+    adults,
+    kids,
+    kidAges,
+    ...(familyOfM && !adults && !kids ? { familyOf: Math.min(9, parseInt(familyOfM[1], 10)) } : {}),
+  } as { adults: number; kids: number; kidAges: number[]; familyOf?: number };
+}
+
+// Travelers from the party composition. Explicit adults + kids sum;
+// otherwise the existing parseTravelers result. A kids-only mention
+// ("3 kids") assumes the usual 2 adults + kids unless the traveler says
+// solo — the Trip Summary shows the count, so the traveler can correct it.
+export function travelersFromParty(text: string): number {
+  const party = parseParty(text);
+  if (party.adults > 0 && party.kids > 0) return Math.min(9, party.adults + party.kids);
+  if (party.familyOf) return party.familyOf;
+  if (party.kids > 0) {
+    return /\bsolo\b|\balone\b|\bjust me\b/.test(text.toLowerCase())
+      ? Math.min(9, 1 + party.kids)
+      : Math.min(9, Math.max(parseTravelers(text.toLowerCase()), party.kids + 2));
+  }
+  return parseTravelers(text.toLowerCase());
+}
+
+// Family pace: one honest line for the reply and the trip card, derived
+// from the YOUNGEST kid's age — never invented venue names, just the pace
+// the plan should keep (activities per day, downtime, walking distance).
+export function familyPaceLine(kids: number[]): string {
+  if (!kids?.length) return '';
+  const youngest = Math.min(...kids);
+  const ages = kids.map((a) => String(a)).join(', ');
+  if (youngest < 5)
+    return `Family pace for kids ages ${ages}: slow days, 2 major activities a day, a nap or downtime after lunch, and kid-friendly restaurants near each stop — stroller-friendly where it matters.`;
+  if (youngest <= 11)
+    return `Family pace for kids ages ${ages}: 2–3 activities a day with buffers between them, kid-friendly restaurants near each stop, and realistic walking distances.`;
+  return `Teen pace for kids ages ${ages}: full days are fine, with a mix of sights and something active.`;
+}
+
 // Regions count as travel too — "europe, january" names a place and a
 // month, and must reach the recommend rule, not the off-topic decline
 // (the Nov 10 Europe bug came back in exactly this form). Bare regions
@@ -681,7 +758,7 @@ export function askFujin(
   contextDestination = '',
   currentMessage = '',
   contextOrigin = ''
-): { destination: string; travelers: number; reply: string; missing: string[]; needsMore: boolean } {
+): { destination: string; travelers: number; reply: string; missing: string[]; needsMore: boolean; kids?: number[] } {
   // Off-topic is judged on the CURRENT message only. The joined history
   // would make any message look like travel — "who will win the election?"
   // after an Egypt chat came back as an Egypt route (Nov 10 overnight
@@ -770,7 +847,15 @@ export function askFujin(
     /(\d+)\s*(people|travelers|traveler|adults|person|of us)|\b(?:we'?re|we are)\s+\d+\b|\bparty of\s+\d+\b|\bsolo\b|\balone\b|\bjust me\b|\bcouple\b/.test(
       lower
     );
-  const travelers = hasPartySignal ? parseTravelers(lower) : defaultTravelers;
+  // Family: adults + kids sum ("2 adults, 3 kids" is 5 travelers), ages
+  // set the pace. travelersFromParty falls back to the existing parser,
+  // so solo/couple/bare-number behavior is unchanged.
+  const party = parseParty(lower);
+  const kidAges = party.kidAges;
+  const kidCount = party.kids;
+  const hasKids = kidCount > 0;
+  const travelers = hasPartySignal || hasKids ? travelersFromParty(lower) : defaultTravelers;
+  const familyNote = familyPaceLine(kidAges);
   // Guided slots (Layla-style, Nov 11): the month, the trip length and
   // the departure city are what the trip card is built from, so the
   // conversation collects them one question at a time instead of dumping
@@ -798,6 +883,10 @@ export function askFujin(
   if (!month) missing.push('Dates');
   if (!hasBudget) missing.push('Budget');
   if (!/slow|fast|relax|adventure|food|surf|hike|culture/.test(lower)) missing.push('Pace');
+  // Kids' ages: the ages set the pace (nap times for under-5s, 2–3
+  // activities a day for older kids), so ask them once the party has
+  // kids but no ages were given.
+  if (hasKids && kidAges.length === 0) missing.push("Kids' ages");
   // Departure city: the flight fare depends on where the traveler flies
   // from, so ask for it when planning a trip and it was never said
   // (Nov 11 review: a Europe plan was priced without ever asking).
@@ -812,10 +901,13 @@ export function askFujin(
   if (needsDuration) missing.push('Duration');
   // One question at a time, in Layla's order: region (Europe only),
   // when + how long, flying from, budget when unknown. Never a wall of
-  // text or a full plan before the details exist.
+  // text or a full plan before the details exist. Kids' ages come right
+  // after the region choice — the pace depends on them.
   const nextQuestion = (): string => {
     if (regionQuestion)
       return `Europe on a solo budget? Absolutely — we can stretch those dollars and still hit incredible historic sights, buzzing hostels, and top-tier street food. Which vibe sounds better for you — Central Europe (Prague, Vienna, Budapest: winter wonderland, thermal baths, dirt-cheap beer and food) or sunny Portugal (Lisbon & Porto: mild winter, great food, coastal viewpoints)?`;
+    if (hasKids && kidAges.length === 0)
+      return `How old are the kids? (For example: 4, 7 and 11 — the ages set the pace: nap times and downtime for the little ones, 2–3 activities a day for older kids.)`;
     if (!month && !duration)
       return `When are you thinking of going, and for how long? (For example: January, 14 days.)`;
     if (!month) return `When are you thinking of going? (For example: January, or next spring.)`;
@@ -847,7 +939,7 @@ export function askFujin(
           ? `${origin ? `${origin} ✈️ ` : ''}${legs[0].city}`
           : dest;
     const monthName = month ? MONTH_NAMES[month - 1] : '';
-    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport. Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
+    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport.${familyNote ? ` ${familyNote}` : ''} Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
   };
   const isConfirmation = /^(yes|yeah|yep|sure|ok|okay|looks great|looks good|perfect|sounds good|sounds great|build it|let'?s build|go ahead|do it|great|love it)\b/.test(
     currentLower.trim()
@@ -869,7 +961,7 @@ export function askFujin(
       // proposed — proposing the 5-country loop AND asking Central vs
       // Portugal in the same breath would contradict itself.
       if (regionQuestion) {
-        return { destination: display, travelers, reply: nextQuestion(), missing, needsMore: true };
+        return { destination: display, travelers, reply: nextQuestion(), missing, needsMore: true, kids: kidAges };
       }
       const route = COUNTRY_ROUTES[routeKey];
       let routeText = route.route;
@@ -884,9 +976,10 @@ export function askFujin(
         return {
           destination: display,
           travelers,
-          reply: `Here's a route that fits — ${routeText}${wantsCheap ? ' Since you asked for affordable, I’ll lead with the Cheapest option — hostels and guesthouses, public transport, and low-cost flights where they help.' : ''} ${q}`,
+          reply: `Here's a route that fits — ${routeText}${wantsCheap ? ' Since you asked for affordable, I’ll lead with the Cheapest option — hostels and guesthouses, public transport, and low-cost flights where they help.' : ''}${familyNote ? ` ${familyNote}` : ''} ${q}`,
           missing,
           needsMore: true,
+          kids: kidAges,
         };
       }
       return {
@@ -895,6 +988,7 @@ export function askFujin(
         reply: tripSummary(display, routeKey),
         missing,
         needsMore: false,
+        kids: kidAges,
       };
     }
     if (noIdea) {
@@ -912,15 +1006,15 @@ export function askFujin(
       if (wantsWarm) {
         const proposal = `Here's a great first pick for warmth and culture — Southeast Asia: Bangkok (Grand Palace, floating markets, street food) → Siem Reap (Angkor Wat sunrise) → Hanoi (Old Quarter, pho). Warm in winter, safe to travel, and some of the best local food anywhere. Stay in social hostels and guesthouses, and get around by metro, tuk-tuk and short domestic flights.`;
         if (q) {
-          return { destination: 'Southeast Asia', travelers, reply: `${proposal} ${q}`, missing, needsMore: true };
+          return { destination: 'Southeast Asia', travelers, reply: `${proposal}${familyNote ? ` ${familyNote}` : ''} ${q}`, missing, needsMore: true, kids: kidAges };
         }
-        return { destination: 'Southeast Asia', travelers, reply: tripSummary('Southeast Asia', 'southeastasia'), missing, needsMore: false };
+        return { destination: 'Southeast Asia', travelers, reply: tripSummary('Southeast Asia', 'southeastasia'), missing, needsMore: false, kids: kidAges };
       }
       const proposal = `Here's a great first pick — Bali: affordable flights and stays, and some of the best local food anywhere (warungs, night markets, Ubud). Stay in guesthouses and small hotels, and get around by scooter or Gojek/Grab instead of private cars — it's cheaper, and it's how locals travel.`;
       if (q) {
-        return { destination: 'Bali', travelers, reply: `${proposal} ${q}`, missing, needsMore: true };
+        return { destination: 'Bali', travelers, reply: `${proposal}${familyNote ? ` ${familyNote}` : ''} ${q}`, missing, needsMore: true, kids: kidAges };
       }
-      return { destination: 'Bali', travelers, reply: tripSummary('Bali', ''), missing, needsMore: false };
+      return { destination: 'Bali', travelers, reply: tripSummary('Bali', ''), missing, needsMore: false, kids: kidAges };
     }
     // No constraints to recommend from — ask which city or country.
     return {
@@ -941,6 +1035,7 @@ export function askFujin(
       reply: `Got it — ${known} for ${travelers} traveler${travelers > 1 ? 's' : ''}. ${q}`,
       missing,
       needsMore: true,
+      kids: kidAges,
     };
   }
   if (isConfirmation) {
@@ -950,6 +1045,7 @@ export function askFujin(
       reply: `Great — your trip is set. Tap Build my plan below to generate the full trip card, then pick your flights and stays on the map next to the chat.`,
       missing,
       needsMore: false,
+      kids: kidAges,
     };
   }
   return {
@@ -958,5 +1054,6 @@ export function askFujin(
     reply: tripSummary(known, ''),
     missing,
     needsMore: false,
+    kids: kidAges,
   };
 }
