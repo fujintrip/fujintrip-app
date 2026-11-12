@@ -331,3 +331,51 @@ export function priceCheck(f: LiveFares, plannerFlight: number): PriceCheck {
     line: `Book-now read: the cheapest live fares out and back total $${liveTotal.toLocaleString()} — $${diff.toLocaleString()} over the plan's flight budget ($${plannerFlight.toLocaleString()}). The plan's total would rise by about $${diff.toLocaleString()} if you booked these fares today. Waiting may help or hurt — fares move both ways and we never predict them. Watch the price and we'll tell you when it drops.`,
   };
 }
+
+// --- "Buy now / Wait" + confidence (competitor learning round 2 #3,
+// Kayak) -----------------------------------------------------------------
+// The trend is a read of the traveler's OWN checks, never a forecast:
+// each observation is one live out+back total on one date, taken from
+// the price watch (baseline first, then every later check). The
+// confidence is humble on purpose — 2 checks is "low", 3 or more is
+// "medium", and "high" never exists. No check count, no confidence;
+// never "95% accurate" (Hopper) and never a prediction of where fares
+// go next.
+export type TrendObservation = { at: string; total: number };
+export type Trend = {
+  confidence: 'none' | 'low' | 'medium';
+  // The one humble sentence for the chat reply and the plan view, or ''
+  // when there are fewer than 2 observations to read.
+  line: string;
+};
+
+// Append a fresh check to a history: the same total on the same day is
+// not a new observation, so it is not counted — the check count in the
+// trend sentence must mean real checks, not button presses.
+export function appendObservation(observations: TrendObservation[], total: number, at?: string): TrendObservation[] {
+  const now = at ?? new Date().toISOString();
+  const list = (observations ?? []).filter((o) => o && typeof o.total === 'number' && o.total > 0 && typeof o.at === 'string' && o.at);
+  if (typeof total !== 'number' || !Number.isFinite(total) || total <= 0) return list;
+  const last = list[list.length - 1];
+  if (last && last.total === total && last.at.slice(0, 10) === now.slice(0, 10)) return list;
+  return [...list, { at: now, total }];
+}
+
+export function trendLine(observations: TrendObservation[]): Trend {
+  const valid = (observations ?? []).filter((o) => o && typeof o.total === 'number' && o.total > 0 && typeof o.at === 'string' && o.at);
+  if (valid.length < 2) return { confidence: 'none', line: '' };
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const started = new Date(first.at).toLocaleDateString();
+  const confidence = valid.length >= 3 ? 'medium' : 'low';
+  const move =
+    last.total < first.total
+      ? `fell from $${first.total.toLocaleString()} to $${last.total.toLocaleString()} — $${(first.total - last.total).toLocaleString()} less`
+      : last.total > first.total
+        ? `rose from $${first.total.toLocaleString()} to $${last.total.toLocaleString()} — $${(last.total - first.total).toLocaleString()} more`
+        : `have not moved — $${first.total.toLocaleString()} then, $${last.total.toLocaleString()} now`;
+  return {
+    confidence,
+    line: `Since you started watching on ${started}, the cheapest live fares out and back ${move}. Confidence: ${confidence} — based on ${valid.length} checks of your own fares, not a forecast. Past prices aren't a promise; fares move both ways.`,
+  };
+}

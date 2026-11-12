@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchLiveFares, priceCheck } from '../../../lib/duffel';
+import { appendObservation, fetchLiveFares, priceCheck, trendLine, type TrendObservation } from '../../../lib/duffel';
 import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../../../lib/planner';
 import { suggestedStart } from '../../../lib/tripCard';
 
@@ -7,7 +7,7 @@ import { suggestedStart } from '../../../lib/tripCard';
  * POST /api/price-check — the whole-trip price check (competitor
  * learning, Nov 11 #4: Mindtrip / Kayak).
  *
- * Body: { origin, destination, travelers, month, durationDays }.
+ * Body: { origin, destination, travelers, month, durationDays, history? }.
  * Asks Duffel for the live fares for the exact trip (same dates the
  * trip card uses), compares the cheapest out+back total with the
  * plan's Best-value flight leg, and returns the honest "book now or
@@ -15,6 +15,13 @@ import { suggestedStart } from '../../../lib/tripCard';
  * a forecast. When Duffel has no fare (no key, no airport code, no
  * offers), live is false and the response still carries the plan's
  * flight budget, so the UI can say what it knows instead of faking it.
+ *
+ * history (optional, round 2 #3): the watch's own past observations
+ * [{ at, total }] — the fresh check is appended (deduped) before the
+ * trend is read, so the returned trend always ends with today's fare.
+ * The trend is a humble read of the traveler's own checks ("Since you
+ * started watching…", confidence low/medium), never a forecast and
+ * never "95% accurate".
  *
  * The Duffel key never leaves the server; the response carries airline
  * names and prices only.
@@ -29,6 +36,16 @@ export async function POST(req: NextRequest) {
   const durationDays = typeof raw.durationDays === 'number' && raw.durationDays >= 2 ? raw.durationDays : 0;
 
   const plannerFlight = destination ? comparisonFor(destination, travelers).best.flight : 0;
+  // The watch's own past checks, validated and capped — arbitrary
+  // history is never trusted blindly.
+  const history: TrendObservation[] = Array.isArray(raw.history)
+    ? (raw.history as unknown[])
+        .filter(
+          (h): h is TrendObservation =>
+            !!h && typeof h === 'object' && typeof (h as TrendObservation).at === 'string' && typeof (h as TrendObservation).total === 'number' && (h as TrendObservation).total > 0
+        )
+        .slice(0, 50)
+    : [];
 
   const routeKey = destination ? routeKeyForDestination(destination) : '';
   const fareDestCity = routeKey ? ROUTE_STOPS[routeKey][0].city : destination;
@@ -53,6 +70,7 @@ export async function POST(req: NextRequest) {
       diff: 0,
       verdict: 'no_fare',
       line: '',
+      trend: trendLine(history),
     });
   }
 
@@ -64,6 +82,14 @@ export async function POST(req: NextRequest) {
     travelers,
   }).catch(() => null);
   const check = liveFares ? priceCheck(liveFares, plannerFlight) : { live: false, liveTotal: 0, plannerFlight, diff: 0, verdict: 'no_fare' as const, line: '' };
+  // The trend reads the watch's own past checks plus today's fresh
+  // fare (deduped — the same total on the same day adds nothing), so
+  // it always ends with the fare this response just fetched.
+  const trend = trendLine(
+    check.live && liveFares && liveFares.out.length && liveFares.back.length
+      ? appendObservation(history, check.liveTotal)
+      : history
+  );
 
   return NextResponse.json({
     live: check.live,
@@ -81,5 +107,6 @@ export async function POST(req: NextRequest) {
     diff: check.diff,
     verdict: check.verdict,
     line: check.line,
+    trend,
   });
 }

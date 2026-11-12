@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, type Plan, type RouteOverride } from '../lib/planner';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
+import { appendObservation, trendLine, type TrendObservation } from '../lib/duffel';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -35,6 +36,10 @@ type PriceCheckData = {
   diff: number;
   verdict: 'under' | 'over' | 'same' | 'no_fare';
   line: string;
+  // The trend read of the watch's own past checks (round 2 #3) — a
+  // humble sentence with a low/medium confidence, or an empty line when
+  // there are fewer than 2 observations to read.
+  trend?: { confidence: 'none' | 'low' | 'medium'; line: string };
 };
 type PriceWatch = {
   id: string;
@@ -49,6 +54,10 @@ type PriceWatch = {
   baselineAt: string;
   lastTotal: number | null;
   lastCheckedAt: string | null;
+  // The watch's own past checks (round 2 #3): one live out+back total
+  // per check date, baseline first. The trend is read from these —
+  // never from a forecast, never from the planner estimate.
+  history: TrendObservation[];
 };
 type Voices = { destination: string; text: string; source: string } | null;
 // On-trip flight status (competitor learning #5, TripIt Pro / Romie /
@@ -162,7 +171,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[] }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[] }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -303,6 +312,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
   // flow): a reply that asks one question must not also dump three prices.
   const withOptions = (p: { destination: string; travelers: number; reply: string; missing: string[]; needsMore?: boolean; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number }) =>
     p.destination && !p.needsMore ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers, { kids: p.kids ?? [] })}` } : p;
+  // The price watch for a trip, by its slots — its own past checks feed
+  // the trend read in the chat (tripState.priceHistory) and in the
+  // "Book now or wait?" box. A trip without a watch has no history, and
+  // the chat says so instead of inventing a confidence.
+  const watchFor = (dest: string | undefined, travelers: number, origin: string, month: number, days: number) =>
+    dest ? watches.find((w) => w.destination === dest && w.travelers === travelers && (w.origin || '') === (origin || '') && w.month === month && w.durationDays === days) : undefined;
+
   const send = async (textOverride?: string, statusOverride?: FlightStatusData | null) => {
     const text = (textOverride ?? input).trim();
     if (!text) return;
@@ -324,6 +340,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
     // Kids' ages, from everything said so far — the pace depends on them,
     // and they ride along in tripState like the origin.
     const kids = parseKidAges(contextText).length ? parseKidAges(contextText) : lastParsed?.kids ?? [];
+    // The price watch for this trip, if one exists — its own past checks
+    // ride along in tripState so the trend read is from real checks.
+    const tripWatch = lastParsed ? watchFor(lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0) : undefined;
     // Live AI first (server route); any failure falls back to the built-in planner.
     let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number };
     let live = false;
@@ -341,7 +360,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
           // Durable trip memory: the trip already established (destination
           // + travelers + departure city) goes with EVERY request, so it
           // survives history scrolling off the window.
-          ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice } } : {}),
+          ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } } : {}),
           // On-trip mode: tell the server the traveler is already there.
           ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
           // Disruption report: the checked flight status rides along so
@@ -518,7 +537,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
         if (j.live) baseline = j.liveTotal;
       } catch {}
     }
-    onWatchPrices({ ...slots, baseline, lastTotal: baseline });
+    onWatchPrices({ ...slots, baseline, lastTotal: baseline, history: baseline !== null ? appendObservation([], baseline) : [] });
     setActionMsg(
       baseline !== null
         ? `Watching ${plan.destination} prices — baseline $${baseline.toLocaleString()} for the cheapest live fares out and back (Duffel test fares). We'll tell you in My Trips when they drop below that.`
@@ -611,10 +630,14 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
     priceCheckKeyRef.current = key;
     setPriceCheck('loading');
     try {
+      // The watch's own past checks ride along, so the response's trend
+      // is read from real checks — and the box shows it beside the
+      // book-now read.
+      const watch = watchFor(plan.destination, plan.travelers, lastParsed?.origin ?? '', lastParsed?.month ?? 0, lastParsed?.durationDays ?? 0);
       const r = await fetch('/api/price-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin: lastParsed?.origin ?? '', destination: plan.destination, travelers: plan.travelers, month: lastParsed?.month ?? 0, durationDays: lastParsed?.durationDays ?? 0 }),
+        body: JSON.stringify({ origin: lastParsed?.origin ?? '', destination: plan.destination, travelers: plan.travelers, month: lastParsed?.month ?? 0, durationDays: lastParsed?.durationDays ?? 0, ...(watch && watch.history.length ? { history: watch.history } : {}) }),
       });
       const j = await r.json();
       if (priceCheckKeyRef.current === key) setPriceCheck(j as PriceCheckData);
@@ -628,11 +651,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
       priceCheckKeyRef.current = '';
       return;
     }
-    const key = `${plan.destination}|${plan.travelers}|${lastParsed?.origin ?? ''}|${lastParsed?.month ?? 0}|${lastParsed?.durationDays ?? 0}`;
+    const key = `${plan.destination}|${plan.travelers}|${lastParsed?.origin ?? ''}|${lastParsed?.month ?? 0}|${lastParsed?.durationDays ?? 0}|${watchFor(plan.destination, plan.travelers, lastParsed?.origin ?? '', lastParsed?.month ?? 0, lastParsed?.durationDays ?? 0)?.history.length ?? 0}`;
     if (key === priceCheckKeyRef.current) return;
     void fetchPriceCheck();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, lastParsed]);
+  }, [plan, lastParsed, watches]);
   // Map inventory (split-screen, Nov 11): the legs the traveler picked
   // from the map's price tags, and the leg whose card is open. A new
   // destination clears the picks — they belonged to the old trip.
@@ -932,6 +955,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
                   {priceCheck && priceCheck !== 'loading' && priceCheck.live && (
                     <>
                       <p style={{ fontSize: 14, margin: '4px 0' }}>{priceCheck.line}</p>
+                      {priceCheck.trend && priceCheck.trend.line ? (
+                        <p style={{ fontSize: 14, margin: '4px 0' }}>{priceCheck.trend.line}</p>
+                      ) : (
+                        <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>No price history yet — watch this trip&apos;s prices and we&apos;ll show whether the fares are drifting up or down.</p>
+                      )}
                       <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
                         Cheapest live fares: {priceCheck.out[0] ? `${priceCheck.out[0].airline} $${priceCheck.out[0].price.toLocaleString()} out` : 'no outbound fare'} · {priceCheck.back[0] ? `${priceCheck.back[0].airline} $${priceCheck.back[0].price.toLocaleString()} back` : 'no return fare'} · {priceCheck.departDate} → {priceCheck.returnDate}. Live Duffel fares (test fares in test mode).
                       </p>
@@ -1096,18 +1124,21 @@ export default function Home() {
       const r = await fetch('/api/price-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin: w.origin, destination: w.destination, travelers: w.travelers, month: w.month, durationDays: w.durationDays }),
+        body: JSON.stringify({ origin: w.origin, destination: w.destination, travelers: w.travelers, month: w.month, durationDays: w.durationDays, ...(w.history.length ? { history: w.history } : {}) }),
       });
       const j = (await r.json()) as PriceCheckData;
       setWatches((all) =>
         all.map((x) => {
           if (x.id !== id) return x;
           // A watch with no baseline yet starts the moment a live fare
-          // appears — the first live fare becomes the baseline.
+          // appears — the first live fare becomes the baseline, and the
+          // first observation in the history. Every later live check
+          // appends to the history (deduped — the same total on the same
+          // day adds nothing), so the trend is read from real checks.
           if (x.baseline === null && j.live) {
-            return { ...x, baseline: j.liveTotal, baselineAt: new Date().toISOString(), lastTotal: j.liveTotal, lastCheckedAt: new Date().toISOString() };
+            return { ...x, baseline: j.liveTotal, baselineAt: new Date().toISOString(), lastTotal: j.liveTotal, lastCheckedAt: new Date().toISOString(), history: appendObservation([], j.liveTotal) };
           }
-          return { ...x, lastTotal: j.live ? j.liveTotal : x.lastTotal, lastCheckedAt: new Date().toISOString() };
+          return { ...x, history: j.live ? appendObservation(x.history, j.liveTotal) : x.history, lastTotal: j.live ? j.liveTotal : x.lastTotal, lastCheckedAt: new Date().toISOString() };
         })
       );
     } catch {}
@@ -1154,7 +1185,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 
         <section>
@@ -1231,6 +1262,9 @@ export default function Home() {
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {watches.map((w) => {
                 const dropped = w.baseline !== null && w.lastTotal !== null && w.lastTotal < w.baseline ? w.baseline - w.lastTotal : 0;
+                // The trend read of this watch's own past checks — a humble
+                // sentence with a low/medium confidence, never a forecast.
+                const trend = trendLine(w.history);
                 return (
                   <li key={w.id}>
                     <span>
@@ -1239,6 +1273,7 @@ export default function Home() {
                       {w.lastTotal !== null ? ` · now $${w.lastTotal.toLocaleString()}` : ''}
                       {dropped > 0 ? ` · ↓ Price dropped $${dropped.toLocaleString()} since you started watching` : ''}
                       {w.lastCheckedAt ? ` · checked ${new Date(w.lastCheckedAt).toLocaleDateString()}` : ''}
+                      {trend.line ? <><br />{trend.line}</> : ''}
                     </span>
                     <span>
                       <button className="ghost" onClick={() => void checkWatch(w.id)}>Check now</button>{' '}

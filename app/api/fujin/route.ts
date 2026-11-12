@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
-import { fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, type LiveFares } from '../../../lib/duffel';
+import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { visaLine } from '../../../lib/visa';
 import { suggestedStart } from '../../../lib/tripCard';
 
@@ -123,7 +123,7 @@ const SYSTEM_PROMPT = [
   'OPEN-JAW — when the traveler changes a multi-city route, allow dropping a leg without regenerating the trip, and offer flying into one city and home from another when it saves a backtrack. Prices shown are for the return route unless stated otherwise.',
   'REVISION — when the traveler changes the trip they already have, change ONLY what they asked for and keep everything else (destination, dates, origin, travelers, the other stops). "Swap Vienna for Porto" means the route becomes Prague → Porto → Budapest with the same nights per city; "drop Vienna" removes it; "add Porto" adds it at the end; "Budapest before Vienna" or "put Budapest first" reorders; "slow down" drops the shortest stop; "more time in Prague" gives Prague the longest stay (set routeWeights {"Prague": 9}); "make it cheaper" / "upgrade" / "best value" changes the tier (return the tier field: 0 Cheapest, 1 Best value, 2 Premium); "change the budget to $2000" means pick the highest tier whose total fits $2000 and return its tier. Return the revised ordered list of cities in routeStops, and ONLY the changes the traveler asked for — never rebuild the route, never add a city they did not ask for, and never change the destination. If the city they name is not on the route (or is already on it), say so honestly and ask what they meant instead of inventing the change. A revision message naming route cities is NEVER a new destination. After any change, state the new total and the delta vs the previous plan (the totals are in the price table / FAMILY PRICES block) — confirm what changed, state what did NOT change, then the new total and the delta.',
   'VISA — when the trip\'s countries are known (see the VISA block below), mention the entry requirements in ONE short sentence in the Trip Summary, for a US passport, and point the traveler to the plan view\'s Visa & entry panel for the official source links. Never invent a visa rule, a fee, or a validity period — only state what the VISA block says. If there is no VISA block, say nothing about visas.',
-  'BOOK NOW — when the traveler asks whether to book now or wait, use the PRICE CHECK block below: it compares the cheapest live fares out and back with the plan\'s own flight budget, and says whether the plan still holds or would rise. Quote that read, never add your own forecast, and never say fares will drop or rise — fares move both ways and we never predict them. If there is no PRICE CHECK block, say the live fare is not available for this trip yet and offer a price watch in My Trips.',
+  'BOOK NOW — when the traveler asks whether to book now or wait, use the PRICE CHECK block below: it compares the cheapest live fares out and back with the plan\'s own flight budget, and says whether the plan still holds or would rise. Quote that read, never add your own forecast, and never say fares will drop or rise — fares move both ways and we never predict them. If a TREND block is present, quote its sentence too — it is the read of the traveler\'s own past fare checks (\"Since you started watching on [date], the cheapest fares out and back went $X → $Y. Confidence: low/medium — based on N checks of your own fares, not a forecast.\"). If there is no TREND block, say there is no price history yet and offer a price watch in My Trips. Never give a confidence level from nothing, never say "high confidence", and never say a forecast is "95% accurate". If there is no PRICE CHECK block, say the live fare is not available for this trip yet and offer a price watch in My Trips.',
   'DISRUPTION — when the traveler says their flight was cancelled, delayed, missed or diverted: first state what is confirmed — ONLY from the FLIGHT STATUS block below (or from the status the traveler quoted in their own message); if there is no status block, say plainly you don\'t have a live status for that flight and point them to the "Check my flight" box. A cancellation counts only when it is confirmed — never call a flight cancelled on a rumor or a single flag. Then list the rebooking options ONLY from the LIVE FARES block (airline, price, times) — never invent an alternate flight, a gate, or a rebooking. If no live fares are available, say so and offer to save a booking request in My Trips for the FujinTrip team. Keep it short and practical: what happened, what to do now, and the options.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
@@ -163,7 +163,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number) {
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[]) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -209,6 +209,14 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     // the plan's flight budget — never a forecast, always a snapshot.
     const checkLine = priceCheck(liveFares, comparisonFor(destination, parsed.travelers, { kids: parsed.kids ?? [] }).best.flight).line;
     if (checkLine) reply += ` ${checkLine}`;
+  }
+  // The trend read stands on its own: the watch's own past checks, with
+  // or without a fresh live fare today — the last observation is the
+  // freshest check, and the sentence says so.
+  if (destination && !parsed.needsMore && !declinedOffTopic) {
+    const freshTotal = liveFares?.live && liveFares.out.length && liveFares.back.length ? (liveFares.out[0]?.price ?? 0) + (liveFares.back[0]?.price ?? 0) : 0;
+    const trend = trendLine(freshTotal > 0 ? appendObservation(contextPriceHistory ?? [], freshTotal) : contextPriceHistory ?? []);
+    if (trend.line) reply += liveFares?.live ? ` ${trend.line}` : `\n\n${trend.line}`;
   }
   return NextResponse.json({
     live: false,
@@ -309,6 +317,17 @@ export async function POST(req: NextRequest) {
   // delta vs this tier.
   const stateTier =
     typeof tripState.tier === 'number' && [0, 1, 2].includes(tripState.tier) ? tripState.tier : undefined;
+  // The watch's own past fare checks for this trip (round 2 #3) — the
+  // cheapest live out+back total on each check date, sent by the page
+  // with every request so the trend read is always from real checks.
+  const statePriceHistory: TrendObservation[] = Array.isArray(tripState.priceHistory)
+    ? (tripState.priceHistory as unknown[])
+        .filter(
+          (h): h is TrendObservation =>
+            !!h && typeof h === 'object' && typeof (h as TrendObservation).at === 'string' && typeof (h as TrendObservation).total === 'number' && (h as TrendObservation).total > 0
+        )
+        .slice(0, 50)
+    : [];
   // The trip's current route override (from an earlier revision): the
   // ordered cities + weights, so the model and the fallback keep
   // building on the revised route instead of the original.
@@ -437,6 +456,16 @@ export async function POST(req: NextRequest) {
   if (check?.line) {
     systemPrompt += ` PRICE CHECK — ${check.line}`;
   }
+  // Trend (round 2 #3, Kayak): the watch's own past checks plus today's
+  // fresh live fare (both directions — a partial total is not comparable
+  // with past full totals). The model quotes the humble sentence when
+  // the traveler asks about timing; with fewer than 2 observations
+  // there is no sentence and the BOOK NOW rule says so.
+  const freshTotal = liveFares?.live && liveFares.out.length && liveFares.back.length ? (liveFares.out[0]?.price ?? 0) + (liveFares.back[0]?.price ?? 0) : 0;
+  const trend = trendLine(freshTotal > 0 ? appendObservation(statePriceHistory, freshTotal) : statePriceHistory);
+  if (trend.line) {
+    systemPrompt += ` TREND — ${trend.line}`;
+  }
   // Flight status (competitor learning #5): the traveler checked a
   // flight in the "Check my flight" box and sent the result with this
   // message — the model quotes THIS status and nothing else about the
@@ -479,7 +508,8 @@ export async function POST(req: NextRequest) {
       liveFares,
       stateRouteOverride,
       stateKids,
-      stateTier
+      stateTier,
+      statePriceHistory
     );
   }
   const apiKey = provider.apiKey;
@@ -533,14 +563,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory);
     }
 
     return NextResponse.json({
@@ -554,7 +584,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory);
   }
 }
 
