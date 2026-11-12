@@ -78,3 +78,22 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
   .plan-print .compare{grid-template-columns:1fr}
   .plan-print .compare .box:not(.chosen){display:none !important}
 }
+
+/* Split-screen chat + map (Nov 11): the chat stays still on the left and
+   the map fills the right half. The chat column scrolls inside itself
+   (the messages area flexes, the input stays pinned at the bottom) while
+   the map changes as the trip changes. On a narrow screen the two stack. */
+.chatmap{display:flex;gap:16px;align-items:stretch;height:min(88vh,860px);min-height:560px}
+.chatcol{flex:1 1 50%;min-width:0;display:flex;flex-direction:column}
+.chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
+.mapcol{flex:1 1 50%;min-width:0;display:flex;flex-direction:column;gap:10px}
+.map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed #d8cfb0;border-radius:12px;padding:24px;color:#6b655a;background:#fbf7ea}
+.map-placeholder p{max-width:340px}
+.legcard{border:1px solid #e8e0c8;border-radius:10px;padding:12px 14px;background:#fff}
+.legcard p{margin:6px 0}
+.maphint{font-size:13px;color:#6b655a;margin:0}
+@media (max-width:900px){
+  .chatmap{flex-direction:column;height:auto}
+  .chatmap .chat{max-height:60vh}
+  .mapcol{min-height:460px}
+}

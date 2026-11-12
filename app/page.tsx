@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, routeKeyForDestination, type Plan } from '../lib/planner';
-import { buildTripCard, cardComparison, CITY_INFO, type TripCard } from '../lib/tripCard';
+import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 
@@ -229,7 +229,11 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     if (parsed.destination) {
       // A new destination means a new trip: the old plan no longer applies
       // — clear it so the traveler builds a fresh one for this trip.
-      if (lastParsed && parsed.destination !== lastParsed.destination) setPlan(null);
+      if (lastParsed && parsed.destination !== lastParsed.destination) {
+        setPlan(null);
+        setChosenLegs(new Set());
+        setSelectedLeg(null);
+      }
       setLastParsed({
         destination: parsed.destination,
         travelers: parsed.travelers,
@@ -364,50 +368,135 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
             days: lastParsed?.durationDays ?? 3,
             month: lastParsed?.month ?? 0,
             origin: lastParsed?.origin ?? '',
+            // The map's price tags show the tier the traveler picked.
+            tier: choice,
           })
         : null,
-    [plan, lastParsed]
+    [plan, lastParsed, choice]
   );
   const comparison = useMemo(
     () => (plan ? cardComparison(plan.destination, plan.travelers) : null),
     [plan]
   );
+  // Map inventory (split-screen, Nov 11): the legs the traveler picked
+  // from the map's price tags, and the leg whose card is open. A new
+  // destination clears the picks — they belonged to the old trip.
+  const [chosenLegs, setChosenLegs] = useState<Set<string>>(new Set());
+  const [selectedLeg, setSelectedLeg] = useState<TripLeg | null>(null);
+  const [legExpanded, setLegExpanded] = useState(false);
+  const chosenTotal = useMemo(
+    () => (tripCard ? tripCard.legs.filter((l) => chosenLegs.has(l.id)).reduce((s, l) => s + l.price, 0) : 0),
+    [tripCard, chosenLegs]
+  );
+  // Add to plan: the leg joins the trip plan AND the chat — the traveler
+  // sees the pick in the conversation, not just on the map.
+  const addLegToPlan = (leg: TripLeg) => {
+    setChosenLegs((prev) => new Set(prev).add(leg.id));
+    setMsgs((m) => [...m, { who: 'ai', text: `Added to your plan: ${leg.label} — from $${leg.price.toLocaleString()}.` }]);
+  };
   const fmtDate = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const fmtDateYear = (d: Date) =>
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   return (
     <div>
-      <div className="chat">
-        {msgs.map((m, i) => (
-          <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
-            {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
-            {m.who === 'ai' && m.tips && m.tips.length > 0 && (
-              <ul style={{ fontSize: 13, color: '#6b655a', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
-                {m.tips.map((t) => <li key={t}>{t}</li>)}
-              </ul>
-            )}
+      {/* Split screen (Nov 11): the chat stays still on the left, the map
+          fills the right half and changes as the trip changes — the route
+          and the flights, stays and cars as price tags the traveler can
+          click to read more or add to the plan. */}
+      <div className="chatmap">
+        <div className="chatcol">
+          <div className="chat">
+            {msgs.map((m, i) => (
+              <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
+                {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
+                {m.who === 'ai' && m.tips && m.tips.length > 0 && (
+                  <ul style={{ fontSize: 13, color: '#6b655a', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
+                    {m.tips.map((t) => <li key={t}>{t}</li>)}
+                  </ul>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
+          <div className="row">
+            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
+            <button className="primary" onClick={send}>Send</button>
+          </div>
+          <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
+          <p className="selling">No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
+          {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: '#6b655a' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
+          <p className="no-print" style={{ marginTop: 16 }}>
+            <button className="primary" onClick={build}>Build my plan</button>{' '}
+            {lastParsed && (
+              <button className="ghost" onClick={() => setTripMode((m) => !m)}>
+                {tripMode ? `✓ On-trip mode on — ${lastParsed.destination}` : 'Take this plan on your trip'}
+              </button>
+            )}
+          </p>
+          {tripMode && lastParsed && (
+            <p className="no-print" style={{ fontSize: 13, color: '#6b655a' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
+          )}
+        </div>
+        <div className="mapcol no-print">
+          {tripCard ? (
+            <>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <TripMap
+                  stops={tripCard.stops
+                    .filter((s) => CITY_INFO[s.city])
+                    .map((s) => ({ city: s.city, lat: CITY_INFO[s.city].lat, lng: CITY_INFO[s.city].lng }))}
+                  legs={tripCard.legs}
+                  selectedLegId={selectedLeg?.id ?? null}
+                  onSelectLeg={(leg) => {
+                    setSelectedLeg(leg);
+                    setLegExpanded(false);
+                  }}
+                  addedLegIds={[...chosenLegs]}
+                />
+              </div>
+              {selectedLeg ? (
+                <div className="legcard">
+                  <strong>
+                    {selectedLeg.icon} {selectedLeg.label}
+                  </strong>
+                  <p>
+                    from <strong>${selectedLeg.price.toLocaleString()}</strong> · {selectedLeg.detail}
+                  </p>
+                  {legExpanded && <p style={{ fontSize: 14 }}>{selectedLeg.more}</p>}
+                  <div className="row">
+                    <button className="ghost" onClick={() => setLegExpanded((e) => !e)}>
+                      {legExpanded ? 'Show less' : 'Read more'}
+                    </button>
+                    {chosenLegs.has(selectedLeg.id) ? (
+                      <button className="ghost" disabled>
+                        ✓ Added to your plan
+                      </button>
+                    ) : (
+                      <button className="primary" onClick={() => addLegToPlan(selectedLeg)}>
+                        Add to plan
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="maphint">Click a price tag on the map to see the flight, stay or car — then read more or add it to your plan.</p>
+              )}
+              {chosenLegs.size > 0 && (
+                <p className="maphint">
+                  In your plan so far: {chosenLegs.size} of {tripCard.legs.length} items · ${chosenTotal.toLocaleString()} — the full plan is below.
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="map-placeholder">
+              <p>
+                <strong>Your trip map</strong>
+              </p>
+              <p>Tell Fujin AI where you want to go, then build the plan — the map fills in with your route, and the flights, stays and cars appear as price tags you can click.</p>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="row">
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
-        <button className="primary" onClick={send}>Send</button>
-      </div>
-      <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
-      <p className="selling">No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
-      {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: '#6b655a' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
-      <p className="no-print" style={{ marginTop: 16 }}>
-        <button className="primary" onClick={build}>Build my plan</button>{' '}
-        {lastParsed && (
-          <button className="ghost" onClick={() => setTripMode((m) => !m)}>
-            {tripMode ? `✓ On-trip mode on — ${lastParsed.destination}` : 'Take this plan on your trip'}
-          </button>
-        )}
-      </p>
-      {tripMode && lastParsed && (
-        <p className="no-print" style={{ fontSize: 13, color: '#6b655a' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
-      )}
       {plan && (
         <div className="plan-print" style={{ marginTop: 20 }}>
           <h3>Your {plan.destination} plan — pick one</h3>
@@ -422,13 +511,8 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
                 <span style={{ color: '#6b655a', fontSize: 13 }}>(Suggested dates — change anytime.)</span>
               </p>
               <p style={{ fontSize: 14, margin: '8px 0' }}>{tripCard.routeLine}</p>
-              <div className="no-print">
-                <TripMap
-                  stops={tripCard.stops
-                    .filter((s) => CITY_INFO[s.city])
-                    .map((s) => ({ city: s.city, lat: CITY_INFO[s.city].lat, lng: CITY_INFO[s.city].lng }))}
-                />
-              </div>
+              {/* The map lives in the split screen above — it shows the
+                  route and the price tags there, not inside the plan. */}
               <p className="print-only" style={{ fontSize: 13, color: '#6b655a' }}>Map: {tripCard.routeLine}</p>
               <div style={{ background: '#f7f3e3', border: '1px solid #e8e0c8', borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>
                 <strong style={{ fontSize: 14 }}>Top improvement for your budget</strong>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, routeKeyForDestination } from '../../../lib/planner';
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 
 /**
@@ -63,15 +63,21 @@ function getProvider(): Provider | null {
   return null;
 }
 
-// Price table built from the planner's comparison helper (2 travelers;
-// scaled proportionally for other party sizes). Same numbers as the
-// homepage comparison section and the plan cards — single source of
-// truth, the model quotes only these numbers, never invented prices.
+// Price table built from the planner's comparison helper. Both the
+// 1-traveler row AND the 2-traveler row are printed for every
+// destination, from buildPlan()/comparisonFor() directly — the live
+// model must NEVER scale a price itself: on the live site it quoted the
+// 2-traveler totals for a solo traveler (turn 5: $1,920/$3,000/$4,920
+// for 1 traveler; turn 6: it "scaled" by an invented ×0.8). The prompt
+// tells it to quote the row matching the traveler count exactly.
 const PRICE_TABLE = [...KNOWN_DESTINATIONS, 'Other destinations']
   .map((d) => {
-    const opts = buildPlan(d, 2, 3).options;
-    const c = comparisonFor(d, 2);
-    return `${d}: Cheapest $${opts[0].total.toLocaleString()} / Best value $${opts[1].total.toLocaleString()} (booking the same parts separately about $${c.separate.total.toLocaleString()}, save $${c.save.toLocaleString()}, ~${c.savePercent}%) / Premium $${opts[2].total.toLocaleString()}`;
+    const row = (n: number) => {
+      const opts = buildPlan(d, n, 3).options;
+      const c = comparisonFor(d, n);
+      return `${n} traveler${n > 1 ? 's' : ''}: Cheapest $${opts[0].total.toLocaleString()} / Best value $${opts[1].total.toLocaleString()} (booking the same parts separately about $${c.separate.total.toLocaleString()}, save $${c.save.toLocaleString()}, ~${c.savePercent}%) / Premium $${opts[2].total.toLocaleString()}`;
+    };
+    return `${d} — ${row(1)}; ${row(2)}`;
   })
   .join('\n');
 
@@ -88,15 +94,15 @@ const SYSTEM_PROMPT = [
   'FORMAT — keep the reply short and scannable: a warm line, the route, one line per day, the 3 prices, one recommendation, then the missing questions. Use short lines and simple bullets. Do not write long paragraphs or a full day-by-day guide in the chat — the full plan is what the PDF is for. But while you are still gathering details, ask ONE question at a time and show NO prices and NO day sketch yet (see GUIDED).',
   'Extract: destination, traveler count, dates, budget, travel pace, and departure city (where they fly from).',
   'DESTINATION — accept ANY destination the traveler names: any city, country or region (for example Paris, Japan, Europe). Never decline a travel request because the destination is not in the list below. If they name a country or region instead of a city (for example Europe), accept it as the destination and propose a route through it (see RECOMMEND below); add a follow-up question to missing only after proposing.',
-  'GUIDED — when the traveler gives a vague request (a region with no cities, no dates, no origin, no length), guide them one question at a time, in this order: (1) if they said only "Europe", offer the choice — Central Europe (Prague, Vienna, Budapest) or sunny Portugal (Lisbon & Porto); (2) when are they going, and for how long; (3) where are they flying from; (4) their budget, only if they never mentioned one. Ask exactly ONE question per reply, keep it short, and show no prices and no day-by-day yet. Once destination, month, length and origin are all known, give the Trip Summary (route with nights per city, dates, style, travelers) and ask "Does this sound right — shall I build it?", then show the 3 prices. Never dump the full plan before the summary is confirmed.',
+  'GUIDED — when the traveler gives a vague request (a region with no cities, no dates, no origin, no length), guide them one question at a time, in this order: (1) if they said only "Europe", offer the choice — Central Europe (Prague, Vienna, Budapest) or sunny Portugal (Lisbon & Porto); (2) when are they going, and for how long; (3) where are they flying from; (4) their budget, only if they never mentioned one. Ask exactly ONE question per reply, keep it short, and show no prices and no day-by-day yet. Once destination, month, length and origin are all known, give the Trip Summary (route with nights per city, dates, style, travelers) and ask "Does this sound right — shall I build it?", then show the 3 prices, and tell the traveler to pick their flights and stays on the map next to the chat (click a price tag to read more or add it to the plan). Never dump the full plan before the summary is confirmed.',
   'ORIGIN — the flight fare depends on where the traveler flies from. If they did not say where they are traveling from, ask for the departure city and add "Departure city" to missing. Never quote a flight fare as if it were for a specific origin when the origin is unknown — planner prices are estimates, labeled as such. When the traveler gave a month (for example January) but no exact dates, ask "which dates in January?" — do not list "Dates" as missing as if nothing was said.',
   'ROUTE STICKINESS — once you propose a route, KEEP IT across turns unless the traveler asks to change it. Never silently swap cities on the next reply: if turn 1 proposed Lisbon → Madrid → Barcelona → Paris → Rome → Athens, turn 2 must build on that same route, not propose a different one. A changed route confuses the traveler — the route they were just given disappeared.',
   'ALL THREE PRICES — every plan reply shows all three totals: Cheapest, Best value AND Premium. Never show only two of them.',
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
   'Traveler count: "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'List anything missing as short questions in the missing array.',
-  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates, per trip for 2 travelers; scale proportionally for other party sizes). Never invent any other price or fare. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from the table below (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
-  'FujinTrip plan prices (2 travelers):\n' + PRICE_TABLE,
+  'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes.',
+  'FujinTrip plan prices (1 traveler and 2 travelers):\n' + PRICE_TABLE,
   'LOCAL TIPS — return 1-3 short tips in the tips array: what travelers often love about the destination and how to experience it like a local — eat where locals eat, local transport, neighborhood stays, local guides. FujinTrip’s approach: travel globally, act locally — global trip planning with local experiences. These are general travel knowledge; never invent named reviewers, quotes, or fake review scores.',
   'Reply with strict JSON only, no other text: {"destination": string, "travelers": number, "reply": string, "missing": string[], "tips": string[]}.',
   'If the destination is unclear AND the traveler gave no constraints at all, ask which city or country they mean. If they already said they don\'t know or have nothing in mind, recommend instead of asking again.',
@@ -246,6 +252,18 @@ export async function POST(req: NextRequest) {
   }
   if (stateDestination) {
     systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
+  }
+  // Nights per city, from the planner's distribution — injected so the
+  // live model never re-splits the route: on the live site turn 5 gave
+  // Prague 4 / Vienna 4 / Budapest 4 plus filler days and turn 6 gave
+  // 3/3/3, so the chat and the trip card disagreed. The distribution is
+  // the same one the trip card uses, so the chat and the map always agree.
+  // Only when the destination maps to a route and the length is known.
+  const routeKey = routeKeyForDestination(voicesDest || stateDestination);
+  const tripDays = parseDuration(fullText);
+  if (routeKey && tripDays >= 2) {
+    const legs = distributeNights(routeKey, tripDays);
+    systemPrompt += ` ROUTE NIGHTS — for ${voicesDest || stateDestination} over ${tripDays} days, the nights per city are EXACTLY: ${legs.map((l) => `${l.city} ${l.nights} nights`).join(', ')}. Use exactly these nights, in exactly this order, in every reply — never re-split them, never add filler days, and never change them on a later turn.`;
   }
 
   const provider = getProvider();

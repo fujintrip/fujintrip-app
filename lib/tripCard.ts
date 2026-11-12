@@ -142,6 +142,20 @@ export type TripCardStop = {
   days: TripCardDay[];
   transportIn: { mode: string; from: string; price: number };
 };
+export type TripLeg = {
+  id: string;
+  kind: 'flight' | 'transport' | 'stay' | 'car';
+  icon: string;
+  label: string;
+  detail: string;
+  more: string;
+  price: number;
+  city: string;
+  lat: number;
+  lng: number;
+  startDate: Date;
+  endDate: Date;
+};
 export type TripCard = {
   title: string;
   destination: string;
@@ -154,6 +168,7 @@ export type TripCard = {
   origin: string;
   travelers: number;
   stops: TripCardStop[];
+  legs: TripLeg[];
   returnTransport: { mode: string; from: string; price: number };
   experiences: number;
   hotels: number;
@@ -174,6 +189,7 @@ export function buildTripCard(opts: {
   days: number;
   month: number;
   origin: string;
+  tier?: number;
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -181,7 +197,10 @@ export function buildTripCard(opts: {
   const startDate = suggestedStart(opts.month);
   const endDate = addDays(startDate, days - 1);
   const plan = buildPlan(opts.destination, opts.travelers, days);
-  const best = plan.options[1];
+  // The tier the traveler picked (0 Cheapest, 1 Best value, 2 Premium):
+  // the map's price tags show that tier's legs, not always Best value.
+  const tier = Math.min(2, Math.max(0, opts.tier ?? 1));
+  const best = plan.options[tier];
   const cheapest = plan.options[0];
   const totalNights = days - 1;
 
@@ -233,6 +252,116 @@ export function buildTripCard(opts: {
   });
 
   const legIcon = (LEG_MODE[routeKey] ?? '🚆 Train').split(' ')[0];
+  // Stay estimates are rounded per stop, so their sum can drift a dollar
+  // from the hotel leg — nudge the longest stay so the map's stays add up
+  // exactly to the plan's hotel total (same rule as fixLegs in planner).
+  {
+    const diff = best.hotel - cardStops.reduce((s, st) => s + st.stayEstimate, 0);
+    if (diff !== 0) {
+      const longest = cardStops.reduce((a, b) => (b.nights > a.nights ? b : a));
+      longest.stayEstimate += diff;
+    }
+  }
+
+  // Map inventory (split-screen redesign, Nov 11): every bookable leg as
+  // a marker with a price tag — flights, stays, car rental. The traveler
+  // clicks a tag to read more, then Add to plan. Prices are the chosen
+  // tier's legs; stays and cars split by nights like the hotel leg.
+  // Coordinates are the city coordinates with small offsets so the
+  // stay/car tags never stack on the city pin; flight tags sit midway
+  // along the route (or at the arrival city when the origin is unknown).
+  const coordsFor = (name: string): { lat: number; lng: number } | null => {
+    const info = CITY_INFO[name === 'NYC' ? 'New York' : name];
+    return info ? { lat: info.lat, lng: info.lng } : null;
+  };
+  const mid = (
+    a: { lat: number; lng: number } | null,
+    b: { lat: number; lng: number } | null,
+    fb: { lat: number; lng: number }
+  ): { lat: number; lng: number } =>
+    a && b ? { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 } : fb;
+  const legs: TripLeg[] = [];
+  const firstCoords = coordsFor(cardStops[0].city) ?? { lat: 0, lng: 0 };
+  const lastCoords = coordsFor(cardStops[cardStops.length - 1].city) ?? firstCoords;
+  const originCoords = opts.origin ? coordsFor(opts.origin) : null;
+  const legMode = LEG_MODE[routeKey] ?? '🚆 Train';
+  legs.push({
+    id: 'flight-out',
+    kind: 'flight',
+    icon: '✈️',
+    label: `Flight ${opts.origin || 'Your city'} → ${cardStops[0].city}`,
+    detail: 'Economy · planning estimate',
+    more: 'The flight fare is passed through at cost, plus our service fee shown separately at checkout. Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.',
+    price: legFlightOut,
+    city: cardStops[0].city,
+    ...mid(originCoords, firstCoords, firstCoords),
+    startDate,
+    endDate: startDate,
+  });
+  for (let i = 1; i < cardStops.length; i++) {
+    const from = cardStops[i - 1];
+    const to = cardStops[i];
+    legs.push({
+      id: `leg-${i}`,
+      kind: 'transport',
+      icon: legMode.split(' ')[0],
+      label: `${legMode} ${from.city} → ${to.city}`,
+      detail: 'Planning estimate',
+      more: 'Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.',
+      price: legIntercity,
+      city: to.city,
+      ...mid(coordsFor(from.city), coordsFor(to.city), coordsFor(to.city) ?? firstCoords),
+      startDate: to.startDate,
+      endDate: to.startDate,
+    });
+  }
+  const lastStop = cardStops[cardStops.length - 1];
+  legs.push({
+    id: 'flight-back',
+    kind: 'flight',
+    icon: '✈️',
+    label: `Flight ${lastStop.city} → ${opts.origin || 'Your city'}`,
+    detail: 'Economy · planning estimate',
+    more: 'The flight fare is passed through at cost, plus our service fee shown separately at checkout. Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.',
+    price: legFlightBack,
+    city: lastStop.city,
+    ...mid(lastCoords, originCoords, lastCoords),
+    startDate: endDate,
+    endDate,
+  });
+  for (const st of cardStops) {
+    const c = coordsFor(st.city) ?? firstCoords;
+    const info = CITY_INFO[st.city];
+    legs.push({
+      id: `stay-${st.city}`,
+      kind: 'stay',
+      icon: '🛏️',
+      label: `Stay in ${st.city}`,
+      detail: `${st.nights} night${st.nights > 1 ? 's' : ''} · hostel / guesthouse estimate`,
+      more: `${st.intro} ${info ? `Days here: ${info.days.map((d) => d.t).join(' · ')}.` : ''} The stay is a planning estimate — real named stays with ratings arrive with a hotel supplier (Expedia / Duffel Stays). Nothing is booked until you confirm it.`,
+      price: st.stayEstimate,
+      city: st.city,
+      lat: c.lat + 0.04,
+      lng: c.lng,
+      startDate: st.startDate,
+      endDate: st.endDate,
+    });
+    legs.push({
+      id: `car-${st.city}`,
+      kind: 'car',
+      icon: '🚗',
+      label: `Car rental in ${st.city}`,
+      detail: `${st.nights} day${st.nights > 1 ? 's' : ''} · pickup on arrival`,
+      more: `A rental car for your ${st.nights} night${st.nights > 1 ? 's' : ''} in ${st.city}, picked up when you arrive and dropped off when you leave. Planning estimate — live rental cars arrive with a car supplier.`,
+      price: Math.round((best.car * st.nights) / totalNights),
+      city: st.city,
+      lat: c.lat - 0.04,
+      lng: c.lng + 0.04,
+      startDate: st.startDate,
+      endDate: st.endDate,
+    });
+  }
+
   const experiences = cardStops.reduce((s, st) => s + st.days.reduce((a, d) => a + d.experiences, 0), 0);
   const routeLine = [
     opts.origin ? `${opts.origin} ✈️` : '',
@@ -255,6 +384,7 @@ export function buildTripCard(opts: {
     origin: opts.origin,
     travelers: opts.travelers,
     stops: cardStops,
+    legs,
     returnTransport: {
       mode: '✈️ Flight',
       from: cardStops[cardStops.length - 1].city,

@@ -805,7 +805,7 @@ export function askFujin(
           ? `${origin ? `${origin} ✈️ ` : ''}${legs[0].city}`
           : dest;
     const monthName = month ? MONTH_NAMES[month - 1] : '';
-    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport. Does this sound right? Tap Build my plan to generate the full trip card.`;
+    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport. Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
   };
   const isConfirmation = /^(yes|yeah|yep|sure|ok|okay|looks great|looks good|perfect|sounds good|sounds great|build it|let'?s build|go ahead|do it|great|love it)\b/.test(
     currentLower.trim()
@@ -892,7 +892,7 @@ export function askFujin(
     return {
       destination: known,
       travelers,
-      reply: `Great — your trip is set. Tap Build my plan below to generate the full trip card.`,
+      reply: `Great — your trip is set. Tap Build my plan below to generate the full trip card, then pick your flights and stays on the map next to the chat.`,
       missing,
       needsMore: false,
     };
