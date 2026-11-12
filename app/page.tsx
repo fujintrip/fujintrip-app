@@ -1153,7 +1153,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
                 {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
                 {m.who === 'ai' && m.tips && m.tips.length > 0 && (
-                  <ul style={{ fontSize: 13, color: '#666', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
+                  <ul style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
                     {m.tips.map((t) => <li key={t}>{t}</li>)}
                   </ul>
                 )}
@@ -1187,7 +1187,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               exactly where it matters most. It now sits in the chat
               panel, visible on every viewport. */}
           {chosenLegs.size > 0 && mapCard && (
-            <p className="no-print" style={{ fontSize: 13, color: '#666', margin: '0 0 8px' }}>
+            <p className="no-print" style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 8px' }}>
               In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${bundleTotal(bundle).toLocaleString()}
             </p>
           )}
@@ -1216,7 +1216,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               section and in the footer — it now lives once, near the
               prices in the plan section and in the footer. */}
           <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
-          {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: '#666' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
+          {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: 'var(--muted)' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
           <p className="no-print" style={{ marginTop: 16 }}>
             <button className="primary" onClick={build}>Build my plan</button>{' '}
             {lastParsed && (
@@ -1228,9 +1228,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           {/* Start Anywhere (competitor learning round 2 #6, Mindtrip):
               paste a link to a travel article, or paste the text of
               one — the trip is drafted from the places it names. */}
-          <div className="no-print" style={{ border: '1px solid #e5e5e5', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+          <div className="no-print" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
             <strong style={{ fontSize: 13 }}>Start from a link</strong>
-            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
             <div className="row">
               <input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startFromLink()} placeholder="https://… or paste the text of an article" aria-label="Link or text to start a trip from" />
               <button className="ghost" onClick={startFromLink} disabled={!linkInput.trim() || linkBusy}>{linkBusy ? 'Reading…' : 'Start from this'}</button>
@@ -1238,11 +1238,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           </div>
           {tripMode && lastParsed && (
             <div className="no-print" style={{ marginTop: 8 }}>
-              <p style={{ fontSize: 13, color: '#666' }}>On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
+              <p className="plan-muted">On-trip mode for {lastParsed.destination}: short, right-now answers — where to eat tonight, what’s open, how to get there. (WhatsApp delivery comes later — it needs a business number.)</p>
               {/* Check my flight (competitor learning #5, TripIt Pro /
                   Romie / Layla): live status, gate + baggage, and the
                   "my flight was cancelled" path to rebooking options. */}
-              <div style={{ border: '1px solid #e5e5e5', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+              <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
                 <strong style={{ fontSize: 13 }}>Check my flight</strong>
                 <div className="row" style={{ marginTop: 8 }}>
                   <input value={flightNo} onChange={(e) => setFlightNo(e.target.value)} placeholder="Flight number, e.g. UAL123" aria-label="Flight number" style={{ textTransform: 'uppercase' }} />
@@ -1269,7 +1269,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       {' · '}Arrives {flightStatus.scheduledArrival ? new Date(flightStatus.scheduledArrival).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'}
                       {flightStatus.estimatedArrival && flightStatus.estimatedArrival !== flightStatus.scheduledArrival ? ` (now ${new Date(flightStatus.estimatedArrival).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })})` : ''}
                     </p>
-                    <p style={{ margin: '4px 0', color: '#666' }}>
+                    <p style={{ margin: '4px 0', color: 'var(--muted)' }}>
                       {flightStatus.terminalOrigin ? `Terminal ${flightStatus.terminalOrigin}` : ''}
                       {flightStatus.gateOrigin ? ` · gate ${flightStatus.gateOrigin}` : ''}
                       {flightStatus.terminalDestination || flightStatus.gateDestination ? ` · arrival ${flightStatus.terminalDestination ? `terminal ${flightStatus.terminalDestination}` : ''}${flightStatus.terminalDestination && flightStatus.gateDestination ? ', ' : ''}${flightStatus.gateDestination ? `gate ${flightStatus.gateDestination}` : ''}` : ''}
@@ -1282,7 +1282,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   </div>
                 )}
                 {flightStatus && flightStatus !== 'loading' && !flightStatus.live && (
-                  <p style={{ marginTop: 10, fontSize: 13, color: '#666' }}>{flightStatus.message ?? 'Live flight status isn’t available for this flight right now.'}</p>
+                  <p style={{ marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>{flightStatus.message ?? 'Live flight status isn’t available for this flight right now.'}</p>
                 )}
                 <button className="ghost" style={{ marginTop: 10 }} onClick={reportCancellation}>
                   ✈ My flight was cancelled — what are my options?
@@ -1293,7 +1293,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   price band, open-now, walk time, dish and one Wikivoyage
                   quote. Fetched on demand; a place whose hours cannot be
                   verified says so, never guessed open. */}
-              <div style={{ border: '1px solid #e5e5e5', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+              <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
                 <strong style={{ fontSize: 13 }}>Tonight near you</strong>
                 <div className="row" style={{ marginTop: 8 }}>
                   <button className="ghost" onClick={fetchTonightPlaces} disabled={tonight === 'loading'}>
@@ -1308,13 +1308,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                         {p.priceBand ? ` · ${p.priceBand}` : ''} · {p.openNow === true ? 'Open now' : p.openNow === false ? 'Closed now' : 'Hours not verified'}
                         {p.walkMinutes ? ` · about ${p.walkMinutes}-min walk from the city center (estimate)` : ''}
                         {p.dish ? <div style={{ marginTop: 2 }}>{p.dish}</div> : null}
-                        {p.quote ? <div style={{ marginTop: 2, color: '#666' }}>Wikivoyage says: “{p.quote}”</div> : null}
+                        {p.quote ? <div style={{ marginTop: 2, color: 'var(--muted)' }}>Wikivoyage says: “{p.quote}”</div> : null}
                       </li>
                     ))}
                   </ul>
                 )}
                 {tonight && tonight !== 'loading' && tonight.places.length === 0 && (
-                  <p style={{ marginTop: 10, fontSize: 13, color: '#666' }}>I couldn&apos;t confirm anywhere open tonight in {foodCity} — the guide has no Eat listings I could verify. Try asking Fujin AI, or check back later.</p>
+                  <p style={{ marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>I couldn&apos;t confirm anywhere open tonight in {foodCity} — the guide has no Eat listings I could verify. Try asking Fujin AI, or check back later.</p>
                 )}
               </div>
             </div>
@@ -1356,7 +1356,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     </p>
                   )}
                   {selectedLeg.terms && (
-                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>{selectedLeg.terms}</p>
+                    <p className="plan-note">{selectedLeg.terms}</p>
                   )}
                   {legExpanded && <p style={{ fontSize: 14 }}>{selectedLeg.more}</p>}
                   <div className="row">
@@ -1397,44 +1397,44 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           {tripCard && (
             <div style={{ marginTop: 12 }}>
               <h3 style={{ margin: '4px 0' }}>{tripCard.title}</h3>
-              <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+              <p className="plan-note">
                 {tripCard.days} days · {tripCard.stops.length} {tripCard.stops.length > 1 ? 'cities' : 'city'} · {tripCard.experiences} experiences · {tripCard.hotels} {tripCard.hotels > 1 ? 'stays' : 'stay'} · {tripCard.transports} transports
               </p>
               {tripCard.familyNote && (
-                <p style={{ fontSize: 14, margin: '8px 0', background: '#fff1e8', border: '1px solid #ead9c8', borderRadius: 10, padding: '10px 14px' }}>
+                <p style={{ fontSize: 14, margin: '8px 0', background: 'var(--accent-soft)', border: '1px solid #ead9c8', borderRadius: 10, padding: '10px 14px' }}>
                   <strong>Family pace</strong> — {tripCard.familyNote}
                 </p>
               )}
-              <p style={{ fontSize: 14, margin: '4px 0' }}>
+              <p className="plan-line">
                 <strong>{fmtDateYear(tripCard.startDate)} – {fmtDateYear(tripCard.endDate)}</strong>{' '}
-                <span style={{ color: '#666', fontSize: 13 }}>(Suggested dates — change anytime.)</span>
+                <span style={{ color: 'var(--muted)', fontSize: 13 }}>(Suggested dates — change anytime.)</span>
               </p>
               <p style={{ fontSize: 14, margin: '8px 0' }}>{tripCard.routeLine}</p>
               {/* The map lives in the split screen above — it shows the
                   route and the price tags there, not inside the plan. */}
-              <p className="print-only" style={{ fontSize: 13, color: '#666' }}>Map: {tripCard.routeLine}</p>
-              <div style={{ background: '#f7f7f5', border: '1px solid #e8e8e6', borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>
+              <p className="print-only plan-muted">Map: {tripCard.routeLine}</p>
+              <div className="plan-box">
                 <strong style={{ fontSize: 14 }}>Top improvement for your budget</strong>
-                <p style={{ fontSize: 14, margin: '4px 0' }}>{tripCard.budgetTip}</p>
+                <p className="plan-line">{tripCard.budgetTip}</p>
               </div>
               {/* The stops render from the display card (round 2 #10):
                   when a weather/closure swap applies, the two days'
                   activities exchange places — the dates stay put. */}
               {(displayCard ?? tripCard).stops.map((stop, si) => (
-                <div key={stop.city} style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+                <div key={stop.city} className="plan-section">
                   <strong>Days {stop.days[0]?.day ?? si + 1}{stop.days.length > 1 ? `-${stop.days[stop.days.length - 1].day}` : ''} · {fmtDate(stop.startDate)} – {fmtDate(stop.endDate)} · {stop.city}</strong>
                   <p style={{ margin: '4px 0' }}>{stop.intro}</p>
                   {/* Start Anywhere (round 2 #6): the sentence from the
                       traveler's own link that named this stop — kept with
                       the plan so the trip remembers where it came from. */}
                   {stop.sourceTip && (
-                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>From your link: “{stop.sourceTip}”</p>
+                    <p className="plan-note">From your link: “{stop.sourceTip}”</p>
                   )}
-                  <p style={{ fontSize: 14, margin: '4px 0' }}>
-                    <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: '#666' }}>(estimate)</span>
+                  <p className="plan-line">
+                    <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
                   </p>
-                  <p style={{ fontSize: 14, margin: '4px 0' }}>
-                    <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()} <span style={{ color: '#666' }}>(planning estimate — real named stays arrive with a hotel supplier)</span>
+                  <p className="plan-line">
+                    <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(planning estimate — real named stays arrive with a hotel supplier)</span>
                   </p>
                   <p style={{ fontSize: 14, margin: '8px 0 4px' }}><b>Itinerary</b></p>
                   {stop.days.map((d) => (
@@ -1448,30 +1448,30 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               {/* Weather / closure day-swap (round 2 #10): the Plan
                   updates box — what changed and why, with the check
                   dates. The button runs the check on demand. */}
-              <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+              <div className="plan-section">
                 <strong>Plan updates — weather &amp; closures</strong>
                 {weatherCheck === null && (
                   <div style={{ marginTop: 8 }}>
-                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Checks the closures on your dates (Louvre, Uffizi, Vatican Museums) and the 16-day rain forecast — and swaps a day when one is closed or rainy.</p>
+                    <p className="plan-note">Checks the closures on your dates (Louvre, Uffizi, Vatican Museums) and the 16-day rain forecast — and swaps a day when one is closed or rainy.</p>
                     <button className="ghost" onClick={checkWeather}>Check weather &amp; closures</button>
                   </div>
                 )}
                 {weatherCheck === 'loading' && (
-                  <p style={{ fontSize: 14, margin: '4px 0' }}>Checking weather &amp; closures…</p>
+                  <p className="plan-line">Checking weather &amp; closures…</p>
                 )}
                 {weatherCheck && weatherCheck !== 'loading' && (
                   <div style={{ marginTop: 8 }}>
                     {weatherCheck.swaps.length ? (
                       weatherCheck.swaps.map((s, i) => (
-                        <p key={i} style={{ fontSize: 14, margin: '4px 0' }}>
+                        <p key={i} className="plan-line">
                           {s.type === 'closure' ? 'Closed' : 'Rain'} — Day {s.fromDay} (“{s.fromTitle}”) swaps with Day {s.toDay} (“{s.toTitle}”) in {s.city}: {s.reason}
                         </p>
                       ))
                     ) : (
-                      <p style={{ fontSize: 14, margin: '4px 0' }}>Nothing needs to move — no closures on your dates, and no rainy outdoor day.</p>
+                      <p className="plan-line">Nothing needs to move — no closures on your dates, and no rainy outdoor day.</p>
                     )}
                     {!weatherCheck.forecastAvailable && (
-                      <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+                      <p className="plan-note">
                         {weatherCheck.forecastReason === 'too_far'
                           ? `Weather forecast not available yet — your trip starts ${weatherCheck.startDate}, more than 16 days out.`
                           : weatherCheck.forecastReason === 'past'
@@ -1479,7 +1479,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                             : 'The weather forecast could not be loaded just now — the closures above are still checked.'}
                       </p>
                     )}
-                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Closure rules checked {weatherCheck.closuresCheckedAt} · forecast from Open-Meteo, checked {new Date(weatherCheck.checkedAt).toLocaleString()}.</p>
+                    <p className="plan-note">Closure rules checked {weatherCheck.closuresCheckedAt} · forecast from Open-Meteo, checked {new Date(weatherCheck.checkedAt).toLocaleString()}.</p>
                     <button className="ghost" onClick={checkWeather}>Check again</button>
                   </div>
                 )}
@@ -1488,13 +1488,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   the map, with the exact total and the last day a leg
                   can still be added at the same bundled price. */}
               {bundle.legs.length > 0 && (
-                <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+                <div className="plan-section">
                   <strong>Your bundle — {bundle.legs.length} item{bundle.legs.length > 1 ? 's' : ''} · ${bundleTotal(bundle).toLocaleString()}</strong>
                   {lockedUntil && (
-                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Locked until {lockedUntil} — you can add your hotel, car or activities any time before then, at the same bundled price.</p>
+                    <p className="plan-note">Locked until {lockedUntil} — you can add your hotel, car or activities any time before then, at the same bundled price.</p>
                   )}
                   {bundle.legs.map((leg) => (
-                    <p key={leg.id} style={{ fontSize: 14, margin: '4px 0' }}>
+                    <p key={leg.id} className="plan-line">
                       {leg.label} · ${leg.price.toLocaleString()}{' '}
                       <button className="ghost" onClick={() => removeLegFromBundle(leg.id)}>Remove</button>
                     </p>
@@ -1506,12 +1506,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   settle-up. No money moves here — the travelers settle
                   up between themselves. */}
               {plan && plan.travelers > 1 && (
-                <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+                <div className="plan-section">
                   <strong>Split the trip — {plan.options[choice].name}</strong>
-                  <p style={{ fontSize: 14, margin: '4px 0' }}>
+                  <p className="plan-line">
                     {splitPeople.map((p) => `${p.label} $${p.total.toLocaleString()}`).join(' · ')} — ${splitTotal.toLocaleString()} total for {plan.travelers} travelers.
                   </p>
-                  <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Record who paid what on the trip — FujinTrip works out who owes whom. No money moves here; settle up between yourselves.</p>
+                  <p className="plan-note">Record who paid what on the trip — FujinTrip works out who owes whom. No money moves here; settle up between yourselves.</p>
                   <div className="row" style={{ marginTop: 8 }}>
                     <select value={expPayer || splitPeople[0]?.label || ''} onChange={(e) => setExpPayer(e.target.value)} aria-label="Who paid">
                       {splitPeople.map((p) => <option key={p.label} value={p.label}>{p.label}</option>)}
@@ -1535,7 +1535,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   {expenses.length > 0 && (
                     <div style={{ marginTop: 10 }}>
                       {expenses.map((e) => (
-                        <p key={e.id} style={{ fontSize: 14, margin: '4px 0' }}>
+                        <p key={e.id} className="plan-line">
                           {e.payer} paid ${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{e.note ? ` — ${e.note}` : ''} · split between {e.shares.join(', ')}{' '}
                           <button className="ghost" onClick={() => setExpenses((prev) => prev.filter((x) => x.id !== e.id))}>Remove</button>
                         </p>
@@ -1544,15 +1544,15 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       {settle.payments.length ? (
                         settle.payments.map((s, i) => <p key={i} style={{ fontSize: 14, margin: '3px 0' }}>{settlementLine(s)}</p>)
                       ) : (
-                        <p style={{ fontSize: 14, margin: '4px 0' }}>All settled — nobody owes anyone.</p>
+                        <p className="plan-line">All settled — nobody owes anyone.</p>
                       )}
                     </div>
                   )}
                 </div>
               )}
-              <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
-                <p style={{ fontSize: 14, margin: '4px 0' }}>
-                  <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: '#666' }}>(estimate)</span>
+              <div className="plan-section">
+                <p className="plan-line">
+                  <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(estimate)</span>
                 </p>
               </div>
               {comparison && (
@@ -1560,7 +1560,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   <h3 style={{ margin: '4px 0' }}>Our rate vs other options</h3>
                   <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '2px solid #e8e8e6' }}>
+                      <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--line)' }}>
                         <th style={{ padding: '6px 0' }}></th>
                         <th style={{ padding: '6px 0' }}>FujinTrip — Best value</th>
                         <th style={{ padding: '6px 0' }}>Booking separately</th>
@@ -1568,11 +1568,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       </tr>
                     </thead>
                     <tbody>
-                      <tr><td>Flights</td><td>${comparison.best.flight.toLocaleString()}</td><td>${comparison.separate.flight.toLocaleString()}</td><td rowSpan={4} style={{ verticalAlign: 'top', color: '#666' }}>Live competitor rates arrive with live fares — no live fare feed is connected yet, so we show nothing invented here.</td></tr>
+                      <tr><td>Flights</td><td>${comparison.best.flight.toLocaleString()}</td><td>${comparison.separate.flight.toLocaleString()}</td><td rowSpan={4} style={{ verticalAlign: 'top', color: 'var(--muted)' }}>Live competitor rates arrive with live fares — no live fare feed is connected yet, so we show nothing invented here.</td></tr>
                       <tr><td>Hotels</td><td>${comparison.best.hotel.toLocaleString()}</td><td>${comparison.separate.hotel.toLocaleString()}</td></tr>
                       <tr><td>Car</td><td>${comparison.best.car.toLocaleString()}</td><td>${comparison.separate.car.toLocaleString()}</td></tr>
                       <tr><td>Activities</td><td>${comparison.best.activities.toLocaleString()}</td><td>${comparison.separate.activities.toLocaleString()}</td></tr>
-                      <tr style={{ borderTop: '2px solid #e8e8e6', fontWeight: 700 }}><td>Total</td><td>${comparison.best.total.toLocaleString()}</td><td>${comparison.separate.total.toLocaleString()}</td></tr>
+                      <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}><td>Total</td><td>${comparison.best.total.toLocaleString()}</td><td>${comparison.separate.total.toLocaleString()}</td></tr>
                     </tbody>
                   </table>
                   <p style={{ fontSize: 14, margin: '8px 0' }}>
@@ -1583,16 +1583,16 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               {visaInfos.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: '4px 0' }}>Visa &amp; entry requirements</h3>
-                  <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+                  <p className="plan-note">
                     {VISA_PASSPORT_NOTE} Checked {VISA_LAST_CHECKED} — check before you book.
                   </p>
                   {visaInfos.map((v) => (
-                    <div key={v.country} style={{ borderTop: '1px solid #f0f0ee', padding: '10px 0' }}>
+                    <div key={v.country} style={{ borderTop: '1px solid var(--line-soft)', padding: '10px 0' }}>
                       <strong style={{ fontSize: 14 }}>{v.country}</strong>
-                      <p style={{ fontSize: 14, margin: '4px 0' }}>{v.visa}</p>
-                      <p style={{ fontSize: 14, margin: '4px 0' }}><b>Passport:</b> {v.passport}</p>
+                      <p className="plan-line">{v.visa}</p>
+                      <p className="plan-line"><b>Passport:</b> {v.passport}</p>
                       {v.notes.map((n) => (
-                        <p key={n} style={{ fontSize: 14, margin: '4px 0' }}>{n}</p>
+                        <p key={n} className="plan-line">{n}</p>
                       ))}
                       <p style={{ fontSize: 13, margin: '4px 0' }}>
                         Official source: <a href={v.sourceUrl} target="_blank" rel="noreferrer">{v.source}</a>
@@ -1638,13 +1638,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       );
                     })}
                   </div>
-                  <p style={{ fontSize: 13, color: '#666', margin: '6px 0' }}>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0' }}>
                     <span style={{ background: '#c2410c', color: '#fff', borderRadius: 4, padding: '0 6px' }}>Peak</span>{' '}
                     <span style={{ background: '#f0f0ee', borderRadius: 4, padding: '0 6px' }}>Shoulder</span>{' '}
                     <span style={{ background: '#e8eef7', borderRadius: 4, padding: '0 6px' }}>Low</span>{' '}
                     ★ best month · outlined = your month
                   </p>
-                  <p style={{ fontSize: 14, margin: '4px 0' }}>
+                  <p className="plan-line">
                     <strong>Best month to go: {MONTH_NAMES[bestTime.bestMonth - 1]}</strong> — {bestTime.bestNote};{' '}
                     {bestTime.months[bestTime.bestMonth - 1].crowds} crowds, {bestTime.months[bestTime.bestMonth - 1].price} prices
                     {bestTime.months[bestTime.bestMonth - 1].tempLow !== null && bestTime.months[bestTime.bestMonth - 1].tempHigh !== null
@@ -1653,7 +1653,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     .
                   </p>
                   {lastParsed?.month && lastParsed.month !== bestTime.bestMonth && (
-                    <p style={{ fontSize: 14, margin: '4px 0' }}>
+                    <p className="plan-line">
                       Your month ({MONTH_NAMES[lastParsed.month - 1]}) is {bestTime.months[lastParsed.month - 1].season} season —{' '}
                       {bestTime.months[lastParsed.month - 1].crowds} crowds, {bestTime.months[lastParsed.month - 1].price} prices
                       {bestTime.months[lastParsed.month - 1].tempLow !== null && bestTime.months[lastParsed.month - 1].tempHigh !== null
@@ -1662,28 +1662,28 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       .
                     </p>
                   )}
-                  <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Typical season — not live prices, not a weather forecast.</p>
+                  <p className="plan-note">Typical season — not live prices, not a weather forecast.</p>
                 </div>
               )}
               {plan && (
-                <div style={{ marginTop: 16, background: '#f7f7f5', border: '1px solid #e8e8e6', borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 14px' }}>
                   <strong style={{ fontSize: 14 }}>Book now or wait?</strong>
-                  {priceCheck === 'loading' && <p style={{ fontSize: 14, margin: '4px 0' }}>Checking the live fares for this trip…</p>}
+                  {priceCheck === 'loading' && <p className="plan-line">Checking the live fares for this trip…</p>}
                   {priceCheck && priceCheck !== 'loading' && priceCheck.live && (
                     <>
-                      <p style={{ fontSize: 14, margin: '4px 0' }}>{priceCheck.line}</p>
+                      <p className="plan-line">{priceCheck.line}</p>
                       {priceCheck.trend && priceCheck.trend.line ? (
-                        <p style={{ fontSize: 14, margin: '4px 0' }}>{priceCheck.trend.line}</p>
+                        <p className="plan-line">{priceCheck.trend.line}</p>
                       ) : (
-                        <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>No price history yet — watch this trip&apos;s prices and we&apos;ll show whether the fares are drifting up or down.</p>
+                        <p className="plan-note">No price history yet — watch this trip&apos;s prices and we&apos;ll show whether the fares are drifting up or down.</p>
                       )}
-                      <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+                      <p className="plan-note">
                         Cheapest live fares: {priceCheck.out[0] ? `${priceCheck.out[0].airline} $${priceCheck.out[0].price.toLocaleString()} out` : 'no outbound fare'} · {priceCheck.back[0] ? `${priceCheck.back[0].airline} $${priceCheck.back[0].price.toLocaleString()} back` : 'no return fare'} · {priceCheck.departDate} → {priceCheck.returnDate}. Live Duffel fares (test fares in test mode).
                       </p>
                     </>
                   )}
                   {priceCheck && priceCheck !== 'loading' && !priceCheck.live && (
-                    <p style={{ fontSize: 14, margin: '4px 0' }}>
+                    <p className="plan-line">
                       Live fares aren&apos;t available for this trip yet{priceCheck.reason === 'missing_slots' ? ' — we still need the departure city and dates' : ' — no live fare was returned'} — the plan&apos;s flight budget is ${priceCheck.plannerFlight.toLocaleString()} (estimate). Watch the price and we&apos;ll tell you when a live fare drops.
                     </p>
                   )}
@@ -1730,8 +1730,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   <tr><td>Car</td><td>${o.car}</td></tr>
                   <tr><td>Activities</td><td>${o.activities}</td></tr>
                 </tbody></table>
-                <p style={{ fontSize: 13, color: '#666' }}>{fareClassForTier(i).name} — {fareClassForTier(i).includes.join(', ')}{fareClassForTier(i).excludes.length ? `; ${fareClassForTier(i).excludes.join(', ')}` : ''}</p>
-                <p style={{ fontSize: 13, color: '#666' }}>{o.note}</p>
+                <p className="plan-muted">{fareClassForTier(i).name} — {fareClassForTier(i).includes.join(', ')}{fareClassForTier(i).excludes.length ? `; ${fareClassForTier(i).excludes.join(', ')}` : ''}</p>
+                <p className="plan-muted">{o.note}</p>
               </div>
             ))}
           </div>
@@ -1774,14 +1774,14 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           <h3 style={{ marginTop: 24 }}>What travelers say</h3>
           {voices && voices.destination === plan.destination ? (
             <div>
-              <p style={{ fontSize: 13, color: '#666' }}>From real traveler guides — never invented reviews. Source: {voices.source || 'Wikivoyage traveler guide, fetched live'}.</p>
+              <p className="plan-muted">From real traveler guides — never invented reviews. Source: {voices.source || 'Wikivoyage traveler guide, fetched live'}.</p>
               {voices.text.split('\n').filter((l) => l.trim()).map((line, i) => (
                 <p key={i} style={{ fontSize: 14 }}>{line}</p>
               ))}
             </div>
           ) : guide ? (
             <div>
-              <p style={{ fontSize: 13, color: '#666' }}>From researched traveler guides — real dishes and places, never invented reviews. Source: {guide.source}.</p>
+              <p className="plan-muted">From researched traveler guides — real dishes and places, never invented reviews. Source: {guide.source}.</p>
               <p><b>Dishes to know:</b></p>
               <ul>{guide.dishes.map((d) => <li key={d}>{d}</li>)}</ul>
               <p><b>Named places:</b></p>
@@ -1792,7 +1792,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           )}
           <h3>Money-saving tips</h3>
           <ul>{plan.tips.map((t) => <li key={t}>{t}</li>)}</ul>
-          <p style={{ fontSize: 13, color: '#666' }}>Travellers liked: {plan.liked.join(' · ')} — Book it all with FujinTrip, one booking, one price.</p>
+          <p className="plan-muted">Travellers liked: {plan.liked.join(' · ')} — Book it all with FujinTrip, one booking, one price.</p>
           {/* Spacer so the sticky bar never covers the last lines of the
               plan while the traveler reads them. */}
           <div className="no-print" style={{ height: 64 }} aria-hidden="true" />
@@ -1961,7 +1961,7 @@ export default function Home() {
             <select value={loc} onChange={(e) => { setLoc(e.target.value); setLocName(e.target.value); }} aria-label="Pick a city">
               <option value="default">Pick a city…</option><option value="New York">New York</option><option value="Los Angeles">Los Angeles</option>
             </select></p>
-          <p style={{ fontSize: 13, color: '#666' }}>{geoStatus}{locName && locName !== 'default' ? ` Showing trips near ${locName}.` : ''}</p>
+          <p className="plan-muted">{geoStatus}{locName && locName !== 'default' ? ` Showing trips near ${locName}.` : ''}</p>
           <div className="grid">{local.map((l) => (<article className="card" key={l.name}><div className="body"><span className="pill">{l.distance}</span><h3>{l.name}</h3><p>{l.activity}</p><p className="price">{l.price}</p></div></article>))}</div>
         </section>
 
@@ -1985,7 +1985,7 @@ export default function Home() {
           <h2>How much do you actually save?</h2>
           <p className="sub">{aiTrip ? `Your ${cmp.destination} trip for ${cmp.travelers} traveler${cmp.travelers > 1 ? 's' : ''} — the same trip, booked two ways.` : 'An example Kyoto trip — the same trip, booked two ways.'}</p>
           {aiTrip && (
-            <p style={{ fontSize: 13, color: '#666', margin: '0 0 16px' }}>
+            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
               Updated from your Fujin AI chat.{' '}
               <button className="ghost" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => setAiTrip(null)}>Back to the Kyoto example</button>
             </p>
@@ -2003,15 +2003,15 @@ export default function Home() {
           <h2>How FujinTrip works</h2>
           <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — and you book it all with FujinTrip.</p>
           <h2 style={{ marginTop: 28 }}>My Trips</h2>
-          <p style={{ fontSize: 13, color: '#666' }}>“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
-          {trips.length === 0 ? <p style={{ color: '#666' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
+          <p className="plan-muted">“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
+          {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button></span></li>))}
             </ul>
           )}
           <h3 style={{ marginTop: 20 }}>Price watches</h3>
-          <p style={{ fontSize: 13, color: '#666' }}>A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
-          {watches.length === 0 ? <p style={{ color: '#666' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (
+          <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
+          {watches.length === 0 ? <p style={{ color: 'var(--muted)' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {watches.map((w) => {
                 const dropped = w.baseline !== null && w.lastTotal !== null && w.lastTotal < w.baseline ? w.baseline - w.lastTotal : 0;

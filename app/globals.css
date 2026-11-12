@@ -1,7 +1,7 @@
 /* FujinTrip — modern, Layla-like. White, near-black type, one warm
    accent, soft gray surfaces, system sans (like Layla: no display
    serif, no gold leaf). Rounded cards, pill buttons, generous space. */
-:root{--ink:#0f0f0f;--muted:#666;--line:#e8e8e6;--surface:#f7f7f5;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#1f7a4d;--success-soft:#e9f5ee;--danger:#b3261e;--danger-soft:#fdecea}
+:root{--ink:#0f0f0f;--muted:#666;--line:#e8e8e6;--line-soft:#f0f0ee;--surface:#f7f7f5;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#1f7a4d;--success-soft:#e9f5ee;--danger:#b3261e;--danger-soft:#fdecea}
    /* Accent split by use: --accent (#ea580c) is display-only (logo dot, big
       totals) — white on it is 3.56:1 and fails AA for small text. Small
       text and filled tags use --accent-text (#c2410c): white on it is
@@ -120,6 +120,16 @@ section .sub{color:var(--muted);margin:0 0 20px}
 .tier-check{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
 .tier-badge{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
 .tier-price{font-size:26px;margin:8px 0;font-weight:700;font-variant-numeric:tabular-nums}
+/* Plan card on the tokens (design §2.2): the plan markup bypassed the
+   design system with dozens of inline font sizes, hex colors and
+   margins. The repeated patterns now live here as classes — a value
+   that is not a token does not ship. One-off layout values stay inline
+   for now. */
+.plan-line{font-size:14px;margin:4px 0}
+.plan-note{font-size:13px;color:var(--muted);margin:4px 0}
+.plan-muted{font-size:13px;color:var(--muted)}
+.plan-section{border-top:1px solid var(--line-soft);padding:12px 0}
+.plan-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:12px}
 .notice{font-size:13px;color:var(--muted);margin-top:12px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:6px 0;border-bottom:1px solid #f0f0ee}
