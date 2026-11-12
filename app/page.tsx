@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
+import { goNowLine } from '../lib/disruption';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
@@ -304,11 +305,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   };
   // "Leave now" hint for a flight that is still on the ground and
   // departs within 4 hours — general advice, not a per-flight fact.
+  // The clock math lives in lib/disruption's goNowLine (round 2 #9);
+  // this keeps the guards (live status, not cancelled, not departed).
   const leaveNow = (s: FlightStatusData): string | null => {
     if (!s.live || s.cancellationConfirmed || s.actualDeparture || !s.estimatedDeparture) return null;
-    const mins = Math.round((new Date(s.estimatedDeparture).getTime() - Date.now()) / 60000);
-    if (mins < 0 || mins > 240) return null;
-    return `Departs in ${mins < 60 ? `${mins} minutes` : `${Math.floor(mins / 60)}h ${mins % 60}m`} — if you're not at the airport yet, leave now: most airlines close check-in an hour before departure.`;
+    return goNowLine(s.estimatedDeparture);
   };
   // Confirmation line for the plan actions below (share / watch / hold / human).
   const [actionMsg, setActionMsg] = useState('');

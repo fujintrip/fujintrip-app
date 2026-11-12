@@ -4,6 +4,7 @@ import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from '../../../lib/food';
 import { bestTimeLine } from '../../../lib/bestTime';
+import { disruptionTemplate, type DisruptionStatus } from '../../../lib/disruption';
 import { visaLine } from '../../../lib/visa';
 import { suggestedStart } from '../../../lib/tripCard';
 
@@ -130,7 +131,7 @@ const SYSTEM_PROMPT = [
   'BOOK NOW — when the traveler asks whether to book now or wait, use the PRICE CHECK block below: it compares the cheapest live fares out and back with the plan\'s own flight budget, and says whether the plan still holds or would rise. Quote that read, never add your own forecast, and never say fares will drop or rise — fares move both ways and we never predict them. If a TREND block is present, quote its sentence too — it is the read of the traveler\'s own past fare checks (\"Since you started watching on [date], the cheapest fares out and back went $X → $Y. Confidence: low/medium — based on N checks of your own fares, not a forecast.\"). If there is no TREND block, say there is no price history yet and offer a price watch in My Trips. Never give a confidence level from nothing, never say "high confidence", and never say a forecast is "95% accurate". If there is no PRICE CHECK block, say the live fare is not available for this trip yet and offer a price watch in My Trips.',
   'ON-TRIP FOOD — when a FOOD block is present, the traveler is asking where to eat tonight: name ONLY the places in it, with their open-now status, walk time, price band and dish — quote the Wikivoyage sentence as the review. Only say "open now" when the block says so; when it says "hours not verified", say so. Never invent a name, an opening hour, a dish or a review. If there is no FOOD block, answer from the LOCAL VOICES material and say which places you could not confirm.',
   'BEST TIME — when the traveler asks when to go, use the BEST TIME block: name the best month and why (price, crowds, weather), and the season for their month if they named one. Everything is a typical season, never a live price and never a forecast — say "typical season" when you quote it.',
-  'DISRUPTION — when the traveler says their flight was cancelled, delayed, missed or diverted: first state what is confirmed — ONLY from the FLIGHT STATUS block below (or from the status the traveler quoted in their own message); if there is no status block, say plainly you don\'t have a live status for that flight and point them to the "Check my flight" box. A cancellation counts only when it is confirmed — never call a flight cancelled on a rumor or a single flag. Then list the rebooking options ONLY from the LIVE FARES block (airline, price, times) — never invent an alternate flight, a gate, or a rebooking. If no live fares are available, say so and offer to save a booking request in My Trips for the FujinTrip team. Keep it short and practical: what happened, what to do now, and the options.',
+  'DISRUPTION — when the traveler says their flight was cancelled, delayed, missed or diverted, answer in this shape, in order: (1) what changed — ONLY from the FLIGHT STATUS block below (or from the status the traveler quoted in their own message); if there is no status block, say plainly you don\'t have a live status and point them to the "Check my flight" box. A cancellation counts only when it is confirmed — never call a flight cancelled on a rumor or a single flag. (2) why — only what the status itself says; never guess a cause (weather, mechanical). (3) three ranked options — Fastest, Cheapest, Most reliable — ONLY from the LIVE FARES block (airline, price, times); never invent an alternate flight, a gate, or a rebooking; if no live fares are available, say so and offer to save a booking request in My Trips. (4) the refund right: a flight touching the US — DOT automatic cash refund within 7 business days; a European route — EU261 €250/€400/€600 for a 3h+ delay or cancellation; the UK — UK261 £220/£350/£520. (5) one next action. Keep it short and practical.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
   'LIVE FARES — before the model runs, the server asks Duffel for the real fares for this exact trip (origin to the first city of the route, and back) on the trip\'s suggested dates, and appends them as a LIVE FARES block below. ONLY when a LIVE FARES block is present may you say fares are live — quote those fares as the flight prices, with the airline name and the price, and say they are live fares from Duffel (test fares in test mode). If NO LIVE FARES block is present, the flight prices are planning estimates from the price table — never write "live estimates via Duffel", never claim the flight prices come from Duffel, and never invent a fare. For the whole-trip totals, still use the price table (planning estimates) and say the flight inside the plan is estimated — the live fare may be lower.',
@@ -169,7 +170,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null) {
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -189,6 +190,21 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     destination = voicesDest;
     reply = `Got it — ${voicesDest} for ${parsed.travelers} traveler${parsed.travelers > 1 ? 's' : ''}. I’ll build one complete plan with Cheapest / Best value / Premium options, and you book it all with FujinTrip — no bouncing between booking sites.`;
     missing = missing.filter((m) => m !== 'Destination');
+  }
+  // Disruption template (round 2 #9): when the traveler reports a
+  // disruption, the reply follows the template — what changed (from
+  // the checked status), why, the 3 ranked live-fare options, the
+  // refund right, one next action. It replaces the generic disruption
+  // reply; with no live status and no live fares it still answers
+  // honestly (the gaps are stated, never filled in).
+  if (disruption && !declinedOffTopic) {
+    reply = disruptionTemplate({
+      status: flightStatus ?? undefined,
+      fares: liveFares?.live ? liveFares.out : [],
+      routeKey: routeKeyForDestination(destination),
+      origin: contextOrigin,
+    });
+    missing = [];
   }
   // The reply must carry real value: the 3 tier prices with a clear pick,
   // so the traveler can choose before asking for the plan. But NOT while
@@ -538,6 +554,29 @@ export async function POST(req: NextRequest) {
     if (str(f.baggageClaim)) bits.push(`baggage claim ${str(f.baggageClaim)}`);
     systemPrompt += ` FLIGHT STATUS — ${bits.join('. ')}.`;
   }
+  // The checked status for the fallback's disruption template (round 2
+  // #9): only a live, confirmed status is trusted — anything else is
+  // the graceful state, never a faked status.
+  const cityOf = (v: unknown) => {
+    const o = v as Record<string, unknown> | undefined;
+    return o && typeof o.city === 'string' ? { city: o.city } : undefined;
+  };
+  const checkedStatus: DisruptionStatus | null =
+    flightStatus && flightStatus.live === true && typeof flightStatus.flight === 'string' && typeof flightStatus.status === 'string'
+      ? {
+          flight: String(flightStatus.flight),
+          ...(typeof flightStatus.date === 'string' ? { date: flightStatus.date } : {}),
+          status: String(flightStatus.status),
+          ...(flightStatus.cancellationConfirmed === true ? { cancellationConfirmed: true } : {}),
+          ...(flightStatus.cancellationUnconfirmed === true ? { cancellationUnconfirmed: true } : {}),
+          ...(typeof flightStatus.delayedMinutes === 'number' ? { delayedMinutes: flightStatus.delayedMinutes } : {}),
+          ...(flightStatus.diverted === true ? { diverted: true } : {}),
+          ...(cityOf(flightStatus.origin) ? { origin: cityOf(flightStatus.origin) } : {}),
+          ...(cityOf(flightStatus.destination) ? { destination: cityOf(flightStatus.destination) } : {}),
+          ...(typeof flightStatus.estimatedDeparture === 'string' ? { estimatedDeparture: flightStatus.estimatedDeparture } : {}),
+          ...(typeof flightStatus.estimatedArrival === 'string' ? { estimatedArrival: flightStatus.estimatedArrival } : {}),
+        }
+      : null;
 
   const provider = getProvider();
   if (!provider) {
@@ -555,7 +594,8 @@ export async function POST(req: NextRequest) {
       stateKids,
       stateTier,
       statePriceHistory,
-      food
+      food,
+      checkedStatus
     );
   }
   const apiKey = provider.apiKey;
@@ -609,14 +649,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus);
     }
 
     return NextResponse.json({
@@ -630,7 +670,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus);
   }
 }
 
