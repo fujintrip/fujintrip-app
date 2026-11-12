@@ -115,7 +115,12 @@ const SYSTEM_PROMPT = [
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
   'TRAVELER COUNT — "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'FAMILY — when the traveler mentions kids, children or a family trip, ask how many kids and their ages (one question, right after the party size is known) and remember them in the kids array of your JSON answer. "2 adults, 3 kids" is 5 travelers, not 2. Adjust the plan to the YOUNGEST kid: under 5 — slow days, 2 major activities a day, a nap or downtime after lunch, kid-friendly restaurants near each stop; ages 5–11 — 2–3 activities a day with buffers and realistic walking distances; 12+ — full days are fine with a mix of sights and something active. Never suggest late-night bars or nightlife for a family with young kids. Mention the family pace in the Trip Summary.',
-  'REVISION — when the traveler changes the trip they already have, change ONLY what they asked for and keep everything else (destination, dates, origin, travelers, the other stops). "Swap Vienna for Porto" means the route becomes Prague → Porto → Budapest with the same nights per city; "drop Vienna" removes it; "add Porto" adds it at the end; "Budapest before Vienna" or "put Budapest first" reorders; "slow down" drops the shortest stop; "more time in Prague" gives Prague the longest stay (set routeWeights {"Prague": 9}); "make it cheaper" / "upgrade" / "best value" changes the tier (return the tier field: 0 Cheapest, 1 Best value, 2 Premium); "change the budget to $2000" means pick the highest tier whose total fits $2000 and return its tier. Return the revised ordered list of cities in routeStops, and ONLY the changes the traveler asked for — never rebuild the route, never add a city they did not ask for, and never change the destination. If the city they name is not on the route (or is already on it), say so honestly and ask what they meant instead of inventing the change. A revision message naming route cities is NEVER a new destination.',
+  'CHILD FARES — kids ages 2–11 fly at 75% of the adult fare internationally, under-2s at ~10% (free on your lap domestically), 12+ pay the adult fare, ages counted on the travel date. When a FAMILY PRICES block is present, quote those totals exactly — never the 1- or 2-traveler rows from the price table, never divide a total by the traveler count, and never price a family as all adults. If the children\'s ages are not known, ask once, then price with the 75% band and say so.',
+  'PARTY SIZE — a party-size change is a slot update, never a trip reset: re-price the same route, re-check occupancy and the pace, and say what changed. Never flip the route because the party size changed.',
+  'PROACTIVE FOLLOW-UP — end an answer that opens a next step with ONE concrete offer tied to an open slot ("Want me to watch this fare and tell you if it drops?", "Would you like me to check if your hotel offers parking?") — not a generic "anything else?".',
+  'MONEY — always name what is in a total; never hide the service fee; prices are in USD. When a price is shown, add the currency line once: "Prices in USD. If you pay in the local currency, your bank converts at its rate — paying in the local currency is usually cheaper than letting the hotel or airline convert for you."',
+  'OPEN-JAW — when the traveler changes a multi-city route, allow dropping a leg without regenerating the trip, and offer flying into one city and home from another when it saves a backtrack. Prices shown are for the return route unless stated otherwise.',
+  'REVISION — when the traveler changes the trip they already have, change ONLY what they asked for and keep everything else (destination, dates, origin, travelers, the other stops). "Swap Vienna for Porto" means the route becomes Prague → Porto → Budapest with the same nights per city; "drop Vienna" removes it; "add Porto" adds it at the end; "Budapest before Vienna" or "put Budapest first" reorders; "slow down" drops the shortest stop; "more time in Prague" gives Prague the longest stay (set routeWeights {"Prague": 9}); "make it cheaper" / "upgrade" / "best value" changes the tier (return the tier field: 0 Cheapest, 1 Best value, 2 Premium); "change the budget to $2000" means pick the highest tier whose total fits $2000 and return its tier. Return the revised ordered list of cities in routeStops, and ONLY the changes the traveler asked for — never rebuild the route, never add a city they did not ask for, and never change the destination. If the city they name is not on the route (or is already on it), say so honestly and ask what they meant instead of inventing the change. A revision message naming route cities is NEVER a new destination. After any change, state the new total and the delta vs the previous plan (the totals are in the price table / FAMILY PRICES block) — confirm what changed, state what did NOT change, then the new total and the delta.',
   'VISA — when the trip\'s countries are known (see the VISA block below), mention the entry requirements in ONE short sentence in the Trip Summary, for a US passport, and point the traveler to the plan view\'s Visa & entry panel for the official source links. Never invent a visa rule, a fee, or a validity period — only state what the VISA block says. If there is no VISA block, say nothing about visas.',
   'BOOK NOW — when the traveler asks whether to book now or wait, use the PRICE CHECK block below: it compares the cheapest live fares out and back with the plan\'s own flight budget, and says whether the plan still holds or would rise. Quote that read, never add your own forecast, and never say fares will drop or rise — fares move both ways and we never predict them. If there is no PRICE CHECK block, say the live fare is not available for this trip yet and offer a price watch in My Trips.',
   'DISRUPTION — when the traveler says their flight was cancelled, delayed, missed or diverted: first state what is confirmed — ONLY from the FLIGHT STATUS block below (or from the status the traveler quoted in their own message); if there is no status block, say plainly you don\'t have a live status for that flight and point them to the "Check my flight" box. A cancellation counts only when it is confirmed — never call a flight cancelled on a rumor or a single flag. Then list the rebooking options ONLY from the LIVE FARES block (airline, price, times) — never invent an alternate flight, a gate, or a rebooking. If no live fares are available, say so and offer to save a booking request in My Trips for the FujinTrip team. Keep it short and practical: what happened, what to do now, and the options.',
@@ -157,8 +162,8 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride) {
-  const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride);
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number) {
+  const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
   // win the election?" after an Egypt chat came back as an Egypt route).
@@ -184,7 +189,7 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
   // that asks one question ("How many days?") must not also dump three
   // prices — the prices arrive with the Trip Summary. And never on a
   // disruption report (see above).
-  if (destination && !parsed.needsMore && !disruption) reply += `\n\n${optionsLine(destination, parsed.travelers)}`;
+  if (destination && !parsed.needsMore && !disruption) reply += `\n\n${optionsLine(destination, parsed.travelers, { kids: parsed.kids ?? [] })}`;
   // Visa line, on the Trip Summary only — the summary is the moment the
   // trip is set, and the panel in the plan view carries the detail.
   if (destination && reply.includes('Here is your trip —')) {
@@ -201,7 +206,7 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     reply += `\n\n${faresSummaryLine(liveFares)}`;
     // And the book-now-or-wait read, from the same live fares against
     // the plan's flight budget — never a forecast, always a snapshot.
-    const checkLine = priceCheck(liveFares, comparisonFor(destination, parsed.travelers).best.flight).line;
+    const checkLine = priceCheck(liveFares, comparisonFor(destination, parsed.travelers, { kids: parsed.kids ?? [] }).best.flight).line;
     if (checkLine) reply += ` ${checkLine}`;
   }
   return NextResponse.json({
@@ -298,6 +303,11 @@ export async function POST(req: NextRequest) {
   const stateKids = Array.isArray(tripState.kids)
     ? (tripState.kids as unknown[]).filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6)
     : [];
+  // The tier the traveler already picked (the page sends its current
+  // choice with every request) — a revision states the new total AND the
+  // delta vs this tier.
+  const stateTier =
+    typeof tripState.tier === 'number' && [0, 1, 2].includes(tripState.tier) ? tripState.tier : undefined;
   // The trip's current route override (from an earlier revision): the
   // ordered cities + weights, so the model and the fallback keep
   // building on the revised route instead of the original.
@@ -380,7 +390,7 @@ export async function POST(req: NextRequest) {
     systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;
   }
   if (stateDestination) {
-    systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}${stateKids.length ? `, kids ages ${stateKids.join(', ')}` : ''}${stateRouteOverride?.cities.length ? `, route stops ${stateRouteOverride.cities.join(' → ')}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
+    systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}${stateKids.length ? `, kids ages ${stateKids.join(', ')}` : ''}${stateTier !== undefined ? `, on the ${['Cheapest', 'Best value', 'Premium'][stateTier]} plan` : ''}${stateRouteOverride?.cities.length ? `, route stops ${stateRouteOverride.cities.join(' → ')}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
   }
   // Nights per city, from the planner's distribution — injected so the
   // live model never re-splits the route: on the live site turn 5 gave
@@ -404,6 +414,16 @@ export async function POST(req: NextRequest) {
   const visa = visaLine(voicesDest || stateDestination);
   if (visa) {
     systemPrompt += ` VISA — ${visa}`;
+  }
+  // Family prices (competitor learning, round 2 #1: child fares): the
+  // price table's 1- and 2-traveler rows are wrong for a family — the
+  // model quotes THESE totals for this party, never the table rows,
+  // never a scaled price, never "total ÷ travelers".
+  if (stateKids.length && (voicesDest || stateDestination)) {
+    const famDest = voicesDest || stateDestination;
+    const famOpts = buildPlan(famDest, stateTravelers || 2, 3, { kids: stateKids }).options;
+    const famFlightSaving = buildPlan(famDest, stateTravelers || 2, 3).options[1].flight - famOpts[1].flight;
+    systemPrompt += ` FAMILY PRICES — for this trip's party (${stateTravelers || 2} travelers, kids ages ${stateKids.join(', ')}), child fares apply: ages 2–11 fly at 75% of the adult fare, under-2s at 10%, 12+ at the adult fare. The totals for THIS party are: Cheapest $${famOpts[0].total.toLocaleString()} / Best value $${famOpts[1].total.toLocaleString()} / Premium $${famOpts[2].total.toLocaleString()} — the flights inside are $${famFlightSaving.toLocaleString()} less than pricing everyone as an adult. Quote these totals exactly, never the 1- or 2-traveler rows from the price table, never divide a total by the traveler count, and never price a family as all adults.`;
   }
   // Price check (competitor learning #4, Mindtrip / Kayak): the live
   // fares against the plan's own flight budget — the model quotes this
@@ -456,7 +476,9 @@ export async function POST(req: NextRequest) {
       message,
       stateOrigin,
       liveFares,
-      stateRouteOverride
+      stateRouteOverride,
+      stateKids,
+      stateTier
     );
   }
   const apiKey = provider.apiKey;
@@ -510,14 +532,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier);
     }
 
     return NextResponse.json({
@@ -531,7 +553,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier);
   }
 }
 

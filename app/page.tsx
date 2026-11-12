@@ -162,7 +162,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[] }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[] }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -302,7 +302,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
   // But NOT while the conversation is still gathering details (guided
   // flow): a reply that asks one question must not also dump three prices.
   const withOptions = (p: { destination: string; travelers: number; reply: string; missing: string[]; needsMore?: boolean; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number }) =>
-    p.destination && !p.needsMore ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers)}` } : p;
+    p.destination && !p.needsMore ? { ...p, reply: `${p.reply}\n\n${optionsLine(p.destination, p.travelers, { kids: p.kids ?? [] })}` } : p;
   const send = async (textOverride?: string, statusOverride?: FlightStatusData | null) => {
     const text = (textOverride ?? input).trim();
     if (!text) return;
@@ -341,7 +341,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
           // Durable trip memory: the trip already established (destination
           // + travelers + departure city) goes with EVERY request, so it
           // survives history scrolling off the window.
-          ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}) } } : {}),
+          ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice } } : {}),
           // On-trip mode: tell the server the traveler is already there.
           ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
           // Disruption report: the checked flight status rides along so
@@ -368,10 +368,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
           setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
         }
       } else {
-        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride));
+        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride, kids.length ? kids : lastParsed?.kids ?? [], choice));
       }
     } catch {
-      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride));
+      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride, kids.length ? kids : lastParsed?.kids ?? [], choice));
     }
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
@@ -410,7 +410,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
         ...(routeOverrideOut ? { routeOverride: routeOverrideOut } : {}),
       });
       // The price-comparison section below follows the AI's trip.
-      onParsed?.({ destination: parsed.destination, travelers: parsed.travelers });
+      onParsed?.({ destination: parsed.destination, travelers: parsed.travelers, ...(kidsOut.length ? { kids: kidsOut } : {}) });
     }
     setMsgs((m) => [...m, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
   };
@@ -419,7 +419,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
     const people = lastParsed?.travelers ?? 2;
     // The plan's day cards span the trip length the traveler gave
     // (14 days → 14 day cards), not a fixed 3.
-    setPlan(buildPlan(dest, people, lastParsed?.durationDays ?? 3));
+    setPlan(buildPlan(dest, people, lastParsed?.durationDays ?? 3, { kids: lastParsed?.kids ?? [] }));
     setActionMsg('');
   };
 
@@ -589,8 +589,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
   );
   const mapCard = tripCard ?? previewCard;
   const comparison = useMemo(
-    () => (plan ? cardComparison(plan.destination, plan.travelers) : null),
-    [plan]
+    () => (plan ? cardComparison(plan.destination, plan.travelers, { kids: lastParsed?.kids ?? [] }) : null),
+    [plan, lastParsed]
   );
   // Visa & entry panel (competitor learning #3, Sherpa): one row per
   // route country, from the curated visa dataset — US passport, tourism,
@@ -1105,8 +1105,8 @@ export default function Home() {
   };
   // The trip Fujin AI most recently understood — the price-comparison
   // section below follows it. Null until the user chats: Kyoto example.
-  const [aiTrip, setAiTrip] = useState<{ destination: string; travelers: number } | null>(null);
-  const cmp = useMemo(() => comparisonFor(aiTrip?.destination ?? 'Kyoto', aiTrip?.travelers ?? 2), [aiTrip]);
+  const [aiTrip, setAiTrip] = useState<{ destination: string; travelers: number; kids?: number[] } | null>(null);
+  const cmp = useMemo(() => comparisonFor(aiTrip?.destination ?? 'Kyoto', aiTrip?.travelers ?? 2, { kids: aiTrip?.kids ?? [] }), [aiTrip]);
   const [loc, setLoc] = useState('default');
   const [locName, setLocName] = useState('');
   const [geoStatus, setGeoStatus] = useState('Use your location, or pick a city below — we only use it to show nearby trips.');

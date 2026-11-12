@@ -21,13 +21,46 @@ function fixLegs(o: PlanOption): PlanOption {
   return { ...o, [keys[0]]: o[keys[0]] + diff };
 }
 
-export function buildPlan(destination: string, travelers: number, days = 3): Plan {
+// Child fares (IATA standard, international — competitor learning,
+// Nov 11): under-2s fly at ~10% of the adult fare (free on your lap
+// domestically), ages 2–11 at 75%, 12+ at the adult fare. Age is the age
+// ON THE TRAVEL DATE. Only the FLIGHT leg is child-priced — hotels, cars
+// and activities still price per traveler (kids share rooms and ride in
+// the same car), so the flight is where the family saving lives.
+// "Total ÷ travelers" overcharges families: 2 adults + 2 kids (4, 7)
+// should price flights at 2× adult + 2× 0.75× adult, not 4× adult.
+export type Party = { kids?: number[]; kidsUnknown?: number };
+
+export function childFareFactor(age: number): number {
+  if (age < 2) return 0.1;
+  if (age <= 11) return 0.75;
+  return 1;
+}
+
+// Adult-equivalents for the flight leg: each adult at 1, each kid at the
+// child-fare factor for their age, kids whose ages are unknown at 0.75
+// (the 2–11 band — the reply says so). No kids → the traveler count.
+export function flightPassengerFactor(travelers: number, party?: Party): number {
+  const ages = (party?.kids ?? []).filter((a) => a >= 0 && a <= 17).slice(0, 6);
+  const unknown = Math.max(0, Math.min(6, party?.kidsUnknown ?? 0));
+  const adults = Math.max(0, travelers - ages.length - unknown);
+  return adults + ages.reduce((s, a) => s + childFareFactor(a), 0) + unknown * 0.75;
+}
+
+export function buildPlan(destination: string, travelers: number, days = 3, party?: Party): Plan {
   const base = BASE[destination] ?? 1500;
+  // The flight leg prices by adult-equivalents (child fares above); the
+  // other legs still price per traveler. The total is the all-adult total
+  // minus the flight saving, so a no-kids trip keeps its exact old total
+  // and a family trip drops by exactly the child-fare saving.
+  const flightFactor = flightPassengerFactor(travelers, party);
   const per = (f: number) => Math.round(base * f * travelers);
+  const perFlight = (f: number) => Math.round(base * f * flightFactor);
+  const flightSaving = (f: number) => per(f) - perFlight(f);
   const options: PlanOption[] = [
-    { name: 'Cheapest', total: per(0.64), flight: per(0.28), hotel: per(0.22), car: per(0.05), activities: per(0.09), note: 'Budget stays, off-peak flights, free activities first.' },
-    { name: 'Best value', total: per(1), flight: per(0.42), hotel: per(0.33), car: per(0.08), activities: per(0.17), note: 'Our pick — comfort where it matters, savings where it doesn’t.' },
-    { name: 'Premium', total: per(1.64), flight: per(0.6), hotel: per(0.62), car: per(0.14), activities: per(0.28), note: 'Top stays, direct flights, private guides.' },
+    { name: 'Cheapest', total: per(0.64) - flightSaving(0.28), flight: perFlight(0.28), hotel: per(0.22), car: per(0.05), activities: per(0.09), note: 'Budget stays, off-peak flights, free activities first.' },
+    { name: 'Best value', total: per(1) - flightSaving(0.42), flight: perFlight(0.42), hotel: per(0.33), car: per(0.08), activities: per(0.17), note: 'Our pick — comfort where it matters, savings where it doesn’t.' },
+    { name: 'Premium', total: per(1.64) - flightSaving(0.6), flight: perFlight(0.6), hotel: per(0.62), car: per(0.14), activities: per(0.28), note: 'Top stays, direct flights, private guides.' },
   ].map(fixLegs);
   const dayTitles = ['Arrive & settle in', 'The big day', 'Slow morning, local flavour'];
   const planDays: DayPlan[] = Array.from({ length: days }, (_, i) => ({
@@ -63,8 +96,8 @@ export type TripComparison = {
 // rounded, then adjusted so the legs sum exactly to the separate total.
 // No numbers are invented — everything derives from buildPlan().
 // Kyoto, 2 travelers: Best value $3,900 vs separately $4,483, save $583 (~13%).
-export function comparisonFor(destination: string, travelers: number): TripComparison {
-  const best = buildPlan(destination, travelers, 3).options[1];
+export function comparisonFor(destination: string, travelers: number, party?: Party): TripComparison {
+  const best = buildPlan(destination, travelers, 3, party).options[1];
   const separateTotal = Math.round(best.total / 0.87);
   const legs = [
     { key: 'flight' as const, value: Math.round(best.flight / 0.87) },
@@ -970,9 +1003,25 @@ function isTravel(text: string): boolean {
 // with a clear pick — so the traveler can choose before asking for the
 // plan. Used by the built-in fallback (route + page local fallback); the
 // live model already quotes the Best value total from its prompt.
-export function optionsLine(destination: string, travelers: number): string {
-  const opts = buildPlan(destination, travelers, 3).options;
-  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}. Tap Build my plan to pick one.`;
+export function optionsLine(destination: string, travelers: number, party?: Party): string {
+  const opts = buildPlan(destination, travelers, 3, party).options;
+  const kids = (party?.kids ?? []).filter((a) => a >= 0 && a <= 17).slice(0, 6);
+  const unknown = Math.max(0, Math.min(6, party?.kidsUnknown ?? 0));
+  // The child-fare saving, in one line — the family sees WHY the flight
+  // leg is cheaper than "4 adults × adult fare", and the saving is the
+  // Best-value flight saving (the tier the line leads with).
+  let childLine = '';
+  if (kids.length || unknown) {
+    const saving = buildPlan(destination, travelers, 3).options[1].flight - opts[1].flight;
+    const who = kids.length
+      ? `kids ages ${kids.join(', ')}`
+      : `${unknown} kid${unknown > 1 ? 's' : ''} (ages not given yet)`;
+    const rate = kids.length ? 'ages 2–11 fly at 75% of the adult fare, under-2s at 10%, 12+ at the adult fare' : 'kids priced at the 2–11 rate (75% of the adult fare) until we know their ages';
+    childLine = saving > 0
+      ? ` Flights for this party — ${who} — are priced with child fares (${rate}), $${saving.toLocaleString()} less on flights than pricing all ${travelers} as adults.`
+      : ` Flights for this party — ${who} — use child fares (${rate}).`;
+  }
+  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}.${childLine} Tap Build my plan to pick one.`;
 }
 
 // Departure city (origin): the flight fare depends on where the traveler
@@ -1006,7 +1055,13 @@ export function askFujin(
   // The trip's current route override (from a previous revision): the
   // ordered cities + any weight override, so the summary and a new
   // revision keep building on the revised route instead of the original.
-  contextOverride?: RouteOverride
+  contextOverride?: RouteOverride,
+  // Kids' ages from an earlier turn (tripState — the live model may have
+  // collected them in a turn that has scrolled out of the history
+  // window) and the tier the traveler already picked, so a revision can
+  // state the new total AND the delta vs the plan they had.
+  contextKids?: number[],
+  contextTier?: number
 ): { destination: string; travelers: number; reply: string; missing: string[]; needsMore: boolean; kids?: number[]; routeOverride?: RouteOverride; tier?: number } {
   // Off-topic is judged on the CURRENT message only. The joined history
   // would make any message look like travel — "who will win the election?"
@@ -1100,7 +1155,10 @@ export function askFujin(
   // set the pace. travelersFromParty falls back to the existing parser,
   // so solo/couple/bare-number behavior is unchanged.
   const party = parseParty(lower);
-  const kidAges = party.kidAges;
+  // Kids' ages: this message's first, else the trip's already-known ages
+  // (a long conversation must not lose them when the turn scrolls out of
+  // the history window).
+  const kidAges = party.kidAges.length ? party.kidAges : (contextKids ?? []);
   const kidCount = party.kids;
   const hasKids = kidCount > 0;
   const travelers = hasPartySignal || hasKids ? travelersFromParty(lower) : defaultTravelers;
@@ -1216,11 +1274,25 @@ export function askFujin(
         : (ROUTE_STOPS[rk] ?? []);
       if (stops.length) {
         const TIER_NAMES = ['Cheapest', 'Best value', 'Premium'];
+        // Revision reply shape (Layla pattern, training notes): confirm
+        // what changed, state what did NOT change, then the new total
+        // AND the delta vs the plan they had. A route change never moves
+        // the total (totals depend on destination/travelers/days, not
+        // stops) — say so. A tier/budget change re-prices with child
+        // fares when the party has kids.
+        const partyForTotals: Party = { kids: kidAges };
+        const planTotals = buildPlan(dest, travelers, duration || 14, partyForTotals).options.map((o) => o.total);
+        const oldTier = Math.min(2, Math.max(0, contextTier ?? 1));
+        const deltaLine = (newTier: number): string => {
+          const d = planTotals[newTier] - planTotals[oldTier];
+          if (newTier === oldTier || d === 0) return `Total stays $${planTotals[newTier].toLocaleString()} — the same as the ${TIER_NAMES[oldTier]} plan you had.`;
+          return `New total $${planTotals[newTier].toLocaleString()} — $${Math.abs(d).toLocaleString()} ${d < 0 ? 'less' : 'more'} than the ${TIER_NAMES[oldTier]} plan ($${planTotals[oldTier].toLocaleString()}).`;
+        };
         if (revision.type === 'tier') {
           return {
             destination: dest,
             travelers,
-            reply: `Got it — switched to the ${TIER_NAMES[revision.tier]} plan. Your route stays ${stops.map((s) => s.city).join(' → ')}, and the trip card prices update to the new tier. Tap Build my plan to see it.`,
+            reply: `Got it — switched to the ${TIER_NAMES[revision.tier]} plan. Your route stays ${stops.map((s) => s.city).join(' → ')}, and the trip card prices update to the new tier. ${deltaLine(revision.tier)} Tap Build my plan to see it.`,
             missing,
             needsMore: false,
             kids: kidAges,
@@ -1231,7 +1303,7 @@ export function askFujin(
           // The highest tier whose whole-trip total fits the budget —
           // the plan must fit what the traveler said, not the closest
           // number above it.
-          const totals = buildPlan(dest, travelers, duration || 14).options.map((o) => o.total);
+          const totals = planTotals;
           let tier = 0;
           totals.forEach((total, i) => {
             if (total <= revision.amount) tier = i;
@@ -1239,7 +1311,7 @@ export function askFujin(
           return {
             destination: dest,
             travelers,
-            reply: `Your $${revision.amount.toLocaleString()} budget fits the ${TIER_NAMES[tier]} plan ($${totals[tier].toLocaleString()} for the whole trip, flights, stays, transport between cities and activities included). Your route stays ${stops.map((s) => s.city).join(' → ')}. Tap Build my plan to see it.`,
+            reply: `Your $${revision.amount.toLocaleString()} budget fits the ${TIER_NAMES[tier]} plan ($${totals[tier].toLocaleString()} for the whole trip, flights, stays, transport between cities and activities included). Your route stays ${stops.map((s) => s.city).join(' → ')}. ${deltaLine(tier)} Tap Build my plan to see it.`,
             missing,
             needsMore: false,
             kids: kidAges,
@@ -1253,7 +1325,7 @@ export function askFujin(
           return {
             destination: dest,
             travelers,
-            reply: `${applied.note} The nights are now ${routeLine} — everything else (dates, origin, budget) stays the same. Tap Build my plan to see the updated trip card.`,
+            reply: `${applied.note} The nights are now ${routeLine} — everything else (dates, origin, budget) stays the same. Total unchanged at $${planTotals[oldTier].toLocaleString()} (${TIER_NAMES[oldTier]}). Tap Build my plan to see the updated trip card.`,
             missing,
             needsMore: false,
             kids: kidAges,

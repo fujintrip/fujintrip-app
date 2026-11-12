@@ -9,7 +9,7 @@
 // flights: the card shows the planner's estimated fare split, labeled as
 // an estimate, until Duffel live fares connect.
 
-import { buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, stopsForRoute, type RouteOverride } from './planner';
+import { buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, stopsForRoute, type Party, type RouteOverride } from './planner';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -211,7 +211,7 @@ export function buildTripCard(opts: {
   const stops = routeKey ? ROUTE_STOPS[routeKey] : null;
   const startDate = suggestedStart(opts.month);
   const endDate = addDays(startDate, days - 1);
-  const plan = buildPlan(opts.destination, opts.travelers, days);
+  const plan = buildPlan(opts.destination, opts.travelers, days, { kids: opts.kids ?? [] });
   // The tier the traveler picked (0 Cheapest, 1 Best value, 2 Premium):
   // the map's price tags show that tier's legs, not always Best value.
   const tier = Math.min(2, Math.max(0, opts.tier ?? 1));
@@ -428,8 +428,8 @@ export function buildTripCard(opts: {
 // column — other sites' live prices — stays empty until a live fare feed
 // is connected; the card says so honestly instead of inventing a
 // competitor price.
-export function cardComparison(destination: string, travelers: number) {
-  return comparisonFor(destination, travelers);
+export function cardComparison(destination: string, travelers: number, party?: Party) {
+  return comparisonFor(destination, travelers, party);
 }
 
 export { MONTH_NAMES };
