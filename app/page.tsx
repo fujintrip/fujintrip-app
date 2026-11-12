@@ -203,7 +203,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[] }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -354,6 +354,36 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     if (!s.live || s.cancellationConfirmed || s.actualDeparture || !s.estimatedDeparture) return null;
     return goNowLine(s.estimatedDeparture);
   };
+  // "Plan this trip" from a destination card (design #13): the card's
+  // route becomes the trip — the destination, the ordered cities as a
+  // route override, 2 travelers — and the chat asks the next question
+  // (when, how long) instead of re-proposing a route. The seed fires
+  // once per distinct card tap.
+  const seedKeyRef = useRef('');
+  useEffect(() => {
+    if (!seed) return;
+    const key = JSON.stringify(seed);
+    if (seedKeyRef.current === key) return;
+    seedKeyRef.current = key;
+    const cities = seed.cities.filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map((c) => c.trim()).slice(0, 8);
+    if (!cities.length) return;
+    setPlan(null);
+    setChosenLegs(new Set());
+    setSelectedLeg(null);
+    setExpenses([]);
+    setWeatherCheck(null);
+    setLastParsed({
+      destination: seed.destination,
+      travelers: 2,
+      ...(routeKeyForDestination(seed.destination) ? { routeKey: routeKeyForDestination(seed.destination) } : {}),
+      routeOverride: { cities },
+    });
+    onParsed?.({ destination: seed.destination, travelers: 2 });
+    setMsgs((m) => [...m, { who: 'ai', text: `Let's plan ${seed.destination}: ${cities.join(' → ')} — for 2 travelers. When are you going, and for how long?` }]);
+    onSeedUsed?.();
+    // Run on the seed only — onParsed/onSeedUsed are Home's stable setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed]);
   // Confirmation line for the plan actions below (share / watch / hold / human).
   const [actionMsg, setActionMsg] = useState('');
   // PDF download state: the $1 rule is decided by the server route.
@@ -1932,6 +1962,32 @@ export default function Home() {
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-trips', JSON.stringify(trips)); } catch {} }, [trips]);
   const saveTrip = (label: string, status = 'Request saved', destination?: string) => setTrips((t) => [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString(), ...(destination ? { destination } : {}) }, ...t]);
+  // Destination cards as trip cards (design #13): what is inside the
+  // trip (counts), the route's cities, and the all-in Best value total
+  // for 2 travelers, 3 days — computed from the same trip card and
+  // planner as the plan view, so the card and the chat never disagree.
+  // A destination the card builder cannot price renders the old card.
+  const cardInfo = useMemo(() => {
+    const info: Record<string, { cities: string[]; experiences: number; hotels: number; transports: number; total: number } | null> = {};
+    for (const d of [...GLOBAL_DESTINATIONS, ...HIDDEN_GEMS]) {
+      try {
+        const c = buildTripCard({ destination: d.name, travelers: 2, days: 3, month: 0, origin: '' });
+        info[d.name] = { cities: c.stops.map((s) => s.city), experiences: c.experiences, hotels: c.hotels, transports: c.transports, total: buildPlan(d.name, 2, 3).options[1].total };
+      } catch {
+        info[d.name] = null;
+      }
+    }
+    return info;
+  }, []);
+  // "Plan this trip": switches to the Fujin AI tab, seeds the chat with
+  // the card's route, and scrolls the traveler to the chat.
+  const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[] } | null>(null);
+  const planThisTrip = (name: string) => {
+    const info = cardInfo[name];
+    setTab('Fujin AI');
+    setChatSeed({ destination: name, cities: info?.cities ?? [name] });
+    document.getElementById('fujin-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   // Destinations with a trip marked "Booked with FujinTrip" — those plans
   // download as PDF free; every other plan costs $1 (see /api/plan-download).
   const bookedDestinations = trips.filter((t) => t.status === 'Booked with FujinTrip' && t.destination).map((t) => t.destination as string);
@@ -1961,7 +2017,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel" id="fujin-chat">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
 
         <section>
@@ -1971,7 +2027,17 @@ export default function Home() {
             {GLOBAL_DESTINATIONS.map((d) => (
               <article className="card" key={d.name}>
                 <SafeImg src={d.image} alt={d.name} label={d.name} />
-                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p className="price">{d.priceFrom}</p><button className="ghost" onClick={() => saveTrip(`${d.name} package — request saved`)}>Add to My Trips</button></div>
+                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p>
+                  {cardInfo[d.name] && (
+                    <>
+                      <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
+                      <p className="price">from ${cardInfo[d.name]?.total.toLocaleString()} total</p>
+                      <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>
+                    </>
+                  )}
+                  {!cardInfo[d.name] && <p className="price">{d.priceFrom}</p>}
+                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>
+                </div>
               </article>
             ))}
           </div>
@@ -1995,7 +2061,21 @@ export default function Home() {
             {HIDDEN_GEMS.map((d) => (
               <article className="card" key={d.name}>
                 <SafeImg src={d.image} alt={d.name} label={d.name} />
-                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p><p className="price">{d.priceFrom}</p><ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul><button className="ghost" onClick={() => saveTrip(`${d.name} hidden gem — request saved`)}>Plan this trip</button></div>
+                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
+                  {cardInfo[d.name] && (
+                    <>
+                      <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
+                      <p className="price">from ${cardInfo[d.name]?.total.toLocaleString()} total</p>
+                      <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>
+                    </>
+                  )}
+                  {!cardInfo[d.name] && <p className="price">{d.priceFrom}</p>}
+                  <details>
+                    <summary>See the days</summary>
+                    <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
+                  </details>
+                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>
+                </div>
               </article>
             ))}
           </div>

@@ -96,6 +96,12 @@ button.ghost{background:#fff;border:1px solid #d9d9d6;color:var(--ink);border-ra
 .card img{width:100%;height:180px;object-fit:cover;display:block}
 .card .body{padding:18px;flex:1;display:flex;flex-direction:column}
 .card .body .ghost{margin-top:auto;align-self:flex-start}
+/* Destination cards as trip cards (design #13): the primary action sits
+   at the bottom of the card body, and the hidden-gems itinerary lives
+   behind a native expander so the grid stays even. */
+.card .body .primary{margin-top:auto;align-self:flex-start}
+.card details{font-size:13px;margin:8px 0 0}
+.card summary{cursor:pointer;font-weight:600}
 /* Graceful image fallback: soft gray with the destination name instead
    of a broken-image icon. */
 .img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-size:22px;font-weight:700;text-align:center;padding:16px}
@@ -153,7 +159,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
 .hero-cta{margin-top:18px}
 .hero-cta a{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
 .hero-cta a:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
-@media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}}
+@media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}.card .body .primary{width:100%;text-align:center}}
 /* Screen only: .print-only lines (your choice, full booking URLs) are
    hidden until printing. */
 .print-only{display:none}
