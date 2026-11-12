@@ -101,6 +101,15 @@ button.ghost{background:#fff;border:1px solid #d9d9d6;color:var(--ink);border-ra
 .img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-size:22px;font-weight:700;text-align:center;padding:16px}
 .card .img-fallback{height:180px;width:100%}
 .img-fallback.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto 18px;font-size:26px}
+/* Loading state for images (design #9): a warm shimmer tile with the
+   destination name, same size as the photo that will replace it, so
+   nothing jumps when the image arrives (CLS < 0.1). */
+.img-loading{display:flex;align-items:center;justify-content:center;color:var(--ink);font-size:22px;font-weight:700;text-align:center;padding:16px}
+.card .img-loading{height:180px;width:100%}
+.img-loading.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto 18px;font-size:26px}
+/* Map skeleton (design #9): the shape of the map while the Leaflet chunk
+   loads — a shimmer block with a faint route line, not a blank area. */
+.map-skeleton{height:100%;min-height:320px;display:flex;flex-direction:column;gap:12px}
 .card .body h3{font-size:20px}
 .card .body p{font-size:14px;color:var(--muted)}
 .price{font-weight:700;color:var(--ink)}

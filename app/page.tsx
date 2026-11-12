@@ -16,8 +16,18 @@ import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 
 // Trip map (Leaflet) is client-only — it needs window, so it loads
-// without server rendering.
-const TripMap = dynamic(() => import('../components/TripMap'), { ssr: false });
+// without server rendering. While the chunk loads, a map-shaped skeleton
+// with a shimmer shows instead of a blank area (design #9 — calmer
+// loading; never a full-page spinner).
+const TripMap = dynamic(() => import('../components/TripMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="map-skeleton" aria-label="Loading the map">
+      <div className="skeleton" style={{ flex: 1, borderRadius: 16 }} />
+      <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Loading the map…</p>
+    </div>
+  ),
+});
 
 type Trip = { id: string; label: string; status: string; date: string; destination?: string };
 // The shape of a parsed server reply (streamed `done` result or atomic
@@ -106,8 +116,12 @@ const FUJIN_IMG = '/images/fujin-wind-god.jpg';
 
 // Image with a graceful fallback: a failed image never shows a broken
 // icon — it becomes a soft gray placeholder with the destination name.
+// While it loads, a warm shimmer tile with the name shows instead of a
+// blank space (design #9 — the loaded-error state is the fallback; this
+// is the loading state).
 function SafeImg({ src, alt, label, className }: { src: string; alt: string; label: string; className?: string }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   if (failed) {
     return (
       <div className={`img-fallback ${className ?? ''}`} role="img" aria-label={alt}>
@@ -115,7 +129,16 @@ function SafeImg({ src, alt, label, className }: { src: string; alt: string; lab
       </div>
     );
   }
-  return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
+  return (
+    <>
+      {!loaded && (
+        <div className={`img-loading skeleton ${className ?? ''}`} role="img" aria-label={alt}>
+          <span>{label}</span>
+        </div>
+      )}
+      <img src={src} alt={alt} loading="lazy" className={className} style={loaded ? undefined : { display: 'none' }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+    </>
+  );
 }
 
 // Render an AI reply as readable formatted text. The model writes
