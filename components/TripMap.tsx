@@ -36,12 +36,12 @@ function numberedIcon(n: number) {
 }
 
 // Price tag for a bookable leg: dark for flights, warm accent for stays,
-// gray for cars. Selected tags get a dark border; legs already added to
-// the plan get a green border and a check.
+// gray for cars. Stay tags use --accent-text (#c2410c, white on it 5.18:1)
+// — the old #ea580c was 3.56:1 and failed WCAG AA for 12px text.
 const LEG_COLOR: Record<TripLeg['kind'], string> = {
   flight: '#111',
   transport: '#111',
-  stay: '#ea580c',
+  stay: '#c2410c',
   car: '#6b7280',
 };
 

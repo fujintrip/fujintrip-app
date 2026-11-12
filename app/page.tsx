@@ -1356,7 +1356,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     {bestTime.months.map((m) => {
                       const isBest = m.month === bestTime.bestMonth;
                       const isTrip = lastParsed?.month === m.month;
-                      const bg = m.season === 'peak' ? '#ea580c' : m.season === 'shoulder' ? '#f0f0ee' : '#e8eef7';
+                      const bg = m.season === 'peak' ? '#c2410c' : m.season === 'shoulder' ? '#f0f0ee' : '#e8eef7';
                       const color = m.season === 'peak' ? '#fff' : '#111';
                       return (
                         <div
@@ -1382,7 +1382,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     })}
                   </div>
                   <p style={{ fontSize: 13, color: '#666', margin: '6px 0' }}>
-                    <span style={{ background: '#ea580c', color: '#fff', borderRadius: 4, padding: '0 6px' }}>Peak</span>{' '}
+                    <span style={{ background: '#c2410c', color: '#fff', borderRadius: 4, padding: '0 6px' }}>Peak</span>{' '}
                     <span style={{ background: '#f0f0ee', borderRadius: 4, padding: '0 6px' }}>Shoulder</span>{' '}
                     <span style={{ background: '#e8eef7', borderRadius: 4, padding: '0 6px' }}>Low</span>{' '}
                     ★ best month · outlined = your month
