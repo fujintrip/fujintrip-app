@@ -16,6 +16,9 @@ import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import OfflineBanner from '../components/OfflineBanner';
 import TodayView from '../components/TodayView';
+import ReelsFeed from '../components/ReelsFeed';
+import ReelsStrip from '../components/ReelsStrip';
+import ReelComposer from '../components/ReelComposer';
 
 // Trip map (Leaflet) is client-only — it needs window, so it loads
 // without server rendering. While the chunk loads, a map-shaped skeleton
@@ -205,7 +208,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void }) {
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.' }]);
   const [input, setInput] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -1938,6 +1941,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           ) : (
             <p>No traveler notes fetched for {plan.destination} yet — ask Fujin AI about it in the chat and fresh notes will be pulled in live.</p>
           )}
+          {/* Travelers from this trip (community round, design §6): only
+              human-approved posts on verified trips appear here — the
+              highest-trust surface. An empty strip is an honest
+              invitation, never filled with invented posts. */}
+          <div style={{ marginTop: 16 }}>
+            <ReelsStrip destination={plan.destination} onPost={() => onShareReel?.(plan.destination)} />
+          </div>
           <h3>Money-saving tips</h3>
           <ul>{plan.tips.map((t) => <li key={t}>{t}</li>)}</ul>
           <p className="plan-muted">Travellers liked: {plan.liked.join(' · ')} — Book it all with FujinTrip, one booking, one price.</p>
@@ -2107,6 +2117,17 @@ export default function Home() {
     planThisTrip(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Travelers' reels composer (community round, design §6): opened from
+  // the trip-card strip, the feed, or a booked trip in My Trips ("Share
+  // how it went" — the Booking.com 48h-after-return timing, adapted:
+  // the prompt appears on any booked trip).
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerDest, setComposerDest] = useState('');
+  const openComposer = (destination?: string) => {
+    setComposerDest(destination ?? '');
+    setComposerOpen(true);
+    document.getElementById('reel-composer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   // Destinations with a trip marked "Booked with FujinTrip" — those plans
   // download as PDF free; every other plan costs $1 (see /api/plan-download).
   const bookedDestinations = trips.filter((t) => t.status === 'Booked with FujinTrip' && t.destination).map((t) => t.destination as string);
@@ -2136,8 +2157,13 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className="panel" id="fujin-chat">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
+        {composerOpen && (
+          <div className="panel" id="reel-composer">
+            <ReelComposer trips={trips} prefillDestination={composerDest} onPosted={() => {}} onClose={() => setComposerOpen(false)} />
+          </div>
+        )}
 
         <section>
           <h2>Global packages, in one plan</h2>
@@ -2204,6 +2230,15 @@ export default function Home() {
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
 
         <section>
+          <h2>Travelers&apos; reels</h2>
+          <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
+          <ReelsFeed onPost={() => openComposer()} />
+          <p style={{ marginTop: 12 }}>
+            <a href="/reels">See all travelers’ reels →</a>
+          </p>
+        </section>
+
+        <section>
           <h2>How much do you actually save?</h2>
           <p className="sub">{aiTrip ? `Your ${cmp.destination} trip for ${cmp.travelers} traveler${cmp.travelers > 1 ? 's' : ''} — the same trip, booked two ways.` : 'An example Kyoto trip — the same trip, booked two ways.'}</p>
           {aiTrip && (
@@ -2228,7 +2263,7 @@ export default function Home() {
           <p className="plan-muted">“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
           {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
-              {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button></span></li>))}
+              {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
             </ul>
           )}
           <h3 style={{ marginTop: 20 }}>Price watches</h3>

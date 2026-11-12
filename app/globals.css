@@ -276,3 +276,30 @@ html{scroll-padding-bottom:96px}
 .today-essentials{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
 .today-portable{border-top:1px solid var(--line-soft);padding-top:12px}
 .today-portable input{width:100%;margin-top:4px}
+
+/* --- Travelers' reels (community round, design §6) --- */
+.reels-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.reels-strip{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 12px;scrollbar-width:none}
+.reels-strip::-webkit-scrollbar{display:none}
+.reels-strip .reelcard{flex:0 0 280px}
+.reelcard{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04);display:flex;flex-direction:column}
+.reelcard.compact{flex:0 0 280px}
+.reelcard img,.reelcard video{width:100%;max-height:320px;object-fit:cover;display:block;background:#f0f0ee}
+.reelcard.compact img,.reelcard.compact video{max-height:200px}
+.reel-media-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-size:20px;font-weight:700;min-height:180px;text-align:center;padding:16px}
+.reel-thumbs{display:flex;gap:6px;padding:8px 12px 0}
+.reel-thumbs button{border:1px solid #d9d9d6;background:#fff;border-radius:999px;min-width:32px;min-height:32px;font-size:12px;font-weight:700;cursor:pointer}
+.reel-thumbs button.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.reel-body{padding:14px 16px 16px;flex:1;display:flex;flex-direction:column}
+.reel-author{font-size:14px;margin:0}
+.reel-badge{display:inline-block;background:var(--success-soft);color:var(--success);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-left:8px}
+.reel-unverified{display:inline-block;background:var(--surface);color:var(--muted);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;margin-left:8px}
+.reel-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
+.reel-actions .ghost{padding:8px 14px;min-height:44px}
+.reel-share,.reel-report{margin-top:10px;border-top:1px solid var(--line-soft);padding-top:10px}
+.reel-share a.ghost{text-decoration:none;display:inline-block}
+.reel-empty{background:var(--surface);border:1px dashed #d9d9d6;border-radius:16px;padding:20px;text-align:center}
+.reel-composer{border:1px solid var(--line);border-radius:16px;padding:18px;background:#fff}
+.reel-composer input[type="file"]{border:1px dashed #d9d9d6;border-radius:12px;padding:12px;background:#fff}
+.reel-composer textarea{border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:15px;resize:vertical}
+@media(max-width:640px){.reels-strip .reelcard{flex-basis:240px}}
