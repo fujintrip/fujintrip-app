@@ -1942,6 +1942,14 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
   const [who, setWho] = useState('2 travelers');
   const [result, setResult] = useState('');
   const submit = async () => {
+    // Empty fields must not silently become JFK→LHR (design §2.2): a
+    // traveler who taps Search without typing gets a fare for a route
+    // they never asked about. Ask for the route instead — nothing is
+    // saved and nothing is searched until the route is given.
+    if (tab === 'Flights' && !from.trim() && !to.trim()) {
+      setResult('Add the route first — where are you flying from, and to where?');
+      return;
+    }
     const label = `${tab}: ${from || 'Anywhere'} → ${to || 'Anywhere'} · ${date || 'Flexible'} · ${who}`;
     onSave(label);
     if (tab === 'Flights') {
