@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, type Plan, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
+import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
@@ -282,6 +283,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       setChosenLegs(new Set());
       setSelectedLeg(null);
       setExpenses([]);
+      setWeatherCheck(null);
       setLastParsed({
         destination: j.destination,
         travelers: lastParsed?.travelers ?? 2,
@@ -522,6 +524,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
         setChosenLegs(new Set());
         setSelectedLeg(null);
         setExpenses([]);
+        setWeatherCheck(null);
       }
       // A revision (routeOverride/tier from this reply) applies to THIS
       // trip; a new destination starts fresh, with no override. A revised
@@ -563,6 +566,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     // The plan's day cards span the trip length the traveler gave
     // (14 days → 14 day cards), not a fixed 3.
     setPlan(buildPlan(dest, people, lastParsed?.durationDays ?? 3, { kids: lastParsed?.kids ?? [] }));
+    // A new plan means new dates — the old weather check no longer applies.
+    setWeatherCheck(null);
     setActionMsg('');
   };
 
@@ -862,6 +867,42 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       localStorage.setItem('fujintrip-expenses', JSON.stringify({ key: bundleKey(lastParsed.destination, lastParsed.travelers, lastParsed.durationDays ?? 0), expenses }));
     } catch {}
   }, [hydrated, lastParsed, expenses]);
+  // Weather / closure day-swap (round 2 #10): the plan view checks the
+  // closures on the trip's dates and the 16-day rain forecast on demand
+  // ("Check weather & closures"). The swaps apply to the DISPLAYED card
+  // only — the saved plan and the map never change under the traveler.
+  type WeatherResult = { swaps: DaySwap[]; closures: { city: string; day: number; date: string; attraction: string; note: string }[]; forecastAvailable: boolean; forecastReason?: string; startDate: string; closuresCheckedAt: string; checkedAt: string };
+  const [weatherCheck, setWeatherCheck] = useState<WeatherResult | 'loading' | null>(null);
+  const checkWeather = async () => {
+    if (!plan || !lastParsed || weatherCheck === 'loading') return;
+    setWeatherCheck('loading');
+    try {
+      const r = await fetch('/api/weather', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: plan.destination, travelers: plan.travelers, days: lastParsed.durationDays ?? 3, month: lastParsed.month ?? 0, origin: lastParsed.origin ?? '', kids: lastParsed.kids ?? [], ...(lastParsed.routeOverride ? { routeOverride: lastParsed.routeOverride } : {}) }),
+      });
+      const j = (await r.json()) as WeatherResult;
+      setWeatherCheck(j);
+    } catch {
+      setWeatherCheck(null);
+    }
+  };
+  const displayCard = useMemo(
+    () => (tripCard && weatherCheck && weatherCheck !== 'loading' && weatherCheck.swaps.length ? applySwaps(tripCard, weatherCheck.swaps) : tripCard),
+    [tripCard, weatherCheck]
+  );
+  // Swapped-day tags: "city|day" -> the day it swapped with.
+  const swappedDays = useMemo(() => {
+    const m = new Map<string, number>();
+    if (weatherCheck && weatherCheck !== 'loading') {
+      for (const s of weatherCheck.swaps) {
+        m.set(`${s.city}|${s.fromDay}`, s.toDay);
+        m.set(`${s.city}|${s.toDay}`, s.fromDay);
+      }
+    }
+    return m;
+  }, [weatherCheck]);
   // Add to plan: the leg joins the trip plan AND the chat — the traveler
   // sees the pick in the conversation, not just on the map. The chat
   // line carries the bundle total and the last day a leg can still be
@@ -1119,7 +1160,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 <strong style={{ fontSize: 14 }}>Top improvement for your budget</strong>
                 <p style={{ fontSize: 14, margin: '4px 0' }}>{tripCard.budgetTip}</p>
               </div>
-              {tripCard.stops.map((stop, si) => (
+              {/* The stops render from the display card (round 2 #10):
+                  when a weather/closure swap applies, the two days'
+                  activities exchange places — the dates stay put. */}
+              {(displayCard ?? tripCard).stops.map((stop, si) => (
                 <div key={stop.city} style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
                   <strong>Days {stop.days[0]?.day ?? si + 1}{stop.days.length > 1 ? `-${stop.days[stop.days.length - 1].day}` : ''} · {fmtDate(stop.startDate)} – {fmtDate(stop.endDate)} · {stop.city}</strong>
                   <p style={{ margin: '4px 0' }}>{stop.intro}</p>
@@ -1139,10 +1183,50 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   {stop.days.map((d) => (
                     <p key={d.day} style={{ fontSize: 14, margin: '3px 0' }}>
                       Day {d.day} · {fmtDate(d.date)}{d.weatherF ? ` · ${d.weatherF}°F typical` : ''} · {d.experiences} experiences — {d.title}
+                      {swappedDays.get(`${stop.city}|${d.day}`) ? ` ↔ swapped with Day ${swappedDays.get(`${stop.city}|${d.day}`)}` : ''}
                     </p>
                   ))}
                 </div>
               ))}
+              {/* Weather / closure day-swap (round 2 #10): the Plan
+                  updates box — what changed and why, with the check
+                  dates. The button runs the check on demand. */}
+              <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 0' }}>
+                <strong>Plan updates — weather &amp; closures</strong>
+                {weatherCheck === null && (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Checks the closures on your dates (Louvre, Uffizi, Vatican Museums) and the 16-day rain forecast — and swaps a day when one is closed or rainy.</p>
+                    <button className="ghost" onClick={checkWeather}>Check weather &amp; closures</button>
+                  </div>
+                )}
+                {weatherCheck === 'loading' && (
+                  <p style={{ fontSize: 14, margin: '4px 0' }}>Checking weather &amp; closures…</p>
+                )}
+                {weatherCheck && weatherCheck !== 'loading' && (
+                  <div style={{ marginTop: 8 }}>
+                    {weatherCheck.swaps.length ? (
+                      weatherCheck.swaps.map((s, i) => (
+                        <p key={i} style={{ fontSize: 14, margin: '4px 0' }}>
+                          {s.type === 'closure' ? 'Closed' : 'Rain'} — Day {s.fromDay} (“{s.fromTitle}”) swaps with Day {s.toDay} (“{s.toTitle}”) in {s.city}: {s.reason}
+                        </p>
+                      ))
+                    ) : (
+                      <p style={{ fontSize: 14, margin: '4px 0' }}>Nothing needs to move — no closures on your dates, and no rainy outdoor day.</p>
+                    )}
+                    {!weatherCheck.forecastAvailable && (
+                      <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+                        {weatherCheck.forecastReason === 'too_far'
+                          ? `Weather forecast not available yet — your trip starts ${weatherCheck.startDate}, more than 16 days out.`
+                          : weatherCheck.forecastReason === 'past'
+                            ? `Weather forecast not available — your trip starts ${weatherCheck.startDate}, which has already passed.`
+                            : 'The weather forecast could not be loaded just now — the closures above are still checked.'}
+                      </p>
+                    )}
+                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>Closure rules checked {weatherCheck.closuresCheckedAt} · forecast from Open-Meteo, checked {new Date(weatherCheck.checkedAt).toLocaleString()}.</p>
+                    <button className="ghost" onClick={checkWeather}>Check again</button>
+                  </div>
+                )}
+              </div>
               {/* Add-to-bundle-later (round 2 #7): the legs picked from
                   the map, with the exact total and the last day a leg
                   can still be added at the same bundled price. */}

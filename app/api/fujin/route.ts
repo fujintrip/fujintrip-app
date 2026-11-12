@@ -6,7 +6,8 @@ import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from 
 import { bestTimeLine } from '../../../lib/bestTime';
 import { disruptionTemplate, type DisruptionStatus } from '../../../lib/disruption';
 import { visaLine } from '../../../lib/visa';
-import { suggestedStart } from '../../../lib/tripCard';
+import { buildTripCard, suggestedStart } from '../../../lib/tripCard';
+import { checkTripWeather, swapLine, weatherBlock, type WeatherCheck } from '../../../lib/daySwap';
 
 /**
  * Fujin AI — live model, server-side only. TRAVEL-ONLY scope: the system
@@ -131,6 +132,7 @@ const SYSTEM_PROMPT = [
   'BOOK NOW — when the traveler asks whether to book now or wait, use the PRICE CHECK block below: it compares the cheapest live fares out and back with the plan\'s own flight budget, and says whether the plan still holds or would rise. Quote that read, never add your own forecast, and never say fares will drop or rise — fares move both ways and we never predict them. If a TREND block is present, quote its sentence too — it is the read of the traveler\'s own past fare checks (\"Since you started watching on [date], the cheapest fares out and back went $X → $Y. Confidence: low/medium — based on N checks of your own fares, not a forecast.\"). If there is no TREND block, say there is no price history yet and offer a price watch in My Trips. Never give a confidence level from nothing, never say "high confidence", and never say a forecast is "95% accurate". If there is no PRICE CHECK block, say the live fare is not available for this trip yet and offer a price watch in My Trips.',
   'ON-TRIP FOOD — when a FOOD block is present, the traveler is asking where to eat tonight: name ONLY the places in it, with their open-now status, walk time, price band and dish — quote the Wikivoyage sentence as the review. Only say "open now" when the block says so; when it says "hours not verified", say so. Never invent a name, an opening hour, a dish or a review. If there is no FOOD block, answer from the LOCAL VOICES material and say which places you could not confirm.',
   'BEST TIME — when the traveler asks when to go, use the BEST TIME block: name the best month and why (price, crowds, weather), and the season for their month if they named one. Everything is a typical season, never a live price and never a forecast — say "typical season" when you quote it.',
+  'WEATHER — when the traveler asks about weather, rain or closures, use the WEATHER block below: name the closures on the trip\'s dates and the day swaps they imply, and quote the rain chances for the trip days. Everything is a forecast from Open-Meteo, never a promise — say "forecast" when you quote it. If the block says no forecast exists yet (the trip is more than 16 days out), say so and do not guess the weather. Never invent a closure, a rain chance, or a swap.',
   'DISRUPTION — when the traveler says their flight was cancelled, delayed, missed or diverted, answer in this shape, in order: (1) what changed — ONLY from the FLIGHT STATUS block below (or from the status the traveler quoted in their own message); if there is no status block, say plainly you don\'t have a live status and point them to the "Check my flight" box. A cancellation counts only when it is confirmed — never call a flight cancelled on a rumor or a single flag. (2) why — only what the status itself says; never guess a cause (weather, mechanical). (3) three ranked options — Fastest, Cheapest, Most reliable — ONLY from the LIVE FARES block (airline, price, times); never invent an alternate flight, a gate, or a rebooking; if no live fares are available, say so and offer to save a booking request in My Trips. (4) the refund right: a flight touching the US — DOT automatic cash refund within 7 business days; a European route — EU261 €250/€400/€600 for a 3h+ delay or cancellation; the UK — UK261 £220/£350/£520. (5) one next action. Keep it short and practical.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
@@ -170,7 +172,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null) {
+function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -244,6 +246,23 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
   // appended when the server fetched them for tonight's question.
   if (contextFood?.places.length && !declinedOffTopic) {
     reply += `\n\n${foodReply(contextFood)}`;
+  }
+  // Weather / closures (round 2 #10): when the traveler asked about
+  // weather or closures, the check's swaps and the forecast gap — the
+  // same lines the plan view's Plan updates box shows.
+  if (weather && /weather|rain|rainy|forecast|closed|closure/i.test(message) && destination && !declinedOffTopic) {
+    if (weather.swaps.length) {
+      reply += `\n\nPlan updates — the weather and closures moved two days around:\n${weather.swaps.map(swapLine).join('\n')}`;
+    } else if (weather.closures.length) {
+      reply += `\n\nI checked the closures for your trip: ${weather.closures.map((c) => `${c.attraction} in ${c.city} is closed on day ${c.day}`).join('; ')} — but the plan can't move that day to another day in the same city, so check the attraction's site before you go and plan around it.`;
+    }
+    if (!weather.forecastAvailable) {
+      reply += weather.forecastReason === 'too_far'
+        ? `\n\nThe weather forecast isn't available yet — your trip starts ${weather.startDate}, more than 16 days out.`
+        : weather.forecastReason === 'past'
+          ? `\n\nThe weather forecast isn't available — your trip starts ${weather.startDate}, which has already passed.`
+          : `\n\nThe weather forecast couldn't be loaded just now — I won't guess the weather.`;
+    }
   }
   // Best time to travel (round 2 #5): when the traveler asks when to
   // go, the best month and the season for their month. Pure function of
@@ -444,7 +463,19 @@ export async function POST(req: NextRequest) {
   const foodPromise: Promise<TonightResult | null> = foodCity
     ? fetchTonight(foodCity).catch(() => null)
     : Promise.resolve(null);
-  const [voices, liveFares, food] = await Promise.all([voicesPromise, faresPromise, foodPromise]);
+  // The weather / closure check (round 2 #10): only when the traveler
+  // asks about weather, rain or closures, and only when the trip is
+  // known. The forecast is fetched only when the trip starts within 16
+  // days — beyond that Open-Meteo has no forecast yet, and the route
+  // says so instead of inventing one.
+  const isWeatherQuestion = /weather|rain|rainy|forecast|closed|closure/i.test(message);
+  const weatherCard = isWeatherQuestion && stateDestination && tripDaysKnown >= 2 && tripMonth
+    ? buildTripCard({ destination: stateDestination, travelers: stateTravelers || 2, days: tripDaysKnown, month: tripMonth, origin: stateOrigin, ...(stateRouteOverride ? { routeOverride: stateRouteOverride } : {}), kids: stateKids })
+    : null;
+  const weatherPromise: Promise<WeatherCheck | null> = weatherCard
+    ? checkTripWeather(weatherCard).catch(() => null)
+    : Promise.resolve(null);
+  const [voices, liveFares, food, weather] = await Promise.all([voicesPromise, faresPromise, foodPromise, weatherPromise]);
 
   // System prompt for this request: base prompt + fresh traveler material
   // + on-trip framing when applicable.
@@ -466,6 +497,12 @@ export async function POST(req: NextRequest) {
   // the trip's own month, when the traveler asks when to go.
   if (/best time|when should (i|we) go|when to go|when is the best|cheapest month|best month to/i.test(message) && (voicesDest || stateDestination)) {
     systemPrompt += ` BEST TIME — ${bestTimeLine(voicesDest || stateDestination, tripMonth)}`;
+  }
+  // Weather / closures (round 2 #10): the closures on this trip's
+  // dates, the swaps they imply, and the forecast gap when the trip is
+  // too far out — the model quotes the block, never a guessed forecast.
+  if (weather && isWeatherQuestion) {
+    systemPrompt += ` WEATHER — ${weatherBlock(weather)}`;
   }
   if (onTrip) {
     systemPrompt += ` ON-TRIP MODE — the traveler is in ${onTrip} RIGHT NOW. Answer short and practical: where to eat tonight, what is open now, how to get there. Use the local voices material above for real places. Keep it to what helps right now, not a full plan.`;
@@ -595,7 +632,8 @@ export async function POST(req: NextRequest) {
       stateTier,
       statePriceHistory,
       food,
-      checkedStatus
+      checkedStatus,
+      weather
     );
   }
   const apiKey = provider.apiKey;
@@ -649,14 +687,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather);
     }
 
     return NextResponse.json({
@@ -670,7 +708,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather);
   }
 }
 
