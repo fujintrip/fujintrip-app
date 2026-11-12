@@ -2,7 +2,36 @@ export type PlanOption = { name: string; total: number; flight: number; hotel: n
 export type DayPlan = { day: number; title: string; morning: string; afternoon: string; evening: string; transport: string; stay: string };
 export type Plan = { destination: string; travelers: number; options: PlanOption[]; days: DayPlan[]; tips: string[]; liked: string[]; notLiked: string[] };
 
-const BASE: Record<string, number> = { Kyoto: 1950, Bali: 1250, Santorini: 2100, 'St. George': 780, Tacoma: 920, Hilo: 1450 };
+const BASE: Record<string, number> = {
+  Kyoto: 1950,
+  Bali: 1250,
+  Santorini: 2100,
+  'St. George': 780,
+  Tacoma: 920,
+  Hilo: 1450,
+  // Per-route bases, approved by the user Nov 12, 2026 (as drafted in
+  // files/discovery-route-prices-proposal.md). These are planning-estimate
+  // bases, not live quotes — they give each discovery-map route its own
+  // bubble instead of the old $1,500 default ($3,000 for 2 travelers).
+  // Keys must match the COUNTRY_ROUTES display names exactly.
+  Europe: 2200,
+  'Central Europe': 1800,
+  Portugal: 1450,
+  Egypt: 1200,
+  Japan: 2200,
+  Italy: 1750,
+  France: 1900,
+  Spain: 1550,
+  Greece: 1750,
+  Thailand: 1250,
+  'Southeast Asia': 1300,
+  Turkey: 1350,
+  Morocco: 1150,
+  India: 1150,
+  UK: 1900,
+  Mexico: 1350,
+  USA: 2000,
+};
 
 // Destinations the planner has real tier totals for (used by the live AI
 // route to build its price table — single source of truth, no invented prices).

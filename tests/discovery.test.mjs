@@ -41,11 +41,32 @@ test('every pin price is the planner Best value total for 2 travelers, exactly',
     const expected = comparisonFor(p.destination, 2).best.total;
     assert.equal(p.price, expected, `${p.destination} pin price must equal the planner table`);
   }
-  // The planner's default base: every route is $3,000 for 2 travelers
-  // Best value today; the base-price places differ (Bali $2,500,
-  // St. George $1,560, Tacoma $1,840, Hilo $2,900).
-  assert.equal(discoveryEntry('Central Europe')?.price, 3000);
-  assert.equal(discoveryEntry('Europe')?.price, 3000);
+  // Per-route bases, approved by the user Nov 12, 2026 (as drafted):
+  // 2-traveler Best value totals range $2,300–$4,400. The base-price
+  // places differ (Bali $2,500, St. George $1,560, Tacoma $1,840,
+  // Hilo $2,900).
+  const expectedRoutePrices = {
+    Europe: 4400,
+    'Central Europe': 3600,
+    Portugal: 2900,
+    Egypt: 2400,
+    Japan: 4400,
+    Italy: 3500,
+    France: 3800,
+    Spain: 3100,
+    Greece: 3500,
+    Thailand: 2500,
+    'Southeast Asia': 2600,
+    Turkey: 2700,
+    Morocco: 2300,
+    India: 2300,
+    UK: 3800,
+    Mexico: 2700,
+    USA: 4000,
+  };
+  for (const [route, price] of Object.entries(expectedRoutePrices)) {
+    assert.equal(discoveryEntry(route)?.price, price, `${route} bubble is $${price.toLocaleString()}`);
+  }
   assert.equal(discoveryEntry('Bali')?.price, 2500);
   assert.equal(discoveryEntry('St. George')?.price, 1560);
   assert.equal(discoveryEntry('Tacoma')?.price, 1840);
@@ -111,6 +132,6 @@ test('a destination the planner has no price for gets no price, not a guess', ()
 
 test('price label reads like the destination cards', () => {
   const ce = discoveryEntry('Central Europe');
-  assert.equal(discoveryPriceLabel(ce), 'from $3,000 total');
+  assert.equal(discoveryPriceLabel(ce), 'from $3,600 total');
   assert.equal(discoveryPriceLabel(discoveryEntry('Bali')), 'from $2,500 total');
 });

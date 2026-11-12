@@ -260,11 +260,11 @@ test('discovery map: section renders with a priced default pin and a Plan this t
   // planner's exact Best value total for 2 travelers.
   assert.ok(html.includes('Lisbon (3 nights)'), 'the default pin shows its route line');
   assert.ok(html.includes('Best month to go: May'), 'the default pin shows its best month');
-  assert.ok(html.includes('from $3,000 total'), 'the default pin shows the planner price');
+  assert.ok(html.includes('from $4,400 total'), 'the default pin shows the planner price');
   assert.ok(html.includes('planning estimate'), 'the price is labeled a planning estimate');
   assert.ok(html.includes('not live quotes'), 'the section says the prices are not live quotes');
   // The chip list is the keyboard / small-screen way to pick a pin.
-  assert.ok(html.includes('Central Europe · $3,000'), 'the chip list names a route with its price');
+  assert.ok(html.includes('Central Europe · $3,600'), 'the chip list names a route with its price');
   assert.ok(html.includes('Plan this trip'), 'the essentials panel has the Plan this trip action');
   // The price bubbles themselves are client-only (Leaflet, ssr:false),
   // so they are not in the SSR HTML — their rendering needs the live

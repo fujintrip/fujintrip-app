@@ -7,6 +7,7 @@ import {
   buildPlan,
   childFareFactor,
   comparisonFor,
+  COUNTRY_ROUTES,
   distributeNights,
   flightPassengerFactor,
   serviceFee,
@@ -41,12 +42,16 @@ test('planner: the tiered service fee — $19 / $35 / $49, boundaries exact', ()
   assert.equal(serviceFee(2000), 49);
 });
 
-test('planner: Central Europe, 1 traveler — $960 / $1,500 / $2,460; separate $1,724, save $224', () => {
+test('planner: Central Europe, 1 traveler — $1,152 / $1,800 / $2,952; separate $2,069, save $269', () => {
+  // Base $1,800, approved by the user Nov 12, 2026 (per-route bases).
+  // Was $960 / $1,500 / $2,460 under the old $1,500 default base — the
+  // Layla-verified totals from Nov 11; the change is the approved table,
+  // not a regression.
   const plan = buildPlan('Central Europe', 1, 3);
-  assert.deepEqual(plan.options.map((o) => o.total), [960, 1500, 2460]);
+  assert.deepEqual(plan.options.map((o) => o.total), [1152, 1800, 2952]);
   const c = comparisonFor('Central Europe', 1);
-  assert.equal(c.separate.total, 1724);
-  assert.equal(c.save, 224);
+  assert.equal(c.separate.total, 2069);
+  assert.equal(c.save, 269);
   // The separate-booking parts sum exactly to the separate total.
   assert.equal(c.separate.flight + c.separate.hotel + c.separate.car + c.separate.activities, c.separate.total);
 });
@@ -92,20 +97,32 @@ test('bundle: exact totals, adding the same leg twice dedupes', () => {
 });
 
 test('tripCard: legs sum exactly to the planner totals per kind, for every tier', () => {
-  for (const tier of [0, 1, 2]) {
-    const card = buildTripCard({ destination: 'Central Europe', travelers: 1, days: 14, month: 0, origin: '', tier });
-    const plan = buildPlan('Central Europe', 1, 14).options[tier];
-    const sumKind = (kind) => card.legs.filter((l) => l.kind === kind).reduce((s, l) => s + l.price, 0);
-    // Flight is split 40% out / 40% back / 20% between cities — the
-    // intercity 'transport' legs are part of the flight total.
-    assert.equal(sumKind('flight') + sumKind('transport'), plan.flight, `tier ${tier} flight`);
-    // Stays are nudged so they add up exactly to the hotel total.
-    assert.equal(sumKind('stay'), plan.hotel, `tier ${tier} hotel`);
-    // Cars split by nights with per-stop rounding — within a dollar.
-    assert.ok(Math.abs(sumKind('car') - plan.car) <= 1, `tier ${tier} car`);
-    // Activities have no leg, so legs sum to total minus activities.
-    assert.equal(card.legs.reduce((s, l) => s + l.price, 0), plan.total - plan.activities, `tier ${tier} legs`);
-  }
+  const check = (destination, travelers, days) => {
+    for (const tier of [0, 1, 2]) {
+      const card = buildTripCard({ destination, travelers, days, month: 0, origin: '', tier });
+      const plan = buildPlan(destination, travelers, days).options[tier];
+      const sumKind = (kind) => card.legs.filter((l) => l.kind === kind).reduce((s, l) => s + l.price, 0);
+      // Flight is split 40% out / 40% back / 20% between cities — the
+      // intercity 'transport' legs are part of the flight total.
+      assert.equal(sumKind('flight') + sumKind('transport'), plan.flight, `${destination} tier ${tier} flight`);
+      // Stays are nudged so they add up exactly to the hotel total.
+      assert.equal(sumKind('stay'), plan.hotel, `${destination} tier ${tier} hotel`);
+      // Cars split by nights with per-stop rounding — nudged to the exact total.
+      assert.equal(sumKind('car'), plan.car, `${destination} tier ${tier} car`);
+      // Activities have no leg, so legs sum to total minus activities.
+      assert.equal(card.legs.reduce((s, l) => s + l.price, 0), plan.total - plan.activities, `${destination} tier ${tier} legs`);
+    }
+  };
+  check('Central Europe', 1, 14);
+  // Single places too: one stop means no intercity legs, so the flight
+  // splits 50/50 out/back (Nov 12 fix — the 40/40/20 split stranded 20%
+  // of the fare on a Kyoto card).
+  check('Kyoto', 2, 3);
+  check('Bali', 2, 3);
+  // Every route, at its own approved per-route base (Nov 12, 2026):
+  // the per-leg rounding that the $1,500 default never exposed must not
+  // break the legs-sum invariant anywhere.
+  for (const { display } of Object.values(COUNTRY_ROUTES)) check(display, 2, 10);
 });
 
 test('daySwap: the verified closures — Louvre Tue, Uffizi Mon, Vatican Sun except last Sunday', () => {

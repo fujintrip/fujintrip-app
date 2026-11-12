@@ -250,8 +250,14 @@ export function buildTripCard(opts: {
       ? distributeNights(routeKey, days)
       : [{ city: opts.destination, country: CITY_INFO[opts.destination]?.country ?? '', nights: totalNights }];
 
-  const legFlightOut = Math.round(best.flight * 0.4);
-  const legFlightBack = Math.round(best.flight * 0.4);
+  // One stop means no between-city legs, so the flight splits 50/50
+  // out/back — the 40/40/20 split would strand 20% of the fare with
+  // nowhere to go (pre-Nov-12 bug: a Kyoto card showed $874 of flights
+  // for a $1,092 flight leg). With stops, 40% out / 40% back / 20%
+  // between cities; the nudge below absorbs the ±$1 rounding drift.
+  const singleStop = nightPlan.length <= 1;
+  const legFlightOut = singleStop ? Math.round(best.flight / 2) : Math.round(best.flight * 0.4);
+  const legFlightBack = singleStop ? best.flight - legFlightOut : Math.round(best.flight * 0.4);
   const legIntercity =
     nightPlan.length > 1 ? Math.round((best.flight * 0.2) / (nightPlan.length - 1)) : 0;
 
@@ -423,6 +429,22 @@ export function buildTripCard(opts: {
       startDate: st.startDate,
       endDate: st.endDate,
     });
+  }
+
+  // Car legs and flight legs are rounded per leg, so their sums can drift
+  // a dollar from the plan's car / flight totals — nudge the largest leg
+  // of each kind so the map's legs add up exactly (same rule as the stays
+  // above, and as fixLegs in planner). Exposed Nov 12, 2026 by the
+  // per-route bases: Cheapest Central Europe ($1,800 base) split its $90
+  // car leg 28 + 21 + 42 = $91, so the legs summed $1 over the plan total.
+  for (const kind of ['car', 'flight'] as const) {
+    const kindLegs = legs.filter((l) => (kind === 'flight' ? l.kind === 'flight' || l.kind === 'transport' : l.kind === kind));
+    const target = kind === 'flight' ? best.flight : best.car;
+    const diff = target - kindLegs.reduce((s, l) => s + l.price, 0);
+    if (diff !== 0 && kindLegs.length > 0) {
+      const biggest = kindLegs.reduce((a, b) => (b.price > a.price ? b : a));
+      biggest.price += diff;
+    }
   }
 
   const experiences = cardStops.reduce((s, st) => s + st.days.reduce((a, d) => a + d.experiences, 0), 0);

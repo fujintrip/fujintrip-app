@@ -12,9 +12,8 @@
 // total the destination cards and the AI quote. Every price is labeled
 // "planning estimate" in the UI; a destination the planner has no price
 // for (no route, no base price) gets `price: null` — never a guess.
-// Routes all sit on the planner's default base today ($3,000 for 2
-// travelers), because the planner has no per-route base — that is the
-// table's honest answer, and the UI must not dress it up as variety.
+// Routes carry their own per-route bases (approved Nov 12, 2026), so
+// bubbles range $2,300–$4,400 instead of the old $1,500 default.
 
 import {
   comparisonFor,
