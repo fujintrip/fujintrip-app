@@ -172,7 +172,11 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
-function fallback(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null) {
+// The fallback reply as a plain payload (the built-in planner's answer
+// with voices, fares, trend and food appended) — the atomic path wraps it
+// in NextResponse.json, and the streaming path sends the same payload as
+// the final `done` event after chunking its reply text.
+function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -271,7 +275,7 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     const line = bestTimeLine(destination, findMonth(message));
     if (line) reply += `\n\n${line}`;
   }
-  return NextResponse.json({
+  return {
     live: false,
     label,
     ...parsed,
@@ -287,7 +291,38 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
     voicesSource: voices?.source ?? '',
     voicesDestination: voicesDest,
     liveFares: liveFares ?? null,
-  });
+  };
+}
+
+// The atomic fallback: the payload as a JSON response.
+function fallback(...args: Parameters<typeof fallbackPayload>) {
+  return NextResponse.json(fallbackPayload(...args));
+}
+
+// The reply field inside a half-written model JSON object — the model
+// returns strict JSON, so a streaming reply is the JSON arriving
+// piece by piece. The partial value is the readable text so far; the
+// final parse (parseModelJson) is what the client trusts.
+function partialReply(raw: string): string | null {
+  const m = raw.match(/"reply"\s*:\s*"/);
+  if (!m || m.index === undefined) return null;
+  const s = raw.slice(m.index + m[0].length);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\') {
+      out += s.slice(i, i + 2);
+      i++;
+      continue;
+    }
+    if (ch === '"') break;
+    out += ch;
+  }
+  try {
+    return JSON.parse(`"${out}"`);
+  } catch {
+    return out;
+  }
 }
 
 function parseModelJson(content: string): FujinResult | null {
@@ -616,6 +651,153 @@ export async function POST(req: NextRequest) {
       : null;
 
   const provider = getProvider();
+  // Streaming (design #2): when the client asks for stream: true, the
+  // reply arrives as server-sent events — `chunk` events carry the reply
+  // text as it arrives, then a `done` event carries the full result (the
+  // same shape as the atomic reply). The first chunk is the
+  // time-to-first-token moment; the typing indicator covers the wait
+  // before it. With no provider, the built-in planner's reply is chunked
+  // the same way (paced, ~25ms a chunk) so the client machinery works
+  // identically on the fallback path.
+  if (raw.stream === true) {
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (obj: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        try {
+          if (!provider) {
+            const payload = fallbackPayload(
+              fullText,
+              'Fujin AI is offline — using the built-in planner. Connect an AI provider (QWEN_API_KEY or MODEL_API_KEY) to switch on live AI.',
+              voices,
+              voicesDest,
+              stateTravelers || 2,
+              stateDestination,
+              message,
+              stateOrigin,
+              liveFares,
+              stateRouteOverride,
+              stateKids,
+              stateTier,
+              statePriceHistory,
+              food,
+              checkedStatus,
+              weather
+            );
+            // Chunk the reply at word boundaries so the client renders
+            // flowing text, not characters.
+            const words = payload.reply.split(/(?<=\s)/);
+            let chunk = '';
+            for (const w of words) {
+              chunk += w;
+              if (chunk.length >= 24) {
+                send({ chunk });
+                chunk = '';
+                await new Promise((r) => setTimeout(r, 25));
+              }
+            }
+            if (chunk) send({ chunk });
+            send({ done: true, result: payload });
+            return;
+          }
+          // Live provider, streamed: the same request as the atomic path,
+          // plus stream: true. The deltas are raw JSON text; the chunk
+          // events carry only the new reply text, so the client just appends.
+          const aborter = new AbortController();
+          const timeout = setTimeout(() => aborter.abort(), 30000);
+          let res: Response;
+          try {
+            res = await fetch(`${provider.baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${provider.apiKey}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: provider.model,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  ...history.map((t) => ({ role: t.role, content: t.content })),
+                  { role: 'user', content: message },
+                ],
+                temperature: 0.3,
+                ...(provider.name === 'Qwen' ? { enable_thinking: false } : {}),
+                response_format: provider.useJsonSchema
+                  ? { type: 'json_schema', json_schema: { name: 'fujin_trip', strict: false, schema: FUJIN_SCHEMA } }
+                  : { type: 'json_object' },
+                stream: true,
+              }),
+              signal: aborter.signal,
+            });
+          } finally {
+            clearTimeout(timeout);
+          }
+          if (!res.ok || !res.body) {
+            const detail = `provider ${provider.name} stream ${res.status}`;
+            console.error('[fujin] stream request failed', detail);
+            send({ error: detail });
+            return;
+          }
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          let full = '';
+          let sent = '';
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop() ?? '';
+            for (const line of lines) {
+              const t = line.trim();
+              if (!t.startsWith('data:')) continue;
+              const data = t.slice(5).trim();
+              if (!data || data === '[DONE]') continue;
+              let ev: { choices?: Array<{ delta?: { content?: string } }> };
+              try {
+                ev = JSON.parse(data) as typeof ev;
+              } catch {
+                continue;
+              }
+              const delta = ev?.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string' && delta) {
+                full += delta;
+                const partial = partialReply(full);
+                if (partial !== null && partial.length > sent.length) {
+                  send({ chunk: partial.slice(sent.length) });
+                  sent = partial;
+                }
+              }
+            }
+          }
+          const parsed = parseModelJson(full);
+          if (!parsed) {
+            console.error('[fujin] Streamed model reply was unparseable');
+            send({ error: 'unparseable' });
+            return;
+          }
+          send({
+            done: true,
+            result: {
+              live: true,
+              label: `Live Fujin AI (${provider.name}).`,
+              ...parsed,
+              voices: voices.text,
+              voicesSource: voices.source,
+              voicesDestination: voicesDest,
+              liveFares: liveFares ?? null,
+            },
+          });
+        } catch (err) {
+          console.error('[fujin] Stream failed', err instanceof Error ? err.message : err);
+          send({ error: err instanceof Error ? err.message : 'stream failed' });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
+    });
+  }
   if (!provider) {
     return fallback(
       fullText,

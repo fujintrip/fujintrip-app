@@ -20,6 +20,9 @@ import AdSlot from '../components/AdSlot';
 const TripMap = dynamic(() => import('../components/TripMap'), { ssr: false });
 
 type Trip = { id: string; label: string; status: string; date: string; destination?: string };
+// The shape of a parsed server reply (streamed `done` result or atomic
+// JSON) — shared by the streaming path and the atomic fallback path.
+type ServerParsed = { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number };
 
 // Whole-trip price check (competitor learning #4, Mindtrip / Kayak):
 // the /api/price-check response, and a price watch. A watch measures a
@@ -184,6 +187,21 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const [choice, setChoice] = useState(1);
   const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string> } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
+  // Typing indicator + streaming (design #2): the send is followed by
+  // ~3.4s of silence today. The indicator shows within 200ms of Send;
+  // after 5s with no first chunk it escalates to a status line. While the
+  // reply streams, the Send button becomes a Stop button (AbortController)
+  // and the partial text is kept if the traveler stops it.
+  const [thinking, setThinking] = useState<'thinking' | 'searching' | null>(null);
+  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopThinking = () => {
+    if (thinkingTimerRef.current) clearTimeout(thinkingTimerRef.current);
+    thinkingTimerRef.current = null;
+    setThinking(null);
+    setStreamingText(null);
+  };
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
   const [voices, setVoices] = useState<Voices>(null);
@@ -441,79 +459,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const watchFor = (dest: string | undefined, travelers: number, origin: string, month: number, days: number) =>
     dest ? watches.find((w) => w.destination === dest && w.travelers === travelers && (w.origin || '') === (origin || '') && w.month === month && w.durationDays === days) : undefined;
 
-  const send = async (textOverride?: string, statusOverride?: FlightStatusData | null) => {
-    const text = (textOverride ?? input).trim();
-    if (!text) return;
-    setInput('');
-    // Show your message right away; the AI reply is added when it arrives,
-    // so a slow server never looks like the message didn't send.
-    setMsgs((m) => [...m, { who: 'user', text }]);
-    // Everything the traveler said so far, for the built-in planner when
-    // the server can't be reached — same memory the server gets.
-    const contextText = [...msgs.filter((m) => m.who === 'user').map((m) => m.text), text].join(' ');
-    // The departure city, from everything the traveler said so far — it
-    // rides along in tripState so the server never has to ask twice. A
-    // bare-city answer ("yes new york") counts too, from this message only.
-    const origin = findOrigin(contextText) || findOriginAnswer(text) || lastParsed?.origin || '';
-    // The trip-card slots, from everything said so far (month, length) —
-    // carried forward like the origin so they survive follow-ups.
-    const month = findMonth(contextText) || lastParsed?.month || 0;
-    const durationDays = parseDuration(contextText) || lastParsed?.durationDays || 0;
-    // Kids' ages, from everything said so far — the pace depends on them,
-    // and they ride along in tripState like the origin.
-    const kids = parseKidAges(contextText).length ? parseKidAges(contextText) : lastParsed?.kids ?? [];
-    // The price watch for this trip, if one exists — its own past checks
-    // ride along in tripState so the trend read is from real checks.
-    const tripWatch = lastParsed ? watchFor(lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0) : undefined;
-    // Live AI first (server route); any failure falls back to the built-in planner.
-    let parsed: { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number };
-    let live = false;
-    try {
-      const r = await fetch('/api/fujin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          // Conversation history: the last few turns, so the AI remembers
-          // the trip instead of treating each message as a fresh
-          // conversation (the Nov 10 Europe bug). 10 turns — a long
-          // conversation must not lose the trip.
-          history: msgs.slice(-10).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
-          // Durable trip memory: the trip already established (destination
-          // + travelers + departure city) goes with EVERY request, so it
-          // survives history scrolling off the window.
-          ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } } : {}),
-          // On-trip mode: tell the server the traveler is already there.
-          ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
-          // Disruption report: the checked flight status rides along so
-          // the AI quotes a confirmed status, never a guess (feature 5).
-          ...(statusOverride ? { flightStatus: statusOverride } : {}),
-        }),
-      });
-      const j = await r.json();
-      if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
-        // A revision from the server arrives as routeStops (+ routeWeights
-        // for "more time in a city") and/or a tier change; the fallback
-        // path returns routeOverride/tier directly (see below).
-        const routeStops = Array.isArray(j.routeStops) ? j.routeStops.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0).map((s: string) => s.trim()).slice(0, 8) : [];
-        const routeWeights =
-          j.routeWeights && typeof j.routeWeights === 'object' && !Array.isArray(j.routeWeights)
-            ? Object.fromEntries(
-                Object.entries(j.routeWeights as Record<string, unknown>).filter((e): e is [string, number] => typeof e[1] === 'number' && e[1] > 0)
-              )
-            : undefined;
-        parsed = { destination: j.destination, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply, missing: Array.isArray(j.missing) ? j.missing : [], tips: Array.isArray(j.tips) ? j.tips.filter((t: unknown): t is string => typeof t === 'string').slice(0, 3) : [], kids: Array.isArray(j.kids) ? j.kids.filter((k: unknown): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6) : undefined, ...(routeStops.length ? { routeOverride: { cities: routeStops, ...(routeWeights && Object.keys(routeWeights).length ? { weights: routeWeights } : {}) } } : {}), ...(typeof j.tier === 'number' && [0, 1, 2].includes(j.tier) ? { tier: j.tier } : {}) };
-        live = j.live === true;
-        // Keep the fresh traveler material the server fetched for this trip.
-        if (typeof j.voices === 'string' && j.voices && typeof j.voicesDestination === 'string' && j.voicesDestination) {
-          setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
-        }
-      } else {
-        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride, kids.length ? kids : lastParsed?.kids ?? [], choice));
-      }
-    } catch {
-      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride, kids.length ? kids : lastParsed?.kids ?? [], choice));
-    }
+  // Apply a parsed server reply to the chat state: the AI's live flag, the
+  // trip slots (destination, travelers, origin, month, length, kids, the
+  // revised route, the tier) and the reply message itself. Shared by the
+  // streaming path and the atomic fallback path so both behave identically.
+  const handleParsed = (parsed: ServerParsed, live: boolean, origin: string, month: number, durationDays: number, kids: number[]) => {
     setAiLive(live);
     // Empty destination means an off-topic decline — keep any earlier plan destination.
     if (parsed.destination) {
@@ -560,6 +510,171 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     }
     setMsgs((m) => [...m, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
   };
+
+  const send = async (textOverride?: string, statusOverride?: FlightStatusData | null) => {
+    const text = (textOverride ?? input).trim();
+    if (!text) return;
+    // One reply in flight at a time — while Fujin AI is thinking or
+    // streaming, the Send button is a Stop button instead.
+    if (thinking !== null || streamingText !== null) return;
+    setInput('');
+    // Show your message right away; the AI reply is added when it arrives,
+    // so a slow server never looks like the message didn't send.
+    setMsgs((m) => [...m, { who: 'user', text }]);
+    // Everything the traveler said so far, for the built-in planner when
+    // the server can't be reached — same memory the server gets.
+    const contextText = [...msgs.filter((m) => m.who === 'user').map((m) => m.text), text].join(' ');
+    // The departure city, from everything the traveler said so far — it
+    // rides along in tripState so the server never has to ask twice. A
+    // bare-city answer ("yes new york") counts too, from this message only.
+    const origin = findOrigin(contextText) || findOriginAnswer(text) || lastParsed?.origin || '';
+    // The trip-card slots, from everything said so far (month, length) —
+    // carried forward like the origin so they survive follow-ups.
+    const month = findMonth(contextText) || lastParsed?.month || 0;
+    const durationDays = parseDuration(contextText) || lastParsed?.durationDays || 0;
+    // Kids' ages, from everything said so far — the pace depends on them,
+    // and they ride along in tripState like the origin.
+    const kids = parseKidAges(contextText).length ? parseKidAges(contextText) : lastParsed?.kids ?? [];
+    // The price watch for this trip, if one exists — its own past checks
+    // ride along in tripState so the trend read is from real checks.
+    const tripWatch = lastParsed ? watchFor(lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0) : undefined;
+    // Typing indicator: shows within 200ms of Send; after 5s with no
+    // first chunk it escalates to a status line ("Searching live fares…").
+    setThinking('thinking');
+    thinkingTimerRef.current = setTimeout(() => setThinking((prev) => (prev === 'thinking' ? 'searching' : prev)), 5000);
+    const requestBody = {
+      message: text,
+      // Conversation history: the last few turns, so the AI remembers
+      // the trip instead of treating each message as a fresh
+      // conversation (the Nov 10 Europe bug). 10 turns — a long
+      // conversation must not lose the trip.
+      history: msgs.slice(-10).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
+      // Durable trip memory: the trip already established (destination
+      // + travelers + departure city) goes with EVERY request, so it
+      // survives history scrolling off the window.
+      ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } } : {}),
+      // On-trip mode: tell the server the traveler is already there.
+      ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
+      // Disruption report: the checked flight status rides along so
+      // the AI quotes a confirmed status, never a guess (feature 5).
+      ...(statusOverride ? { flightStatus: statusOverride } : {}),
+    };
+    // Parse a server reply (streamed `done` result or atomic JSON) into
+    // the shape the chat handles — same validation as before.
+    const parseServerReply = (j: Record<string, unknown>): { parsed: ServerParsed; live: boolean } => {
+      // A revision from the server arrives as routeStops (+ routeWeights
+      // for "more time in a city") and/or a tier change; the fallback
+      // path returns routeOverride/tier directly (see below).
+      const routeStops = Array.isArray(j.routeStops) ? j.routeStops.filter((s: unknown): s is string => typeof s === 'string' && s.trim().length > 0).map((s: string) => s.trim()).slice(0, 8) : [];
+      const routeWeights =
+        j.routeWeights && typeof j.routeWeights === 'object' && !Array.isArray(j.routeWeights)
+          ? Object.fromEntries(
+              Object.entries(j.routeWeights as Record<string, unknown>).filter((e): e is [string, number] => typeof e[1] === 'number' && e[1] > 0)
+            )
+          : undefined;
+      const parsed: ServerParsed = { destination: j.destination as string, travelers: typeof j.travelers === 'number' ? j.travelers : 2, reply: j.reply as string, missing: Array.isArray(j.missing) ? j.missing : [], tips: Array.isArray(j.tips) ? j.tips.filter((t: unknown): t is string => typeof t === 'string').slice(0, 3) : [], kids: Array.isArray(j.kids) ? j.kids.filter((k: unknown): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6) : undefined, ...(routeStops.length ? { routeOverride: { cities: routeStops, ...(routeWeights && Object.keys(routeWeights).length ? { weights: routeWeights } : {}) } } : {}), ...(typeof j.tier === 'number' && [0, 1, 2].includes(j.tier) ? { tier: j.tier } : {}) };
+      return { parsed, live: j.live === true };
+    };
+    // Keep the fresh traveler material the server fetched for this trip.
+    const keepVoices = (j: Record<string, unknown>) => {
+      if (typeof j.voices === 'string' && j.voices && typeof j.voicesDestination === 'string' && j.voicesDestination) {
+        setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
+      }
+    };
+    // Stream first: the reply appears as it arrives. A stopped stream
+    // keeps its partial text; any stream failure falls back to the atomic
+    // request below (the same reply, in one piece).
+    const abort = new AbortController();
+    streamAbortRef.current = abort;
+    let streamedSoFar = '';
+    try {
+      const r = await fetch('/api/fujin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...requestBody, stream: true }),
+        signal: abort.signal,
+      });
+      if (!r.ok || !r.body) throw new Error('stream unavailable');
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let doneResult: Record<string, unknown> | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          const t = line.trim();
+          if (!t.startsWith('data:')) continue;
+          const payload = t.slice(5).trim();
+          if (!payload) continue;
+          let ev: { chunk?: string; done?: boolean; result?: Record<string, unknown>; error?: string };
+          try {
+            ev = JSON.parse(payload) as typeof ev;
+          } catch {
+            continue;
+          }
+          if (typeof ev.chunk === 'string') {
+            streamedSoFar += ev.chunk;
+            setThinking(null);
+            setStreamingText(streamedSoFar);
+          } else if (ev.done && ev.result) {
+            doneResult = ev.result;
+          } else if (typeof ev.error === 'string') {
+            throw new Error(ev.error);
+          }
+        }
+      }
+      stopThinking();
+      streamAbortRef.current = null;
+      if (doneResult && typeof doneResult.reply === 'string' && typeof doneResult.destination === 'string') {
+        keepVoices(doneResult);
+        const { parsed, live } = parseServerReply(doneResult);
+        handleParsed(parsed, live, origin, month, durationDays, kids);
+        return;
+      }
+      if (streamedSoFar) {
+        // The stream ended without a result — keep the partial text.
+        setMsgs((m) => [...m, { who: 'ai', text: streamedSoFar + '…' }]);
+        return;
+      }
+      throw new Error('empty stream');
+    } catch (err) {
+      // A stop is a choice, not a failure: keep whatever arrived and do
+      // NOT re-fetch. Anything else falls through to the atomic request.
+      stopThinking();
+      streamAbortRef.current = null;
+      if ((err as Error)?.name === 'AbortError') {
+        if (streamedSoFar) setMsgs((m) => [...m, { who: 'ai', text: streamedSoFar + '…' }]);
+        return;
+      }
+    }
+    // Live AI first (server route); any failure falls back to the built-in planner.
+    let parsed: ServerParsed;
+    let live = false;
+    try {
+      const r = await fetch('/api/fujin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+      const j = await r.json();
+      if (r.ok && typeof j.reply === 'string' && typeof j.destination === 'string') {
+        keepVoices(j);
+        const out = parseServerReply(j);
+        parsed = out.parsed;
+        live = out.live;
+      } else {
+        parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride, kids.length ? kids : lastParsed?.kids ?? [], choice));
+      }
+    } catch {
+      parsed = withOptions(askFujin(contextText, lastParsed?.travelers ?? 2, lastParsed?.destination ?? '', text, origin, lastParsed?.routeOverride, kids.length ? kids : lastParsed?.kids ?? [], choice));
+    }
+    handleParsed(parsed, live, origin, month, durationDays, kids);
+  };
+
   const build = () => {
     const dest = lastParsed?.destination ?? 'Kyoto';
     const people = lastParsed?.travelers ?? 2;
@@ -830,7 +945,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   useEffect(() => {
     const el = chatRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [msgs]);
+  }, [msgs, thinking, streamingText]);
   // Split the trip (round 2 #8): the per-person split of the chosen
   // tier, and the expenses the party records so settle-up can be
   // simplified. No money moves here — the travelers settle up between
@@ -1028,14 +1143,44 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 )}
               </div>
             ))}
+            {/* Streaming reply (design #2): the partial reply renders as it
+                arrives, so the wait feels like under a second instead of
+                3.4s of silence. The typing indicator covers the wait
+                before the first chunk — "Searching live fares…" after 5s. */}
+            {streamingText !== null && (
+              <div className="msg">
+                <div className="bubble">{formatReply(streamingText)}</div>
+              </div>
+            )}
+            {thinking !== null && streamingText === null && (
+              <div className="msg">
+                <div className="bubble">
+                  {thinking === 'searching' ? 'Searching live fares…' : 'Fujin is thinking…'}
+                  <span className="typing-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="row">
             <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask where to eat tonight…` : 'Try: Bali, 2 travelers, surf and food, next spring, $2,000'} aria-label="Ask Fujin AI" />
-            <button className="primary" onClick={() => send()}>Send</button>
+            {/* While Fujin AI is thinking or streaming, Send becomes Stop:
+                the traveler can cut off a wrong or overlong answer instantly
+                and keep the partial text. */}
+            <button
+              className="primary"
+              onClick={() => ((thinking !== null || streamingText !== null) ? streamAbortRef.current?.abort() : send())}
+              aria-label={thinking !== null || streamingText !== null ? 'Stop generating' : 'Send'}
+            >
+              {thinking !== null || streamingText !== null ? 'Stop' : 'Send'}
+            </button>
           </div>
           <div className="chips no-print" role="group" aria-label="Quick replies">
             {chips.map((c) => (
-              <button key={c.label} type="button" className="chip" onClick={() => (c.action === 'build' ? build() : send(c.text ?? c.label))}>
+              <button key={c.label} type="button" className="chip" disabled={thinking !== null || streamingText !== null} onClick={() => (c.action === 'build' ? build() : send(c.text ?? c.label))}>
                 {c.label}
               </button>
             ))}
