@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
 import { fetchLiveFares, faresPromptBlock, faresSummaryLine, type LiveFares } from '../../../lib/duffel';
+import { visaLine } from '../../../lib/visa';
 import { suggestedStart } from '../../../lib/tripCard';
 
 /**
@@ -115,6 +116,7 @@ const SYSTEM_PROMPT = [
   'TRAVELER COUNT — "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'FAMILY — when the traveler mentions kids, children or a family trip, ask how many kids and their ages (one question, right after the party size is known) and remember them in the kids array of your JSON answer. "2 adults, 3 kids" is 5 travelers, not 2. Adjust the plan to the YOUNGEST kid: under 5 — slow days, 2 major activities a day, a nap or downtime after lunch, kid-friendly restaurants near each stop; ages 5–11 — 2–3 activities a day with buffers and realistic walking distances; 12+ — full days are fine with a mix of sights and something active. Never suggest late-night bars or nightlife for a family with young kids. Mention the family pace in the Trip Summary.',
   'REVISION — when the traveler changes the trip they already have, change ONLY what they asked for and keep everything else (destination, dates, origin, travelers, the other stops). "Swap Vienna for Porto" means the route becomes Prague → Porto → Budapest with the same nights per city; "drop Vienna" removes it; "add Porto" adds it at the end; "Budapest before Vienna" or "put Budapest first" reorders; "slow down" drops the shortest stop; "more time in Prague" gives Prague the longest stay (set routeWeights {"Prague": 9}); "make it cheaper" / "upgrade" / "best value" changes the tier (return the tier field: 0 Cheapest, 1 Best value, 2 Premium); "change the budget to $2000" means pick the highest tier whose total fits $2000 and return its tier. Return the revised ordered list of cities in routeStops, and ONLY the changes the traveler asked for — never rebuild the route, never add a city they did not ask for, and never change the destination. If the city they name is not on the route (or is already on it), say so honestly and ask what they meant instead of inventing the change. A revision message naming route cities is NEVER a new destination.',
+  'VISA — when the trip\'s countries are known (see the VISA block below), mention the entry requirements in ONE short sentence in the Trip Summary, for a US passport, and point the traveler to the plan view\'s Visa & entry panel for the official source links. Never invent a visa rule, a fee, or a validity period — only state what the VISA block says. If there is no VISA block, say nothing about visas.',
   'List anything missing as short questions in the missing array.',
   'PRICE COMPARISON — use ONLY these FujinTrip plan prices (planning estimates). The table gives a 1-traveler row AND a 2-traveler row for every destination: quote the row matching the traveler count EXACTLY. Never scale, multiply, divide, or compute a price yourself, and never use the 2-traveler row for 1 traveler. The plan totals (Cheapest / Best value / Premium) already INCLUDE flights, stays, transport between cities and activities — say so, and never break the total into parts that leave flights out. Always show the Best value total for the matched destination (for a destination not in the table, use the Other destinations row) and compare it with booking the same parts separately, using the separate total and saving from that same row (about 13% more when booking separately). Never compute a separate-booking total for Cheapest or Premium — the table gives a separate total only for Best value; if you show Cheapest or Premium, show only their totals. Best value is the recommended balance of quality and affordability. All prices are planning estimates, not live quotes — except the live fares in the LIVE FARES block (see below), which are real API prices.',
   'LIVE FARES — before the model runs, the server asks Duffel for the real fares for this exact trip (origin to the first city of the route, and back) on the trip\'s suggested dates, and appends them as a LIVE FARES block below. ONLY when a LIVE FARES block is present may you say fares are live — quote those fares as the flight prices, with the airline name and the price, and say they are live fares from Duffel (test fares in test mode). If NO LIVE FARES block is present, the flight prices are planning estimates from the price table — never write "live estimates via Duffel", never claim the flight prices come from Duffel, and never invent a fare. For the whole-trip totals, still use the price table (planning estimates) and say the flight inside the plan is estimated — the live fare may be lower.',
@@ -176,6 +178,12 @@ function fallback(message: string, label: string, voices?: LocalVoices, voicesDe
   // that asks one question ("How many days?") must not also dump three
   // prices — the prices arrive with the Trip Summary.
   if (destination && !parsed.needsMore) reply += `\n\n${optionsLine(destination, parsed.travelers)}`;
+  // Visa line, on the Trip Summary only — the summary is the moment the
+  // trip is set, and the panel in the plan view carries the detail.
+  if (destination && reply.includes('Here is your trip —')) {
+    const v = visaLine(destination);
+    if (v) reply += `\n\n${v}`;
+  }
   // Even when the live model is down, fresh traveler material still helps —
   // but never on a decline, where it would read as an answer, and never on
   // a guided question, where a long excerpt would bury the one question.
@@ -375,6 +383,13 @@ export async function POST(req: NextRequest) {
       ? distributeNightsForStops(stopsForRoute(routeKey, stateRouteOverride), tripDays)
       : distributeNights(routeKey, tripDays);
     systemPrompt += ` ROUTE NIGHTS — for ${voicesDest || stateDestination} over ${tripDays} days, the nights per city are EXACTLY: ${legs.map((l) => `${l.city} ${l.nights} nights`).join(', ')}. Use exactly these nights, in exactly this order, in every reply — never re-split them, never add filler days, and never change them on a later turn.`;
+  }
+  // Visa & entry (competitor learning #3, Sherpa): the curated, verified
+  // entry rules for the trip's countries, for a US passport — the model
+  // quotes this block and nothing else about visas.
+  const visa = visaLine(voicesDest || stateDestination);
+  if (visa) {
+    systemPrompt += ` VISA — ${visa}`;
   }
 
   const provider = getProvider();

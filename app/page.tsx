@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, type Plan, type RouteOverride } from '../lib/planner';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
+import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 
@@ -454,6 +455,13 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
     () => (plan ? cardComparison(plan.destination, plan.travelers) : null),
     [plan]
   );
+  // Visa & entry panel (competitor learning #3, Sherpa): one row per
+  // route country, from the curated visa dataset — US passport, tourism,
+  // verified 2026-11-11, with the official source link per country.
+  const visaInfos: VisaInfo[] = useMemo(
+    () => (plan ? visaForDestination(plan.destination) : []),
+    [plan]
+  );
   // Map inventory (split-screen, Nov 11): the legs the traveler picked
   // from the map's price tags, and the leg whose card is open. A new
   // destination clears the picks — they belonged to the old trip.
@@ -664,6 +672,27 @@ function Chat({ onParsed, onSaveTrip, bookedDestinations }: { onParsed?: (t: { d
                   <p style={{ fontSize: 14, margin: '8px 0' }}>
                     You save <strong>${comparison.save.toLocaleString()} (~{comparison.savePercent}%)</strong> with FujinTrip vs booking each leg separately. Prices are planning estimates, not live quotes.
                   </p>
+                </div>
+              )}
+              {visaInfos.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: '4px 0' }}>Visa &amp; entry requirements</h3>
+                  <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>
+                    {VISA_PASSPORT_NOTE} Checked {VISA_LAST_CHECKED} — check before you book.
+                  </p>
+                  {visaInfos.map((v) => (
+                    <div key={v.country} style={{ borderTop: '1px solid #f0f0ee', padding: '10px 0' }}>
+                      <strong style={{ fontSize: 14 }}>{v.country}</strong>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}>{v.visa}</p>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}><b>Passport:</b> {v.passport}</p>
+                      {v.notes.map((n) => (
+                        <p key={n} style={{ fontSize: 14, margin: '4px 0' }}>{n}</p>
+                      ))}
+                      <p style={{ fontSize: 13, margin: '4px 0' }}>
+                        Official source: <a href={v.sourceUrl} target="_blank" rel="noreferrer">{v.source}</a>
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
               <p style={{ fontSize: 15, margin: '12px 0 0' }}>
