@@ -538,9 +538,11 @@ export type Revision =
   | { type: 'swap'; from: string; to: string }
   | { type: 'remove'; city: string }
   | { type: 'add'; city: string }
-  | { type: 'reorder'; city: string; before?: string; toFront?: boolean }
+  | { type: 'reorder'; city: string; before?: string; after?: string; toFront?: boolean }
   | { type: 'slow' }
   | { type: 'moreTime'; city: string }
+  | { type: 'lessTime'; city: string }
+  | { type: 'nights'; city: string; nights: number }
   | { type: 'tier'; tier: number }
   | { type: 'budget'; amount: number };
 
@@ -650,18 +652,38 @@ export function parseRevision(text: string): Revision | null {
     if (city) return { type: 'add', city };
   }
 
-  // Reorder — "Budapest before Vienna", "put Budapest first".
+  // Reorder — "Budapest before Vienna", "put Budapest first",
+  // "move Vienna after Budapest".
   const beforeMatch = lower.match(/\b(.+?)\s+before\s+(.+)/);
   if (beforeMatch) {
     const city = resolveCityName(beforeMatch[1]);
     const before = resolveCityName(beforeMatch[2]);
     if (city && before && city !== before) return { type: 'reorder', city, before };
   }
+  const afterMatch = lower.match(/\bmove\s+(.+?)\s+after\s+(.+)/);
+  if (afterMatch) {
+    const city = resolveCityName(afterMatch[1]);
+    const after = resolveCityName(afterMatch[2]);
+    if (city && after && city !== after) return { type: 'reorder', city, after };
+  }
   const firstMatch = lower.match(/\bput\s+(.+?)\s+(?:first|at the start)\b|\bmove\s+(.+?)\s+(?:to the front|first)\b/);
   if (firstMatch) {
     const city = resolveCityName(firstMatch[1] ?? firstMatch[2] ?? '');
     if (city) return { type: 'reorder', city, toFront: true };
   }
+
+  // Exact nights — "3 nights in Prague", "set Prague to 5 nights",
+  // "Prague for 5 nights". The panel's +/- nights buttons send the same
+  // revision, so a typed sentence and a tap do the same thing.
+  const nightsForms: Array<{ city: string; nights: number }> = [];
+  const nightsIn = lower.match(/\b(\d{1,2})\s*nights?\s+(?:in|at)\s+(.+)/);
+  if (nightsIn) nightsForms.push({ city: resolveCityName(nightsIn[2]), nights: parseInt(nightsIn[1], 10) });
+  const nightsSet = lower.match(/\b(?:give|set)\s+(.+?)\s+(?:to\s+)?(\d{1,2})\s*nights?\b/);
+  if (nightsSet) nightsForms.push({ city: resolveCityName(nightsSet[1]), nights: parseInt(nightsSet[2], 10) });
+  const nightsFor = lower.match(/\b(.+?)\s+for\s+(\d{1,2})\s*nights?\b/);
+  if (nightsFor) nightsForms.push({ city: resolveCityName(nightsFor[1]), nights: parseInt(nightsFor[2], 10) });
+  const nightsHit = nightsForms.find((f) => f.city && Number.isFinite(f.nights) && f.nights >= 1);
+  if (nightsHit) return { type: 'nights', city: nightsHit.city, nights: nightsHit.nights };
 
   // More time — "more time in Prague", "an extra night in Prague".
   const moreMatch = lower.match(/\b(?:more time|an extra night|another night|extra (?:day|night))\s+(?:in|at)\s+(.+)/);
@@ -670,12 +692,74 @@ export function parseRevision(text: string): Revision | null {
     if (city) return { type: 'moreTime', city };
   }
 
+  // Less time — "one less night in Prague", "less time in Prague",
+  // "Prague, one less night". The mirror of moreTime, for the panel's
+  // - nights button and for a typed sentence.
+  const lessMatch =
+    lower.match(/\b(?:one less night|a night less|less time|one fewer night|fewer nights?)\s+(?:in|at)\s+(.+)/) ||
+    lower.match(/\b(.+?)\s+(?:one less night|one fewer night)\b/);
+  if (lessMatch) {
+    const city = resolveCityName(lessMatch[2] ?? lessMatch[1] ?? '');
+    if (city) return { type: 'lessTime', city };
+  }
+
   // Slow down — "slow down", "fewer cities", "less rushed".
   if (/\bslow(?:er)?\s+down\b|\bslow(?:er)? pace\b|\bfewer cities\b|\bless rushed\b|\btoo (?:many|much) (?:cities|stops)\b/.test(lower)) {
     return { type: 'slow' };
   }
 
   return null;
+}
+
+// Set one stop to an exact night count (app-shell round: the trip
+// panel's +/- nights buttons, and the "3 nights in Prague" sentence).
+// The trip's total nights stay the same: the difference comes from — or
+// goes to — the longest other stop, never below 1 night. The result is
+// stored as weights equal to the final nights, so
+// distributeNightsForStops reproduces them exactly
+// (round(total * n / total) === n) — the panel, the trip card and the
+// chat read the same numbers, and a later revision starts from the real
+// distribution, not the route's default weights.
+function setNightsExact(
+  currentStops: Array<{ city: string; country: string; weight: number }>,
+  days: number,
+  city: string,
+  nights: number
+): { override: RouteOverride; note: string } | null {
+  const currentCities = currentStops.map((s) => s.city);
+  if (!currentCities.includes(city)) return null;
+  const plan = distributeNightsForStops(currentStops, days);
+  const total = plan.reduce((s, p) => s + p.nights, 0);
+  const idx = plan.findIndex((p) => p.city === city);
+  // Every other stop keeps at least 1 night.
+  const maxForCity = total - (plan.length - 1);
+  const target = Math.max(1, Math.min(nights, maxForCity));
+  if (plan[idx].nights === target) return null;
+  const final = plan.map((p) => p.nights);
+  final[idx] = target;
+  let diff = total - final.reduce((s, n) => s + n, 0);
+  while (diff > 0) {
+    const cands = final.map((n, i) => (i === idx ? -1 : i)).filter((i) => i >= 0);
+    const i = cands.reduce((a, b) => (final[a] >= final[b] ? a : b));
+    final[i] += 1;
+    diff -= 1;
+  }
+  while (diff < 0) {
+    const cands = final.map((n, i) => (i === idx || n <= 1 ? -1 : i)).filter((i) => i >= 0);
+    if (!cands.length) break;
+    const i = cands.reduce((a, b) => (final[a] >= final[b] ? a : b));
+    final[i] -= 1;
+    diff += 1;
+  }
+  const weights: Record<string, number> = {};
+  plan.forEach((p, i) => {
+    weights[p.city] = final[i];
+  });
+  const nightsLine = plan.map((p, i) => `${p.city} ${final[i]}n`).join(' · ');
+  return {
+    override: { cities: currentCities, weights },
+    note: `${city} is now ${final[idx]} night${final[idx] > 1 ? 's' : ''} — ${nightsLine}.`,
+  };
 }
 
 // Apply a revision to the current stop list. Returns the new override +
@@ -717,6 +801,9 @@ export function applyRevision(
       } else if (revision.before && rest.includes(revision.before)) {
         const idx = rest.indexOf(revision.before);
         cities = [...rest.slice(0, idx), revision.city, ...rest.slice(idx)];
+      } else if (revision.after && rest.includes(revision.after)) {
+        const idx = rest.indexOf(revision.after);
+        cities = [...rest.slice(0, idx + 1), revision.city, ...rest.slice(idx + 1)];
       } else {
         return null;
       }
@@ -744,6 +831,16 @@ export function applyRevision(
         override: { cities: currentCities, weights: { [revision.city]: maxW + 3 } },
         note: `Gave ${revision.city} more time — it now gets the longest stay on the trip.`,
       };
+    }
+    case 'lessTime': {
+      if (!currentCities.includes(revision.city)) return null;
+      const plan = distributeNightsForStops(currentStops, days);
+      const now = plan.find((p) => p.city === revision.city)?.nights ?? 0;
+      if (now <= 1) return null;
+      return setNightsExact(currentStops, days, revision.city, now - 1);
+    }
+    case 'nights': {
+      return setNightsExact(currentStops, days, revision.city, revision.nights);
     }
     case 'tier':
     case 'budget':
