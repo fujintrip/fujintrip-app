@@ -47,6 +47,59 @@ export function flightPassengerFactor(travelers: number, party?: Party): number 
   return adults + ages.reduce((s, a) => s + childFareFactor(a), 0) + unknown * 0.75;
 }
 
+// Fare classes (Kayak Fee Assistant pattern; FTC rule 12 May 2025: the
+// most prominent price must be the true total). Every flight leg carries
+// its fare-class line: what is included and what is NOT, so a cheap fare
+// can never fool the traveler into thinking a bag is included when it
+// is not. The bag fee is the airline's own — it is confirmed at booking
+// and FujinTrip adds no markup on bags. The planner's legs are estimates,
+// so the line states the inclusions as the tier's definition, never a
+// price we have not seen; the live Duffel fares carry the real included
+// baggage from the offer (see lib/duffel.ts).
+export type FareClass = { name: string; includes: string[]; excludes: string[]; bagNote: string };
+export const FARE_CLASSES: FareClass[] = [
+  {
+    name: 'Basic Economy',
+    includes: ['Carry-on only'],
+    excludes: ['No checked bag', 'No seat choice', 'No changes'],
+    bagNote: 'Add a checked bag: the airline charges its own bag fee at booking, confirmed before you pay — FujinTrip adds no markup on bags.',
+  },
+  {
+    name: 'Standard Economy',
+    includes: ['1 checked bag', 'Seat choice'],
+    excludes: ['Changes for a fee'],
+    bagNote: '1 checked bag and seat choice included.',
+  },
+  {
+    name: 'Flexible Economy',
+    includes: ['2 checked bags', 'Seat choice', 'Free changes'],
+    excludes: [],
+    bagNote: '2 checked bags, seat choice and free changes included.',
+  },
+];
+
+export function fareClassForTier(tier: number): FareClass {
+  return FARE_CLASSES[Math.min(2, Math.max(0, tier))] ?? FARE_CLASSES[1];
+}
+
+// The one-line fare-class text for a leg: inclusions, exclusions, bag
+// note. This is what a Basic Economy total actually costs.
+export function fareClassLine(tier: number): string {
+  const c = fareClassForTier(tier);
+  const inc = c.includes.join(', ');
+  const exc = c.excludes.length ? `; ${c.excludes.join(', ')}` : '';
+  return `${c.name}: ${inc}${exc}. ${c.bagNote}`;
+}
+
+// The all-in flight total: the flight leg + FujinTrip's service fee for
+// the flight order (shown separately at checkout, never hidden in the
+// fare). "This is the total you pay" — the fee line is what keeps the
+// site's no-hidden-margin promise honest.
+export function allInFlightLine(flightLeg: number): string {
+  const fee = serviceFee(flightLeg);
+  return `Flight $${flightLeg.toLocaleString()} + service fee $${fee.toLocaleString()} (per flight order, shown separately at checkout) = $${(flightLeg + fee).toLocaleString()} all-in — that is the total you pay for the flights.`;
+}
+
 export function buildPlan(destination: string, travelers: number, days = 3, party?: Party): Plan {
   const base = BASE[destination] ?? 1500;
   // The flight leg prices by adult-equivalents (child fares above); the
@@ -828,8 +881,16 @@ export function findCity(lower: string): string {
 // for the voices fetch and the durable trip memory. Bare regions (Asia,
 // Africa…) are deliberately NOT returned: they are too vague to plan or
 // fetch voices for.
+// Origin phrases are NOT destinations: "central europe … from new york"
+// names Central Europe, not New York (the origin city must never win
+// over the destination named earlier — the same principle as the ORIGIN
+// rule for bare-city answers). Strip "from <city>" / "flying from
+// <city>" / "out of <city>" / "departing from <city>" before matching,
+// so "flights from New York to Paris" resolves to Paris.
 export function lastPlaceMentioned(text: string): string {
-  const lower = text.toLowerCase();
+  const lower = text
+    .toLowerCase()
+    .replace(/\b(?:flying\s+(?:out of|from)|depart(?:ing|s)?\s+from|leav(?:e|ing)\s+from|out of|from)\s+[a-z]{2,}(?:\s+[a-z]{2,})?/g, ' ');
   const knownIdx = lastIndexOfAny(lower, Object.keys(BASE).map((d) => d.toLowerCase()));
   const countryKey = findCountry(lower);
   const countryIdx = countryKey
@@ -1021,7 +1082,7 @@ export function optionsLine(destination: string, travelers: number, party?: Part
       ? ` Flights for this party — ${who} — are priced with child fares (${rate}), $${saving.toLocaleString()} less on flights than pricing all ${travelers} as adults.`
       : ` Flights for this party — ${who} — use child fares (${rate}).`;
   }
-  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}.${childLine} Tap Build my plan to pick one.`;
+  return `Your options for ${destination} (${travelers} traveler${travelers > 1 ? 's' : ''}): Cheapest $${opts[0].total.toLocaleString()} · Best value $${opts[1].total.toLocaleString()} ★ our pick · Premium $${opts[2].total.toLocaleString()}.${childLine} ${fareClassLine(1)} ${allInFlightLine(opts[1].flight)} Tap Build my plan to pick one.`;
 }
 
 // Departure city (origin): the flight fare depends on where the traveler

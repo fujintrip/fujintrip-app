@@ -9,7 +9,7 @@
 // flights: the card shows the planner's estimated fare split, labeled as
 // an estimate, until Duffel live fares connect.
 
-import { buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, stopsForRoute, type Party, type RouteOverride } from './planner';
+import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, fareClassForTier, fareClassLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, stopsForRoute, type Party, type RouteOverride } from './planner';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -160,6 +160,13 @@ export type TripLeg = {
   lng: number;
   startDate: Date;
   endDate: Date;
+  // All-in price honesty (round 2 #2): the fare-class line on every
+  // flight leg, and the cancellation terms on every leg — a leg without
+  // its terms is a price the traveler cannot yet trust. Terms are honest
+  // about being unconfirmed for planning estimates: nothing is booked
+  // until the traveler confirms it.
+  fareClass?: string;
+  terms?: string;
 };
 export type TripCard = {
   title: string;
@@ -303,13 +310,23 @@ export function buildTripCard(opts: {
   const lastCoords = coordsFor(cardStops[cardStops.length - 1].city) ?? firstCoords;
   const originCoords = opts.origin ? coordsFor(opts.origin) : null;
   const legMode = LEG_MODE[routeKey] ?? '🚆 Train';
+  const fareClass = fareClassLine(tier);
+  const fareClassName = fareClassForTier(tier).name;
+  // Cancellation terms (training notes: every leg carries its terms, in
+  // one line, with a deadline when there is one). These legs are planning
+  // estimates, so the honest line is that the terms are confirmed at
+  // booking — never "free cancellation available" without a deadline.
+  const legTerms = 'Cancellation terms are confirmed at booking — refundable options are available on request; nothing is booked until you confirm it.';
+  const flightAllIn = allInFlightLine(best.flight);
   legs.push({
     id: 'flight-out',
     kind: 'flight',
     icon: '✈️',
     label: `Flight ${opts.origin || 'Your city'} → ${cardStops[0].city}`,
-    detail: 'Economy · planning estimate',
-    more: 'The flight fare is passed through at cost, plus our service fee shown separately at checkout. Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.',
+    detail: `${fareClassName} · planning estimate`,
+    more: `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
+    fareClass,
+    terms: legTerms,
     price: legFlightOut,
     city: cardStops[0].city,
     ...mid(originCoords, firstCoords, firstCoords),
@@ -319,13 +336,21 @@ export function buildTripCard(opts: {
   for (let i = 1; i < cardStops.length; i++) {
     const from = cardStops[i - 1];
     const to = cardStops[i];
+    // Between cities the route flies on domestic flights (Southeast Asia,
+    // Turkey, Mexico, USA) — those legs carry the fare class too. Trains
+    // and ferries carry only the terms.
+    const isFlightLeg = legMode.includes('flight');
     legs.push({
       id: `leg-${i}`,
       kind: 'transport',
       icon: legMode.split(' ')[0],
       label: `${legMode} ${from.city} → ${to.city}`,
       detail: 'Planning estimate',
-      more: 'Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.',
+      more: isFlightLeg
+        ? `${fareClass} ${flightAllIn} Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.`
+        : 'Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.',
+      ...(isFlightLeg ? { fareClass } : {}),
+      terms: legTerms,
       price: legIntercity,
       city: to.city,
       ...mid(coordsFor(from.city), coordsFor(to.city), coordsFor(to.city) ?? firstCoords),
@@ -339,8 +364,10 @@ export function buildTripCard(opts: {
     kind: 'flight',
     icon: '✈️',
     label: `Flight ${lastStop.city} → ${opts.origin || 'Your city'}`,
-    detail: 'Economy · planning estimate',
-    more: 'The flight fare is passed through at cost, plus our service fee shown separately at checkout. Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.',
+    detail: `${fareClassName} · planning estimate`,
+    more: `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
+    fareClass,
+    terms: legTerms,
     price: legFlightBack,
     city: lastStop.city,
     ...mid(lastCoords, originCoords, lastCoords),
@@ -357,6 +384,7 @@ export function buildTripCard(opts: {
       label: `Stay in ${st.city}`,
       detail: `${st.nights} night${st.nights > 1 ? 's' : ''} · hostel / guesthouse estimate`,
       more: `${st.intro} ${info ? `Days here: ${info.days.map((d) => d.t).join(' · ')}.` : ''} The stay is a planning estimate — real named stays with ratings arrive with a hotel supplier (Expedia / Duffel Stays). Nothing is booked until you confirm it.`,
+      terms: legTerms,
       price: st.stayEstimate,
       city: st.city,
       lat: c.lat + 0.04,
@@ -371,6 +399,7 @@ export function buildTripCard(opts: {
       label: `Car rental in ${st.city}`,
       detail: `${st.nights} day${st.nights > 1 ? 's' : ''} · pickup on arrival`,
       more: `A rental car for your ${st.nights} night${st.nights > 1 ? 's' : ''} in ${st.city}, picked up when you arrive and dropped off when you leave. Planning estimate — live rental cars arrive with a car supplier.`,
+      terms: legTerms,
       price: Math.round((best.car * st.nights) / totalNights),
       city: st.city,
       lat: c.lat - 0.04,

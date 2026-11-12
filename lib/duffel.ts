@@ -22,6 +22,13 @@ export type DuffelFareOffer = {
   currency: string;
   stops: number;
   duration: string;
+  // Included baggage from the offer's own segments (Duffel returns the
+  // allowance per segment): "1 checked bag included", "carry-on only
+  // (no checked bag included)", or undefined when the offer carries no
+  // baggage data — never guessed. This is the all-in price honesty the
+  // FTC rule (12 May 2025) asks for: a fare that hides a bag fee is not
+  // the true total.
+  bags?: string;
 };
 
 export type LiveFares = {
@@ -95,6 +102,7 @@ export const CITY_IATA: Record<string, string> = {
 type DuffelSegment = {
   operating_carrier?: { name?: string };
   marketing_carrier?: { name?: string };
+  baggages?: Array<{ type?: string; quantity?: number }>;
 };
 
 type DuffelOffer = {
@@ -111,6 +119,47 @@ function parseIsoDuration(iso: string | undefined): string {
   const h = m[1] ? `${Number(m[1])}h` : '';
   const min = m[2] ? ` ${Number(m[2])}m` : '';
   return `${h}${min}`.trim();
+}
+
+function bagsFromSegments(segments: DuffelSegment[]): string | undefined {
+  if (!segments.length) return undefined;
+  const hasData = segments.some((s) => (s.baggages ?? []).length > 0);
+  if (!hasData) return undefined;
+  const perSegment = (type: string) =>
+    Math.max(
+      0,
+      ...segments.map((s) =>
+        (s.baggages ?? []).filter((b) => b.type === type).reduce((sum, b) => sum + (b.quantity ?? 0), 0)
+      )
+    );
+  const checked = perSegment('checked');
+  const carryOn = perSegment('carry_on');
+  if (checked > 0) return `${checked} checked bag${checked > 1 ? 's' : ''} included`;
+  if (carryOn > 0) return 'carry-on only (no checked bag included)';
+  return 'no checked bag included';
+}
+
+// The offer → fare mapping, exported so tests can run it against a canned
+// Duffel payload (the live call is best-effort and needs a key).
+export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined | null): DuffelFareOffer[] {
+  return (data?.offers ?? [])
+    .filter((o) => o.total_amount && o.slices?.length)
+    .map((o) => {
+      const slice = o.slices![0];
+      const segments = slice.segments ?? [];
+      const first = segments[0];
+      const bags = bagsFromSegments(segments);
+      return {
+        airline: first?.operating_carrier?.name || first?.marketing_carrier?.name || 'See details',
+        price: Math.round(Number(o.total_amount)),
+        currency: o.total_currency || 'USD',
+        stops: Math.max(0, segments.length - 1),
+        duration: parseIsoDuration(slice.duration),
+        ...(bags ? { bags } : {}),
+      };
+    })
+    .sort((a, b) => a.price - b.price)
+    .slice(0, 3);
 }
 
 async function offerRequest(
@@ -143,22 +192,7 @@ async function offerRequest(
       data?: { offers?: DuffelOffer[] };
     };
     if (!res.ok) return [];
-    return (json.data?.offers ?? [])
-      .filter((o) => o.total_amount && o.slices?.length)
-      .map((o) => {
-        const slice = o.slices![0];
-        const segments = slice.segments ?? [];
-        const first = segments[0];
-        return {
-          airline: first?.operating_carrier?.name || first?.marketing_carrier?.name || 'See details',
-          price: Math.round(Number(o.total_amount)),
-          currency: o.total_currency || 'USD',
-          stops: Math.max(0, segments.length - 1),
-          duration: parseIsoDuration(slice.duration),
-        };
-      })
-      .sort((a, b) => a.price - b.price)
-      .slice(0, 3);
+    return parseDuffelOffers(json.data);
   } catch {
     return [];
   } finally {
@@ -209,7 +243,7 @@ export async function fetchLiveFares(opts: {
 // cheapest fares with airline names, and the test-mode label.
 export function faresPromptBlock(f: LiveFares): string {
   const line = (o: DuffelFareOffer, from: string, to: string, date: string) =>
-    `${o.airline} $${o.price.toLocaleString()} ${o.currency} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.duration ? `, ${o.duration}` : ''} (${from} → ${to}, ${date})`;
+    `${o.airline} $${o.price.toLocaleString()} ${o.currency} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.duration ? `, ${o.duration}` : ''}${o.bags ? `, ${o.bags}` : ''} (${from} → ${to}, ${date})`;
   const out = f.out.map((o) => line(o, f.origin, f.destCity, f.departDate)).join('; ');
   const back = f.back.map((o) => line(o, f.destCity, f.origin, f.returnDate)).join('; ');
   return (
@@ -226,11 +260,11 @@ export function faresSummaryLine(f: LiveFares): string {
   const parts: string[] = [];
   if (f.out.length) {
     const o = f.out[0];
-    parts.push(`cheapest live fare out: ${o.airline} $${o.price.toLocaleString()} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`} (${f.origin} → ${f.destCity}, ${f.departDate})`);
+    parts.push(`cheapest live fare out: ${o.airline} $${o.price.toLocaleString()} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.bags ? `, ${o.bags}` : ''} (${f.origin} → ${f.destCity}, ${f.departDate})`);
   }
   if (f.back.length) {
     const o = f.back[0];
-    parts.push(`cheapest live fare back: ${o.airline} $${o.price.toLocaleString()} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`} (${f.destCity} → ${f.origin}, ${f.returnDate})`);
+    parts.push(`cheapest live fare back: ${o.airline} $${o.price.toLocaleString()} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.bags ? `, ${o.bags}` : ''} (${f.destCity} → ${f.origin}, ${f.returnDate})`);
   }
   if (!parts.length) return '';
   return `Live fares (Duffel, test fares): ${parts.join('; ')}.`;

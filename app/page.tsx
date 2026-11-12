@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
-import { askFujin, buildPlan, comparisonFor, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, type Plan, type RouteOverride } from '../lib/planner';
+import { askFujin, buildPlan, comparisonFor, fareClassForTier, findMonth, findOrigin, findOriginAnswer, optionsLine, parseDuration, parseKidAges, routeKeyForDestination, type Plan, type RouteOverride } from '../lib/planner';
 import { buildTripCard, cardComparison, CITY_INFO, type TripCard, type TripLeg } from '../lib/tripCard';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { guideFor } from '../lib/localGuides';
@@ -784,6 +784,14 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
                   <p>
                     from <strong>${selectedLeg.price.toLocaleString()}</strong> · {selectedLeg.detail}
                   </p>
+                  {selectedLeg.fareClass && (
+                    <p style={{ fontSize: 13, margin: '4px 0' }}>
+                      <b>Fare class:</b> {selectedLeg.fareClass}
+                    </p>
+                  )}
+                  {selectedLeg.terms && (
+                    <p style={{ fontSize: 13, color: '#666', margin: '4px 0' }}>{selectedLeg.terms}</p>
+                  )}
                   {legExpanded && <p style={{ fontSize: 14 }}>{selectedLeg.more}</p>}
                   <div className="row">
                     <button className="ghost" onClick={() => setLegExpanded((e) => !e)}>
@@ -957,6 +965,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations }: { onP
                   <tr><td>Car</td><td>${o.car}</td></tr>
                   <tr><td>Activities</td><td>${o.activities}</td></tr>
                 </tbody></table>
+                <p style={{ fontSize: 13, color: '#666' }}>{fareClassForTier(i).name} — {fareClassForTier(i).includes.join(', ')}{fareClassForTier(i).excludes.length ? `; ${fareClassForTier(i).excludes.join(', ')}` : ''}</p>
                 <p style={{ fontSize: 13, color: '#666' }}>{o.note}</p>
               </div>
             ))}
