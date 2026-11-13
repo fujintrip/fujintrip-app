@@ -227,7 +227,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact, embassyNumber, onEmbassyChange }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string }; embassyNumber: string; onEmbassyChange: (v: string) => void }) {
+export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact, embassyNumber, onEmbassyChange }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[]; sourceTips?: Record<string, string> } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string }; embassyNumber: string; onEmbassyChange: (v: string) => void }) {
   // The opening line — also the line a "New trip" resets to, so the
   // trip switcher and the plan view's "Start a new trip" restart the
   // conversation in exactly the same words.
@@ -454,6 +454,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
       travelers: 2,
       ...(routeKeyForDestination(seed.destination) ? { routeKey: routeKeyForDestination(seed.destination) } : {}),
       routeOverride: { cities },
+      ...(seed.sourceTips ? { sourceTips: seed.sourceTips } : {}),
     });
     // A seeded template opens in the chat — on a narrow screen the
     // chat is the zone the traveler needs to personalize it.
@@ -597,6 +598,23 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     } catch {}
     setHydrated(true);
     // Run once on mount — onParsed is Home's setAiTrip, stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // A message typed before reaching the chat — the homepage hero
+  // search writes it, /chat consumes it once on mount and sends it,
+  // so the chat opens with the question already asked. The key is
+  // removed BEFORE sending, so a re-render can never send the same
+  // message twice.
+  const pendingSentRef = useRef(false);
+  useEffect(() => {
+    if (pendingSentRef.current) return;
+    pendingSentRef.current = true;
+    try {
+      const raw = localStorage.getItem('fujintrip-pending-message');
+      if (!raw) return;
+      localStorage.removeItem('fujintrip-pending-message');
+      if (typeof raw === 'string' && raw.trim()) send(raw.trim());
+    } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {

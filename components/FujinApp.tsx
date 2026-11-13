@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS } from '../lib/data';
+import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type DiscoveryEntry } from '../lib/discovery';
 import { buildPlan, comparisonFor, MONTH_NAMES } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
@@ -14,7 +14,7 @@ import AdSlot from '../components/AdSlot';
 import PhotoCarousel from '../components/PhotoCarousel';
 import ReelsFeed from '../components/ReelsFeed';
 import ReelComposer from '../components/ReelComposer';
-import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
+import { Chat, HERO_PHOTO, SafeImg, SearchForm, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Discovery map (design #15) — same client-only pattern as the trip map.
 const DiscoveryMap = dynamic(() => import('../components/DiscoveryMap'), {
@@ -31,6 +31,21 @@ const DiscoveryMap = dynamic(() => import('../components/DiscoveryMap'), {
 // seed here and navigates to /chat; the /chat page consumes it once
 // on mount so the chat greets with the route ready, then drops it.
 const CHAT_SEED_KEY = 'fujintrip-chat-seed';
+const PENDING_MESSAGE_KEY = 'fujintrip-pending-message';
+
+// The seven things you can book, straight from the hero (TripAdvisor
+// homepage build). Each preselects the matching SearchForm category —
+// the forms themselves are unchanged, and this row replaces "Prefer
+// forms?" as the homepage's booking entry point.
+const CATEGORY_ACTIONS: { label: string; icon: string; tab: Tab }[] = [
+  { label: 'Tours & sightseeing', icon: '🎡', tab: 'Sightseeing' },
+  { label: 'Flights', icon: '✈️', tab: 'Flights' },
+  { label: 'Hotels', icon: '🏨', tab: 'Hotels' },
+  { label: 'Car rental', icon: '🚗', tab: 'Car rental' },
+  { label: 'Cruises', icon: '🚢', tab: 'Cruises' },
+  { label: 'Buses', icon: '🚌', tab: 'Buses' },
+  { label: 'Taxis', icon: '🚕', tab: 'Taxis & transfers' },
+];
 
 export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -38,7 +53,7 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
   // Theme (interface round §6): the discovery map follows the same
   // theme as the trip map — the Chat hook owns the toggle, this hook
   // just listens (lib/theme.ts dispatches on every change).
-  const [theme] = useTheme();
+  const [theme, setTheme] = useTheme();
   // Preference profile (round 3 #2): stated preferences, carried across
   // trips on this device (localStorage, no accounts). Validated on load
   // so a corrupt or foreign value never reaches the chat.
@@ -121,6 +136,23 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
   // The trip Fujin AI most recently understood — the price-comparison
   // section below follows it. Null until the user chats: Kyoto example.
   const [aiTrip, setAiTrip] = useState<{ destination: string; travelers: number; kids?: number[] } | null>(null);
+  // The comparison section below follows the trip Fujin AI most
+  // recently understood. The chat lives on /chat now, so read the
+  // persisted trip (the chat writes it on every change) instead of
+  // waiting for a chat on this page.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-current-trip');
+      if (!raw) return;
+      const p = JSON.parse(raw) as { destination?: unknown; travelers?: unknown; kids?: unknown };
+      if (typeof p.destination !== 'string' || typeof p.travelers !== 'number') return;
+      setAiTrip({
+        destination: p.destination,
+        travelers: p.travelers,
+        ...(Array.isArray(p.kids) ? { kids: p.kids.filter((k): k is number => typeof k === 'number').slice(0, 6) } : {}),
+      });
+    } catch {}
+  }, []);
   const cmp = useMemo(() => comparisonFor(aiTrip?.destination ?? 'Kyoto', aiTrip?.travelers ?? 2, { kids: aiTrip?.kids ?? [] }), [aiTrip]);
   const [loc, setLoc] = useState('default');
   const [locName, setLocName] = useState('');
@@ -167,14 +199,63 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
   // "Make it yours" is the same seed, plus the chat input takes focus
   // — the traveler lands in the app with the cursor ready to
   // personalize the template ("make it cheaper", "3 nights in Prague").
-  const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[] } | null>(null);
+  const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[]; sourceTips?: Record<string, string> } | null>(null);
+  // Homepage hero (TripAdvisor build): the one question + one box.
+  // A typed destination rides to /chat as a pending message; a
+  // suggestion pick (commit 4) seeds the trip directly instead.
+  const [heroInput, setHeroInput] = useState('');
+  const [homeFormTab, setHomeFormTab] = useState<Tab>('Flights');
+  const [homeLinkInput, setHomeLinkInput] = useState('');
+  const [homeLinkBusy, setHomeLinkBusy] = useState(false);
+  const [homeLinkNote, setHomeLinkNote] = useState<string | null>(null);
+  const submitHeroSearch = () => {
+    const text = heroInput.trim();
+    if (!text) return;
+    try { localStorage.setItem(PENDING_MESSAGE_KEY, text); } catch {}
+    router.push('/chat');
+  };
+  const openBookingCategory = (tab: Tab) => {
+    setHomeFormTab(tab);
+    document.getElementById('book')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  // "Start from a link" on the homepage — same /api/extract as the
+  // chat's, but the result seeds /chat (with the link's per-stop
+  // notes) instead of posting into a chat that isn't on this page.
+  // A link with no known places reports the note inline.
+  const startHomeFromLink = async () => {
+    const raw = homeLinkInput.trim();
+    if (!raw || homeLinkBusy) return;
+    setHomeLinkBusy(true);
+    setHomeLinkNote(null);
+    const isUrl = /^https?:\/\//i.test(raw);
+    try {
+      const r = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isUrl ? { url: raw } : { text: raw }),
+      });
+      const j = (await r.json()) as { destination?: string; cities?: string[]; stops?: { city: string; tip: string }[]; note?: string };
+      if (!j.destination || !j.cities?.length) {
+        setHomeLinkNote(j.note ?? 'I couldn’t find any places I know in that link or text — try a link to a travel article, or paste text naming the cities (for example Kyoto, Bangkok, Lisbon).');
+        return;
+      }
+      const sourceTips: Record<string, string> = {};
+      for (const s of j.stops ?? []) if (s.city && s.tip) sourceTips[s.city] = s.tip;
+      setHomeLinkInput('');
+      seedChat(j.destination, Object.keys(sourceTips).length ? sourceTips : undefined);
+    } catch {
+      setHomeLinkNote('I couldn’t load that link right now — check it and try again, or paste the text of the article instead.');
+    } finally {
+      setHomeLinkBusy(false);
+    }
+  };
   // The chat lives on /chat now — a template, pin or shared link hands
   // its seed over through localStorage and navigates there. Same seed
   // shape the chat already understands: destination + ordered cities.
-  const seedChat = (name: string) => {
+  const seedChat = (name: string, sourceTips?: Record<string, string>) => {
     const info = cardInfo[name];
     try {
-      localStorage.setItem(CHAT_SEED_KEY, JSON.stringify({ destination: name, cities: info?.cities ?? [name] }));
+      localStorage.setItem(CHAT_SEED_KEY, JSON.stringify({ destination: name, cities: info?.cities ?? [name], ...(sourceTips ? { sourceTips } : {}) }));
     } catch {}
     router.push('/chat');
   };
@@ -221,11 +302,14 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
       const raw = localStorage.getItem(CHAT_SEED_KEY);
       if (!raw) return;
       localStorage.removeItem(CHAT_SEED_KEY);
-      const s = JSON.parse(raw) as { destination?: unknown; cities?: unknown };
+      const s = JSON.parse(raw) as { destination?: unknown; cities?: unknown; sourceTips?: unknown };
       if (typeof s.destination !== 'string' || !Array.isArray(s.cities)) return;
       const cities = s.cities.filter((c): c is string => typeof c === 'string' && c.trim().length > 0).map((c) => c.trim()).slice(0, 8);
       if (!cities.length) return;
-      setChatSeed({ destination: s.destination, cities });
+      const sourceTips = s.sourceTips && typeof s.sourceTips === 'object' && !Array.isArray(s.sourceTips)
+        ? Object.fromEntries(Object.entries(s.sourceTips as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'))
+        : undefined;
+      setChatSeed({ destination: s.destination, cities, ...(sourceTips && Object.keys(sourceTips).length ? { sourceTips } : {}) });
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -370,6 +454,62 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
         </div>
       )}
       {composerPanel}
+      {variant === 'home' && (
+        <header className="topbar">
+          <a href="/" className="logo">Fujin<span>Trip</span></a>
+          <nav className="topbar-nav">
+            <a href="/chat" className="ask-ai">Ask Fujin AI</a>
+            <a href="#mytrips" className="ghost-link">My Trips</a>
+            <button type="button" className="ghost" aria-pressed={theme === 'dark'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? '☀ Light' : '☾ Dark'}
+            </button>
+          </nav>
+        </header>
+      )}
+      {variant === 'home' && (
+        <section className="hero-ta">
+          <div className="hero-ta-copy">
+            <h1>Where to?</h1>
+            <p className="hero-ta-sub">One trip, one plan — flights, stays, cars and sightseeing gathered for you.</p>
+            <form className="hero-ta-search" onSubmit={(e) => { e.preventDefault(); submitHeroSearch(); }}>
+              <input value={heroInput} onChange={(e) => setHeroInput(e.target.value)} placeholder="Places to go, things to do, hotels…" aria-label="Where to?" autoComplete="off" />
+              <button type="submit" className="primary">Search</button>
+            </form>
+            <div className="category-row" role="group" aria-label="Book something directly">
+              {CATEGORY_ACTIONS.map((c) => (
+                <button key={c.tab} type="button" className="chip category-btn" onClick={() => openBookingCategory(c.tab)}>
+                  <span aria-hidden="true">{c.icon}</span> {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <figure className="hero-ta-photo">
+            <SafeImg src={HERO_PHOTO} alt="Torii gates at Fushimi Inari, Kyoto" label="Kyoto" />
+          </figure>
+        </section>
+      )}
+      {variant === 'home' && (
+        <section className="book-section" id="book">
+          <h2>Book it</h2>
+          <p className="book-sub">Pick a category — the search below fills in for it. Everything you save lands in My Trips as a request; the price you see is the price you pay, no hidden fees.</p>
+          <label className="book-tab-label">
+            Category
+            <select value={homeFormTab} onChange={(e) => setHomeFormTab(e.target.value as Tab)} aria-label="Search category">
+              {TABS.filter((t) => t !== 'Fujin AI').map((t) => (<option key={t} value={t}>{t}</option>))}
+            </select>
+          </label>
+          <SearchForm tab={homeFormTab} onSave={(label) => saveTrip(label, 'Request saved')} />
+          <div className="link-box">
+            <h3>Start from a link</h3>
+            <p>Paste a travel article or a list of places — Fujin AI reads it and starts the trip in the chat.</p>
+            <div className="row">
+              <input value={homeLinkInput} onChange={(e) => setHomeLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startHomeFromLink()} placeholder="Paste a link or article text" aria-label="Link or text to start a trip from" />
+              <button className="ghost" onClick={startHomeFromLink} disabled={!homeLinkInput.trim() || homeLinkBusy}>{homeLinkBusy ? 'Reading…' : 'Start from this'}</button>
+            </div>
+            {homeLinkNote && <p className="link-note" role="status">{homeLinkNote}</p>}
+          </div>
+        </section>
+      )}
       {variant === 'home' && (
       <main className="wrap">
 

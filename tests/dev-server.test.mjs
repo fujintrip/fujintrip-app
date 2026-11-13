@@ -64,6 +64,35 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
+test('homepage hero: one question, one search box, 7 category actions, exactly one Ask Fujin AI, no chat shell', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  // One solid question + one search box (TripAdvisor model).
+  assert.ok(html.includes('Where to?'), 'hero asks Where to?');
+  assert.equal((html.match(/aria-label="Where to\?"/g) || []).length, 1, 'exactly one hero search box');
+  assert.ok(html.includes('hero-ta-search'), 'hero search box renders');
+  // Seven bookable categories, each opening its booking search.
+  assert.equal((html.match(/category-btn/g) || []).length, 7, '7 category actions');
+  for (const label of ['Tours &amp; sightseeing', 'Flights', 'Hotels', 'Car rental', 'Cruises', 'Buses', 'Taxis']) {
+    assert.ok(html.includes(label), `category action ${label} renders`);
+  }
+  // Exactly ONE AI entry point on the homepage — TripAdvisor's mistake
+  // was three; the chat itself is not on this page.
+  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 1, 'exactly one Ask Fujin AI');
+  assert.ok(html.includes('href="/chat"'), 'the AI entry point leads to /chat');
+  // The chat shell, panel and map live on /chat only.
+  assert.ok(!html.includes('fujin-chat'), 'no chat panel on the homepage');
+  assert.ok(!html.includes('chat-shell'), 'no chat shell on the homepage');
+  assert.ok(!html.includes('trippanel'), 'no trip panel on the homepage');
+  assert.ok(!html.includes('mapcol'), 'no map column on the homepage');
+  // The Kyoto torii hero photo stays as the hero visual.
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
+  // The booking section below the fold: category select + link box.
+  assert.ok(html.includes('id="book"'), 'booking section renders');
+  assert.ok(html.includes('Paste a link or article text'), 'Start from a link is reachable below the fold');
+});
+
 test('service worker serves with the cache version', async () => {
   const r = await fetch(`${BASE}/sw.js`);
   assert.equal(r.status, 200);
