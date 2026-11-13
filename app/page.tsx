@@ -1727,6 +1727,37 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       { label: 'Kyoto, 7 days', text: 'Kyoto for 7 days' },
     ];
   })();
+  // N1: per-slot check — when a slot is filled (route, dates,
+  // travelers, origin), that line replays the 250ms entrance and shows
+  // a ✓ for 1.5s. One line at a time. Gated on hasUserMsg so a
+  // restored trip does not flash checks on mount; an empty value is
+  // never a fill (the line showing "Not set yet" is not a slot being
+  // filled).
+  const [filledSlot, setFilledSlot] = useState<'route' | 'dates' | 'travelers' | 'from' | null>(null);
+  const prevSlotsRef = useRef({ route: '', dates: '', travelers: 0, from: '' });
+  useEffect(() => {
+    if (!hasUserMsg) return;
+    const cur = {
+      route: summaryRoute,
+      dates: summaryDates,
+      travelers: lastParsed?.travelers ?? 0,
+      from: lastParsed?.origin ?? '',
+    };
+    const prev = prevSlotsRef.current;
+    prevSlotsRef.current = cur;
+    const changed = (['route', 'dates', 'travelers', 'from'] as const).find((k) => {
+      if (cur[k] === prev[k]) return false;
+      if (k === 'route' && !cur.route) return false;
+      if (k === 'dates' && (cur.dates === 'Not set yet' || !cur.dates)) return false;
+      if (k === 'travelers' && !cur.travelers) return false;
+      if (k === 'from' && !cur.from) return false;
+      return true;
+    });
+    if (!changed) return;
+    setFilledSlot(changed);
+    const t = setTimeout(() => setFilledSlot(null), 1500);
+    return () => clearTimeout(t);
+  }, [hasUserMsg, summaryRoute, summaryDates, lastParsed?.travelers, lastParsed?.origin]);
   return (
     <div>
       {/* App bar (app-shell round, Nov 12): the app's own bar — the
@@ -1856,24 +1887,28 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           {lastParsed?.destination && (
             <div key={tripSignature} className="tripsummary panel-update" role="group" aria-label="Trip summary — tap a line to change it">
               <div className="tripsummary-title">Your trip</div>
-              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the route')} title="Tap to change the route">
+              <button type="button" className={`tripsummary-line${filledSlot === 'route' ? ' slot-filled' : ''}`} disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the route')} title="Tap to change the route">
                 <span className="tripsummary-label">Route</span>
                 <span>{summaryRoute}</span>
+                {filledSlot === 'route' && <span className="slot-check" aria-hidden="true">✓</span>}
               </button>
-              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the dates')} title="Tap to change the dates">
+              <button type="button" className={`tripsummary-line${filledSlot === 'dates' ? ' slot-filled' : ''}`} disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the dates')} title="Tap to change the dates">
                 <span className="tripsummary-label">Dates</span>
                 <span>{summaryDates}</span>
+                {filledSlot === 'dates' && <span className="slot-check" aria-hidden="true">✓</span>}
               </button>
-              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the party size')} title="Tap to change the party size">
+              <button type="button" className={`tripsummary-line${filledSlot === 'travelers' ? ' slot-filled' : ''}`} disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change the party size')} title="Tap to change the party size">
                 <span className="tripsummary-label">Travelers</span>
                 <span>
                   {lastParsed.travelers} traveler{lastParsed.travelers > 1 ? 's' : ''}
                   {lastParsed.kids?.length ? ` · kids ${lastParsed.kids.join(', ')}` : ''}
                 </span>
+                {filledSlot === 'travelers' && <span className="slot-check" aria-hidden="true">✓</span>}
               </button>
-              <button type="button" className="tripsummary-line" disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change where I fly from')} title="Tap to change the departure city">
+              <button type="button" className={`tripsummary-line${filledSlot === 'from' ? ' slot-filled' : ''}`} disabled={thinking !== null || streamingText !== null} onClick={() => send('I want to change where I fly from')} title="Tap to change the departure city">
                 <span className="tripsummary-label">From</span>
                 <span>{lastParsed.origin || 'Not set yet'}</span>
+                {filledSlot === 'from' && <span className="slot-check" aria-hidden="true">✓</span>}
               </button>
               {/* Tier row (interface round §5): only once a plan exists.
                   At S1 the summary is route/dates/travelers/from only —
@@ -3463,7 +3498,7 @@ export default function Home() {
           <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — and you book it all with FujinTrip.</p>
           <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
           <p className="plan-muted">“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
-          {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet. Search above, or add a destination — it will appear here as a request you can turn into a plan.</p> : (
+          {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet — tell Fujin AI where to go and it will appear here.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
             </ul>
