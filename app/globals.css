@@ -26,7 +26,7 @@
       is 7.31:1 on white (AAA). Retired: --faint #a1a1a1 (2.58:1, unused)
       — never text. */
 *{box-sizing:border-box}
-body{margin:0;background:var(--card);color:var(--ink);font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6}
+body{margin:0;background:var(--card);color:var(--ink);font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6;transition:background-color var(--dur) var(--ease),color var(--dur) var(--ease)}
 h1,h2,h3{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:700;line-height:1.15;margin:0;letter-spacing:-.02em}
 a{color:var(--ink)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
@@ -114,6 +114,12 @@ button:disabled{opacity:.4;cursor:not-allowed}
    it replaces — never a full-page spinner. */
 @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
 .skeleton{background:linear-gradient(90deg,#f0f0ee 25%,#e8e8e6 50%,#f0f0ee 75%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
+/* Price-tag entrance (interface round M5): a tag scales from 0.9 and
+   fades in over 200ms, staggered 60ms per tag (inline
+   animation-delay, max 10 tags) — only when the map first mounts.
+   Killed by the prefers-reduced-motion rule below, like every other
+   entrance. */
+@keyframes tag-in{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
 /* Motion must earn its place: anyone who prefers reduced motion gets
    none of it. Non-negotiable (design §4.5 #5). */
 @media (prefers-reduced-motion: reduce){

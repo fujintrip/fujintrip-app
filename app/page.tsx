@@ -2176,7 +2176,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             trip has a route — at S0 there is no map, no placeholder, no
             "Open the map" button. The zone appears with the destination. */}
         {mapCard && (
-          <div className="mapcol no-print">
+          <div className="mapcol no-print panel-update">
             <>
               <div className="mapdialog-bar" style={{ marginBottom: 8 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>{mapCard.stops.length} stop{mapCard.stops.length !== 1 ? 's' : ''} · {mapCard.legs.length} price tags</span>

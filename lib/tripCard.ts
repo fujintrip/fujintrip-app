@@ -725,6 +725,16 @@ export function buildTripCard(opts: {
 // tag above it 46px higher. Pure function of the legs — unit-tested.
 export const TAG_STACK_STEP = 46;
 export const TAG_STACK_BASE = 62;
+// Entrance stagger (interface round M5): when the map first mounts, each
+// price tag enters with a 200ms scale-from-0.9 + fade, staggered 60ms per
+// tag, max 10 tags. The delay is a pure function of the tag's index in
+// the card's leg order — the component decides whether to animate at
+// all (mount only; tags that already existed never re-animate).
+export const TAG_STAGGER_MS = 60;
+export const TAG_STAGGER_MAX = 10;
+export function tagStaggerDelay(index: number): number {
+  return Math.min(Math.max(index, 0), TAG_STAGGER_MAX - 1) * TAG_STAGGER_MS;
+}
 export function priceTagAnchorY(legs: TripLeg[]): Map<string, number> {
   const groups = new Map<string, TripLeg[]>();
   for (const leg of legs) {

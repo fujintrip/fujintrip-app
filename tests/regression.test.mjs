@@ -12,7 +12,7 @@ import {
   flightPassengerFactor,
   serviceFee,
 } from '../lib/planner.ts';
-import { buildTripCard, mapStopsKey, priceTagAnchorY } from '../lib/tripCard.ts';
+import { buildTripCard, mapStopsKey, priceTagAnchorY, tagStaggerDelay, TAG_STAGGER_MS, TAG_STAGGER_MAX } from '../lib/tripCard.ts';
 import { settleUp } from '../lib/settle.ts';
 import { addLeg, bundleFromLegs, bundleTotal, hasLeg } from '../lib/bundle.ts';
 import { CLOSURES, CLOSURES_LAST_CHECKED, applySwaps, checkClosures } from '../lib/daySwap.ts';
@@ -155,6 +155,17 @@ test('tripCard: price-tag anchors stack per city, 46px apart, clear of the marke
   };
   check('Central Europe', 2, 14);
   check('Kyoto', 2, 3);
+});
+
+test('tagStaggerDelay (interface round M5): 60ms per tag, capped at 10 tags', () => {
+  assert.equal(TAG_STAGGER_MS, 60);
+  assert.equal(TAG_STAGGER_MAX, 10);
+  assert.equal(tagStaggerDelay(0), 0, 'first tag enters immediately');
+  assert.equal(tagStaggerDelay(1), 60);
+  assert.equal(tagStaggerDelay(9), 540, 'tenth tag starts at 540ms');
+  assert.equal(tagStaggerDelay(10), 540, 'eleventh tag is capped at the tenth delay');
+  assert.equal(tagStaggerDelay(25), 540, 'no tag waits longer than 540ms');
+  assert.equal(tagStaggerDelay(-3), 0, 'a negative index never delays backwards');
 });
 
 test('daySwap: the verified closures — Louvre Tue, Uffizi Mon, Vatican Sun except last Sunday', () => {

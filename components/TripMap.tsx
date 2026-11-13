@@ -11,7 +11,7 @@ import { MapContainer, TileLayer, Marker, Polyline, ZoomControl, useMap } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { TripLeg } from '../lib/tripCard';
-import { mapStopsKey, priceTagAnchorY } from '../lib/tripCard';
+import { mapStopsKey, priceTagAnchorY, tagStaggerDelay } from '../lib/tripCard';
 
 export type MapStop = { city: string; lat: number; lng: number };
 
@@ -71,14 +71,18 @@ const LEG_COLOR: Record<TripLeg['kind'], string> = {
 // anchorY is the per-leg stack offset from priceTagAnchorY (legs sharing
 // a city stack upward, 46px apart, so none overlap each other or the
 // city marker). iconAnchor [40, anchorY] puts the pill above its city.
-function priceTagIcon(leg: TripLeg, selected: boolean, added: boolean, anchorY: number) {
+// animate is mount-only (interface round M5): the tag enters with a
+// 200ms scale-from-0.9 + fade, delayed by its stagger; tags that already
+// existed get animate=false and never re-animate on later renders.
+function priceTagIcon(leg: TripLeg, selected: boolean, added: boolean, anchorY: number, animate = false, delayMs = 0) {
   const color = LEG_COLOR[leg.kind];
   const border = added ? '#1f7a4d' : selected ? '#111' : color;
   const width = selected ? 3 : 2;
   const check = added ? '✓ ' : '';
+  const entrance = animate ? `animation:tag-in 200ms var(--ease) both;animation-delay:${delayMs}ms;` : '';
   return L.divIcon({
     className: 'fujin-price-tag',
-    html: `<div style="background:#fff;color:#111;border:${width}px solid ${border};border-radius:22px;padding:10px 14px;min-height:44px;display:flex;align-items:center;font-weight:700;font-size:13px;line-height:1.2;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer">${check}${leg.icon} $${leg.price.toLocaleString()}</div>`,
+    html: `<div style="background:#fff;color:#111;border:${width}px solid ${border};border-radius:22px;padding:10px 14px;min-height:44px;display:flex;align-items:center;font-weight:700;font-size:13px;line-height:1.2;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer;${entrance}">${check}${leg.icon} $${leg.price.toLocaleString()}</div>`,
     iconSize: [0, 0],
     iconAnchor: [40, anchorY],
   });
@@ -103,6 +107,17 @@ export default function TripMap({
   // white-on-dark is the highest-contrast read there.
   dark?: boolean;
 }) {
+  // Mount-only entrance (interface round M5): the stagger runs when
+  // this map first mounts and never again for this instance — a flag
+  // cleared in an effect after the first paint, so later renders
+  // (keystrokes, selection, legs added) re-create the icons without
+  // the entrance and nothing re-animates. Hooks sit above the early
+  // return, so the hook order never changes.
+  const firstMountRef = useRef(true);
+  useEffect(() => {
+    firstMountRef.current = false;
+  }, []);
+  const animateTags = firstMountRef.current;
   if (!stops.length) return null;
   const positions: Array<[number, number]> = stops.map((s) => [s.lat, s.lng]);
   const center: [number, number] = stops.length === 1 ? positions[0] : [0, 0];
@@ -132,11 +147,11 @@ export default function TripMap({
         {stops.map((s, i) => (
           <Marker key={s.city} position={[s.lat, s.lng]} icon={numberedIcon(i + 1)} />
         ))}
-        {legs.map((leg) => (
+        {legs.map((leg, i) => (
           <Marker
             key={leg.id}
             position={[leg.lat, leg.lng]}
-            icon={priceTagIcon(leg, selectedLegId === leg.id, addedLegIds.includes(leg.id), anchors.get(leg.id) ?? 62)}
+            icon={priceTagIcon(leg, selectedLegId === leg.id, addedLegIds.includes(leg.id), anchors.get(leg.id) ?? 62, animateTags, tagStaggerDelay(i))}
             eventHandlers={{ click: () => onSelectLeg?.(leg) }}
           />
         ))}
