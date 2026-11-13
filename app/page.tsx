@@ -491,6 +491,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // + a dismiss button is a row of its own, and the first screen has
   // no room for a second row of chips (M4).
   const [dietaryMore, setDietaryMore] = useState(false);
+  // "Prefer forms?" (interface round M2): the 8-tab bar is gone — the
+  // chat is the way in, and the search forms live behind one quiet
+  // disclosure under the input. Same SearchForm the tabs used to show,
+  // with a category select in place of the tab.
+  const [formsOpen, setFormsOpen] = useState(false);
+  const [formTab, setFormTab] = useState<Tab>('Flights');
   // PDF download state: the $1 rule is decided by the server route.
   const [pdfNotice, setPdfNotice] = useState('');
   const [pdfPay, setPdfPay] = useState(false);
@@ -2002,6 +2008,31 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </button>
             )}
           </p>
+          {/* "Prefer forms?" (interface round M2): the 8-tab bar is gone.
+              The chat is the way in; the search forms live behind this
+              one quiet disclosure — a text button, not a tab — and open
+              inline, in the chat column, instead of swapping the page. */}
+          <div className="no-print" style={{ marginTop: 4 }}>
+            <button
+              type="button"
+              className="forms-toggle"
+              aria-expanded={formsOpen}
+              onClick={() => setFormsOpen((o) => !o)}
+            >
+              Prefer forms? Search flights, hotels, cruises…
+            </button>
+            {formsOpen && (
+              <div className="forms-panel">
+                <div className="row" style={{ alignItems: 'center', marginBottom: 4 }}>
+                  <label htmlFor="forms-category" style={{ fontSize: 13, fontWeight: 600 }}>What are you looking for?</label>
+                  <select id="forms-category" value={formTab} onChange={(e) => setFormTab(e.target.value as Tab)} aria-label="Search category" style={{ flex: '0 0 auto' }}>
+                    {TABS.filter((t) => t !== 'Fujin AI').map((t) => (<option key={t} value={t}>{t}</option>))}
+                  </select>
+                </div>
+                <SearchForm tab={formTab} onSave={(label) => onSaveTrip(label, 'Request saved')} />
+              </div>
+            )}
+          </div>
           {/* Start Anywhere (competitor learning round 2 #6, Mindtrip):
               paste a link to a travel article, or paste the text of
               one — the trip is drafted from the places it names. */}
@@ -2980,7 +3011,6 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
 }
 
 export default function Home() {
-  const [tab, setTab] = useState<Tab>('Fujin AI');
   const [trips, setTrips] = useState<Trip[]>([]);
   // Theme (interface round §6): the discovery map follows the same
   // theme as the trip map — the Chat hook owns the toggle, this hook
@@ -3098,15 +3128,14 @@ export default function Home() {
     }
     return info;
   }, []);
-  // "Plan this trip": switches to the Fujin AI tab, seeds the chat with
-  // the card's route, and scrolls the traveler to the chat.
+  // "Plan this trip": seeds the chat with the card's route, and scrolls
+  // the traveler to the chat.
   // "Make it yours" is the same seed, plus the chat input takes focus
   // — the traveler lands in the app with the cursor ready to
   // personalize the template ("make it cheaper", "3 nights in Prague").
   const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[] } | null>(null);
   const planThisTrip = (name: string, focusInput = false) => {
     const info = cardInfo[name];
-    setTab('Fujin AI');
     setChatSeed({ destination: name, cities: info?.cities ?? [name] });
     document.getElementById('fujin-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (focusInput) {
@@ -3169,18 +3198,16 @@ export default function Home() {
     <div>
       <a href="#fujin-chat" className="skip-link">Skip to chat</a>
       <header><div className="topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
-      {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12): the
-          chat section is full-bleed — header, tabs and chat panel all
-          span the viewport, and the chat + trip panel + map fill the
-          first screen. The slim hero was folded into the app bar (the
-          mark + one-line tagline), so it no longer pushes the app
-          down. The content sections below stay in the capped .wrap. */}
+      {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12;
+          interface round M2 — the 8-tab bar is gone): the chat section
+          is full-bleed — header and chat panel span the viewport, and
+          the chat + trip panel + map fill the first screen. The slim
+          hero was folded into the app bar (the mark + one-line tagline),
+          so it no longer pushes the app down. The content sections
+          below stay in the capped .wrap. */}
       <div className="chat-shell">
-        <div className="tabs" role="tablist" aria-label="Search">
-          {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
-        </div>
-        <div className={tab === 'Fujin AI' ? 'panel chat-panel' : 'panel'} id="fujin-chat">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+        <div className="panel chat-panel" id="fujin-chat">
+          <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} />
         </div>
         {composerOpen && (
           <div className="panel" id="reel-composer">

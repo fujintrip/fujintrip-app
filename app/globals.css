@@ -47,14 +47,17 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
    .chat-shell .plan-print) so the tiers don't stretch edge to edge. */
 .chat-shell{padding:0 24px}
 .chat-shell .plan-print{max-width:1080px;margin-left:auto;margin-right:auto}
-/* The chat tab drops the bordered card — the chatmap itself is the
-   frame (chat panel + map). Other tabs keep the normal .panel card. */
+/* "Prefer forms?" disclosure (interface round M2): the 8-tab bar is
+   gone — the search forms live behind one quiet text button under the
+   chat input. The toggle reads as a link, not a tab; the panel is a
+   plain bordered box in the chat column. */
+.forms-toggle{background:none;border:none;padding:8px 0;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;text-align:left}
+.forms-toggle:hover{color:var(--ink);text-decoration:underline}
+.forms-panel{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:4px;background:var(--card)}
+/* The chat panel drops the bordered card — the chatmap itself is the
+   frame (chat panel + map). */
 .chat-panel{padding:0;border:0;background:transparent;box-shadow:none;margin-bottom:24px}
 .fujin-portrait{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto 18px;display:block}
-.tabs{display:flex;gap:4px;overflow-x:auto;padding:4px;background:var(--surface);border-radius:999px;margin:0 0 20px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.tabs::-webkit-scrollbar{display:none}
-.tab{flex:0 0 auto;border:none;background:transparent;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
-.tab.active{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;margin-bottom:40px;box-shadow:0 2px 16px rgba(0,0,0,.04)}
 .chat{border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--card);min-height:120px;margin:12px 0}
 .msg{margin:10px 0;font-size:15px}
@@ -88,8 +91,6 @@ button.primary:active{transform:translateY(1px);box-shadow:none}
 button.ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
 button.ghost:active{transform:translateY(1px)}
 button:disabled{opacity:.4;cursor:not-allowed}
-.tab{transition:color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
-.tab:hover{color:var(--ink);background:rgba(255,255,255,.7)}
 .card{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
 .card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.10)}
 .card img{transition:transform 300ms var(--ease)}
@@ -203,7 +204,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
    and its traveler notes print in full. */
 @media print{
   body{background:var(--card)}
-  header,footer,.hero,.tabs,.adslot,section,.chat,.row,.selling,.no-print{display:none !important}
+  header,footer,.hero,.adslot,section,.chat,.row,.selling,.no-print{display:none !important}
   .panel{border:none;box-shadow:none;padding:0;margin:0}
   .plan-print{display:block !important}
   /* Print-only lines (your choice, full booking URLs) show only on paper —
