@@ -319,6 +319,10 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   assert.ok(html.includes('Tell me where. I’ll plan the rest.'), 'the S0 greeting is a short headline');
   assert.ok(!html.includes('I’ll gather flights, hotels, cars'), 'the old paragraph greeting is gone');
   assert.ok(!html.includes('Gathers everything into one plan'), 'the S0 tagline is gone from the first screen');
+  // One hero photo beside the chat (first-screen rebuild) — the
+  // Kyoto torii gates, the template photo already in lib/data.ts.
+  assert.ok(html.includes('hero-photo'), 'the S0 hero photo renders');
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
   // Templates are one click from the app: every library card on page 1
   // (12) plus the discovery panel (1) and the hidden gems (3) offer
   // "Make it yours".

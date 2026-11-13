@@ -147,13 +147,17 @@ type FlightStatusData = {
 // that name), so the portrait never loaded. Served locally now; credit stays
 // in the footer.
 const FUJIN_IMG = '/images/fujin-wind-god.jpg';
+// Hero photo (first-screen rebuild, Nov 13): Kyoto's torii gates —
+// the Kyoto template photo already in lib/data.ts, same photo ID,
+// portrait crop for the tall hero frame. Never a new stock photo.
+const HERO_PHOTO = 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=900&h=1200&q=70';
 
 // Image with a graceful fallback: a failed image never shows a broken
 // icon — it becomes a soft gray placeholder with the destination name.
 // While it loads, a warm shimmer tile with the name shows instead of a
 // blank space (design #9 — the loaded-error state is the fallback; this
 // is the loading state).
-function SafeImg({ src, alt, label, className }: { src: string; alt: string; label: string; className?: string }) {
+function SafeImg({ src, alt, label, className, loading }: { src: string; alt: string; label: string; className?: string; loading?: 'lazy' | 'eager' }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   if (failed) {
@@ -170,7 +174,7 @@ function SafeImg({ src, alt, label, className }: { src: string; alt: string; lab
           <span>{label}</span>
         </div>
       )}
-      <img src={src} alt={alt} loading="lazy" className={className} style={loaded ? undefined : { display: 'none' }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+      <img src={src} alt={alt} loading={loading ?? 'lazy'} className={className} style={loaded ? undefined : { display: 'none' }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
     </>
   );
 }
@@ -2233,6 +2237,17 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </div>
           )}
         </div>
+        {/* Hero photo (first-screen rebuild, Nov 13): at S0 on a wide
+            screen the chat shares the first viewport with one tall
+            destination photo — Kyoto's torii gates — like Layla's
+            cherry blossoms. It is decoration, never interactive, and
+            it is gone below 1200px so the chat keeps the whole width
+            on a tablet or phone. */}
+        {uiState === 'S0' && (
+          <figure className="hero-photo">
+            <SafeImg src={HERO_PHOTO} alt="Vermilion torii gates at Fushimi Inari shrine, Kyoto" label="Kyoto" className="hero-photo-img" loading="eager" />
+          </figure>
+        )}
         {/* Live trip panel (app shell + interface round §5, M1): the
             middle zone — the itinerary as an editable timeline, fed by
             the same trip card and plan the map and the plan view use.
