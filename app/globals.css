@@ -379,6 +379,12 @@ html{scroll-padding-bottom:96px}
   .chatmap-s0 .hero-photo img,.chatmap-s0 .hero-photo .img-fallback,.chatmap-s0 .hero-photo .img-loading{width:100%;height:100%;object-fit:cover;border-radius:24px}
 }
 
+/* Below-the-fold tools (first-screen rebuild, Nov 13): "Prefer
+   forms?" and "Start from a link" live below the app, in normal
+   flow after the chatmap — the first screen ends after the chips.
+   Same width as the S0 chat column, centered. */
+.below-fold-tools{max-width:720px;margin:28px auto 0;padding:0 4px}
+
 /* Trip panel (app shell): the live itinerary — header with the running
    total, tier + travelers + month controls, then the timeline. The
    steppers are 36px touch targets; the move/remove buttons 32px. */

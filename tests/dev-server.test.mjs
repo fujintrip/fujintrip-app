@@ -332,22 +332,31 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
 
 test('interface round S0 busy budget: at most 10 interactive elements in the first viewport', async () => {
   // The budget (§4) is counted in the SSR HTML, not by eye: the first
-  // viewport is the chat shell (app bar + chat column) — everything
-  // before <main>. Theme toggle, My Trips, input, Send, 3 chips, link
-  // input, "Start from this", "Prefer forms?" = 10. "Build my plan"
-  // is not counted — it appears after the first message.
+  // viewport is the chat shell up to the below-the-fold tools — the
+  // app bar + chat column + hero photo. "Prefer forms?" and "Start
+  // from a link" moved below the fold (first-screen rebuild, Nov 13),
+  // so the first viewport is now theme toggle, My Trips, input, Start
+  // planning, 3 chips = 6. "Build my plan" is not counted — it appears
+  // after the first message.
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
   const shellStart = html.indexOf('chat-shell');
-  const mainStart = html.indexOf('<main', shellStart);
-  assert.ok(shellStart !== -1 && mainStart !== -1, 'the chat shell precedes the main content');
-  const shell = html.slice(shellStart, mainStart);
+  const foldStart = html.indexOf('below-fold-tools', shellStart);
+  assert.ok(shellStart !== -1 && foldStart !== -1, 'the chat shell precedes the below-fold tools');
+  const shell = html.slice(shellStart, foldStart);
   const interactive = shell.match(/<(button|input|select|textarea|a)([\s>])/g) || [];
   assert.ok(interactive.length <= 10, `S0 first viewport has ${interactive.length} interactive elements (budget 10): ${interactive.join(' ')}`);
-  // And the three that must be there are.
-  assert.ok(shell.includes('Prefer forms?'), 'the forms disclosure is in the first viewport');
-  assert.ok(shell.includes('Start from this'), 'the start-from-a-link action is in the first viewport');
+  // And the one that must be there is.
+  assert.ok(shell.includes('Try: Bali, 2 travelers, surf and food'), 'the chat input is in the first viewport');
+  // "Prefer forms?" and "Start from a link" are NOT in the first
+  // viewport — they live below the fold now — but they still exist on
+  // the page, one scroll down.
+  assert.ok(!shell.includes('Prefer forms?'), 'the forms disclosure is below the fold, not in the first viewport');
+  assert.ok(!shell.includes('Start from a link'), 'the link card is below the fold, not in the first viewport');
+  assert.ok(!shell.includes('Start from this'), 'the link action is below the fold, not in the first viewport');
+  assert.ok(html.includes('Prefer forms?'), 'the forms disclosure still renders below the fold');
+  assert.ok(html.includes('Start from a link'), 'the link card still renders below the fold');
   // "Build my plan" is NOT in the first viewport — it appears after
   // the first message, when there is a trip to build (progressive
   // reveal); with no trip yet it would build a Kyoto default nobody

@@ -2096,42 +2096,6 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </button>
             )}
           </p>
-          {/* "Prefer forms?" (interface round M2): the 8-tab bar is gone.
-              The chat is the way in; the search forms live behind this
-              one quiet disclosure — a text button, not a tab — and open
-              inline, in the chat column, instead of swapping the page. */}
-          <div className="no-print" style={{ marginTop: 4 }}>
-            <button
-              type="button"
-              className="forms-toggle"
-              aria-expanded={formsOpen}
-              onClick={() => setFormsOpen((o) => !o)}
-            >
-              Prefer forms? Search flights, hotels, cruises…
-            </button>
-            {formsOpen && (
-              <div className="forms-panel">
-                <div className="row" style={{ alignItems: 'center', marginBottom: 4 }}>
-                  <label htmlFor="forms-category" style={{ fontSize: 13, fontWeight: 600 }}>What are you looking for?</label>
-                  <select id="forms-category" value={formTab} onChange={(e) => setFormTab(e.target.value as Tab)} aria-label="Search category" style={{ flex: '0 0 auto' }}>
-                    {TABS.filter((t) => t !== 'Fujin AI').map((t) => (<option key={t} value={t}>{t}</option>))}
-                  </select>
-                </div>
-                <SearchForm tab={formTab} onSave={(label) => onSaveTrip(label, 'Request saved')} />
-              </div>
-            )}
-          </div>
-          {/* Start Anywhere (competitor learning round 2 #6, Mindtrip):
-              paste a link to a travel article, or paste the text of
-              one — the trip is drafted from the places it names. */}
-          <div className="no-print" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: 'var(--card)' }}>
-            <strong style={{ fontSize: 13 }}>Start from a link</strong>
-            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
-            <div className="row">
-              <input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startFromLink()} placeholder="Paste a link or article text" aria-label="Link or text to start a trip from" />
-              <button className="ghost" onClick={startFromLink} disabled={!linkInput.trim() || linkBusy}>{linkBusy ? 'Reading…' : 'Start from this'}</button>
-            </div>
-          </div>
           {tripMode && lastParsed && (
             <div className="ontrip-wrap no-print">
               {/* Today on your trip (community round, design §7): the plan
@@ -2379,6 +2343,50 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </>
           </div>
         )}
+      </div>
+      {/* "Prefer forms?" + "Start from a link" (first-screen rebuild,
+          Nov 13): they lived in the chat column, so the first screen
+          never ended — the forms disclosure and the link card started
+          right under the chips. They now live below the app, in normal
+          flow after the chatmap, so the first screen ends after the
+          chips. Same state, same handlers — only the place moved. */}
+      <div className="below-fold-tools no-print">
+        {/* "Prefer forms?" (interface round M2): the 8-tab bar is gone.
+            The chat is the way in; the search forms live behind this
+            one quiet disclosure — a text button, not a tab — and open
+            inline below the app, instead of swapping the page. */}
+        <div className="no-print" style={{ marginTop: 4 }}>
+          <button
+            type="button"
+            className="forms-toggle"
+            aria-expanded={formsOpen}
+            onClick={() => setFormsOpen((o) => !o)}
+          >
+            Prefer forms? Search flights, hotels, cruises…
+          </button>
+          {formsOpen && (
+            <div className="forms-panel">
+              <div className="row" style={{ alignItems: 'center', marginBottom: 4 }}>
+                <label htmlFor="forms-category" style={{ fontSize: 13, fontWeight: 600 }}>What are you looking for?</label>
+                <select id="forms-category" value={formTab} onChange={(e) => setFormTab(e.target.value as Tab)} aria-label="Search category" style={{ flex: '0 0 auto' }}>
+                  {TABS.filter((t) => t !== 'Fujin AI').map((t) => (<option key={t} value={t}>{t}</option>))}
+                </select>
+              </div>
+              <SearchForm tab={formTab} onSave={(label) => onSaveTrip(label, 'Request saved')} />
+            </div>
+          )}
+        </div>
+        {/* Start Anywhere (competitor learning round 2 #6, Mindtrip):
+            paste a link to a travel article, or paste the text of
+            one — the trip is drafted from the places it names. */}
+        <div className="no-print" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: 'var(--card)' }}>
+          <strong style={{ fontSize: 13 }}>Start from a link</strong>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
+          <div className="row">
+            <input value={linkInput} onChange={(e) => setLinkInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && startFromLink()} placeholder="Paste a link or article text" aria-label="Link or text to start a trip from" />
+            <button className="ghost" onClick={startFromLink} disabled={!linkInput.trim() || linkBusy}>{linkBusy ? 'Reading…' : 'Start from this'}</button>
+          </div>
+        </div>
       </div>
       {plan && (
         <div className="plan-print" style={{ marginTop: 20 }}>
