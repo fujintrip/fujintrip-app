@@ -12,6 +12,7 @@
 'use client';
 import Expandable from './Expandable';
 import KnowHowBlock from './KnowHow';
+import { SosButton } from './EmergencySheet';
 import { MONTH_NAMES } from '../lib/planner';
 import type { Plan } from '../lib/planner';
 import type { BestTime } from '../lib/bestTime';
@@ -42,6 +43,7 @@ export default function TripPanel({
   onBuild,
   onBook,
   busy,
+  onSos,
 }: {
   card: TripCard | null;
   plan: Plan | null;
@@ -58,6 +60,7 @@ export default function TripPanel({
   onBuild: () => void;
   onBook: () => void;
   busy: boolean;
+  onSos: () => void;
 }) {
   const stops = card?.stops ?? [];
   const totalNights = stops.reduce((s, x) => s + x.nights, 0);
@@ -85,6 +88,16 @@ export default function TripPanel({
           </div>
         )}
       </div>
+
+      {/* SOS (emergency-button build): the panel only renders once a
+          plan exists (S2), so the button appears with the trip, never
+          on the empty S0 screen. It opens the emergency sheet — call
+          the local number, or alert the saved contact. */}
+      {card && (
+        <div style={{ marginBottom: 12 }}>
+          <SosButton onOpen={onSos} />
+        </div>
+      )}
 
       {/* Live Duffel fares (finish-the-web-version round): the card's
           flight legs are the same test fares the chat quoted — one line
