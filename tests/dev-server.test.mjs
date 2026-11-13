@@ -44,7 +44,7 @@ after(async () => {
   }
 });
 
-test('homepage 200 and renders the chat panel', async () => {
+test('homepage 200 renders the brand but no chat panel — the chat lives on /chat now', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = await r.text();
@@ -52,7 +52,16 @@ test('homepage 200 and renders the chat panel', async () => {
   // The service-worker registration lives in the client JS bundle (the
   // component renders null), so the HTML check is for the worker route
   // itself — see the next test.
-  assert.ok(html.includes('fujin-chat'), 'homepage renders the chat panel');
+  assert.ok(!html.includes('fujin-chat'), 'the chat panel is not on the homepage anymore');
+  assert.ok(!html.includes('chat-shell'), 'the chat shell is not on the homepage anymore');
+});
+
+test('chat page 200 and renders the chat panel', async () => {
+  const r = await fetch(`${BASE}/chat`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('FujinTrip'), 'chat page renders the brand');
+  assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
 test('service worker serves with the cache version', async () => {
@@ -250,7 +259,7 @@ test('reels: the strip is empty until a human approves a verified post, and a fl
 });
 
 test('chat-first layout: full-bleed shell, app bar, wrapped chips, short placeholders', async () => {
-  const r = await fetch(`${BASE}/`);
+  const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The chat section is full-bleed (chat-shell), not the 1080px .wrap;
@@ -285,7 +294,7 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   // SSR-visible markers only — the panel's editable timeline, the
   // switcher menu and the map dialog mount client-side, so they are
   // covered by the pure-helper unit tests and the build, not by SSR.
-  const r = await fetch(`${BASE}/`);
+  const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The chat zone renders, centered (chatmap-s0) — it is the only zone.
@@ -325,11 +334,13 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   // Kyoto torii gates, the template photo already in lib/data.ts.
   assert.ok(html.includes('hero-photo'), 'the S0 hero photo renders');
   assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
-  // Templates are one click from the app: every library card on page 1
-  // (12) plus the discovery panel (1) and the hidden gems (3) offer
-  // "Make it yours".
-  const makeItYours = (html.match(/Make it yours/g) || []).length;
-  assert.equal(makeItYours, 16, `12 library cards + discovery panel + 3 hidden gems offer Make it yours (found ${makeItYours})`);
+  // Chips fill, don't fire (item 5): the starter chips carry their full
+  // prompt as data-fill, and the input is what receives it.
+  assert.ok(html.includes('data-fill="Surprise me"'), 'Surprise me chip carries data-fill');
+  assert.ok(html.includes('data-fill="I want a warm beach in February"'), 'a starter chip carries its full prompt as data-fill');
+  // Full-screen map (item 3): the hook is gone at S0 (interface round
+  // M1) — "Open the map" appears with the map, not before it.
+  assert.ok(!html.includes('Open the map'), 'Open the map does not render before the map exists');
 });
 
 test('interface round S0 busy budget: at most 10 interactive elements in the first viewport', async () => {
@@ -340,7 +351,7 @@ test('interface round S0 busy budget: at most 10 interactive elements in the fir
   // so the first viewport is now theme toggle, My Trips, input, Start
   // planning, 3 chips = 6. "Build my plan" is not counted — it appears
   // after the first message.
-  const r = await fetch(`${BASE}/`);
+  const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
   const shellStart = html.indexOf('chat-shell');
@@ -367,7 +378,7 @@ test('interface round S0 busy budget: at most 10 interactive elements in the fir
 });
 
 test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exist with a trip', async () => {
-  const r = await fetch(`${BASE}/`);
+  const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The SOS button lives in the trip panel, the Today view and the map
@@ -621,13 +632,11 @@ test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and m
   assert.ok(html.includes('Food (15)'), 'Food pill with real count');
   assert.ok(html.includes('Mountains &amp; nature (4)') || html.includes('Mountains & nature (4)'), 'Mountains & nature pill with real count');
   assert.ok(!html.includes('Mountains &amp; nature (0)') && !html.includes('Mountains & nature (0)'), 'no empty category pill is rendered');
-  // Chips fill, don't fire (item 5): the starter chips carry their full
-  // prompt as data-fill, and the input is what receives it.
-  assert.ok(html.includes('data-fill="Surprise me"'), 'Surprise me chip carries data-fill');
-  assert.ok(html.includes('data-fill="I want a warm beach in February"'), 'a starter chip carries its full prompt as data-fill');
-  // Full-screen map (item 3): the hook is gone at S0 (interface round
-  // M1) — "Open the map" appears with the map, not before it.
-  assert.ok(!html.includes('Open the map'), 'Open the map does not render before the map exists');
+  // Templates are one click from the chat: every library card on page 1
+  // (12) plus the discovery panel (1) and the hidden gems (3) offer
+  // "Make it yours" — which seeds /chat with the trip.
+  const makeItYours = (html.match(/Make it yours/g) || []).length;
+  assert.equal(makeItYours, 16, `12 library cards + discovery panel + 3 hidden gems offer Make it yours (found ${makeItYours})`);
   // Motion (item 6): the served stylesheet carries the panel entrance
   // and the expandable-row transition — read it from the page's own
   // stylesheet link, falling back to the source file.
