@@ -134,12 +134,17 @@ export default function TripMap({
         <TileLayer
           attribution={
             dark
-              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              ? 'Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, and the GIS user community'
               : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           }
           url={
             dark
-              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              // Esri World Dark Gray canvas — no API key needed (verified
+              // live Nov 13 2026: HTTP 200, real map data). CARTO's
+              // no-key endpoint now serves an identical "API KEY
+              // REQUIRED" tile for every coordinate, so it is gone.
+              // Note the {z}/{y}/{x} order: Esri's REST tile path.
+              ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
               : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
           }
         />
