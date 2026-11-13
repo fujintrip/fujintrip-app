@@ -1135,6 +1135,16 @@ export function familyPaceLine(kids: number[]): string {
   return `Teen pace for kids ages ${ages}: full days are fine, with a mix of sights and something active.`;
 }
 
+// Solo mode (round 3 #4, competitor learning §3 — Layla FAQ,
+// MonkeyTravel, Sorom): a solo traveler is not a smaller group. The
+// supplement is NAMED, not priced — the planner has no live single
+// supplement to quote, so no dollar figure is invented. The workaround
+// (hostel private room, no-supplement departures) and the social
+// options are the honest S-step; no place is ever labeled safe.
+export function soloLine(): string {
+  return `Traveling solo: stays are priced per room, so some places add a single supplement — cruises often 50–100% on top of the per-person fare, and hostels charge per bed. A hostel private room is usually the cheapest private option, and some operators run no-supplement departures. Group walking tours, hostel common rooms and lively evenings are the easy ways to meet people on the road.`;
+}
+
 // Regions count as travel too — "europe, january" names a place and a
 // month, and must reach the recommend rule, not the off-topic decline
 // (the Nov 10 Europe bug came back in exactly this form). Bare regions
@@ -1488,7 +1498,7 @@ export function askFujin(
           ? `${origin ? `${origin} ✈️ ` : ''}${legs[0].city}`
           : dest;
     const monthName = month ? MONTH_NAMES[month - 1] : '';
-    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport.${familyNote ? ` ${familyNote}` : ''} Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
+    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport.${familyNote ? ` ${familyNote}` : ''}${travelers === 1 ? ` ${soloLine()}` : ''} Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
   };
   const isConfirmation = /^(yes|yeah|yep|sure|ok|okay|looks great|looks good|perfect|sounds good|sounds great|build it|let'?s build|go ahead|do it|great|love it)\b/.test(
     currentLower.trim()

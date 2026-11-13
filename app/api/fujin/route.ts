@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type RouteOverride } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, fetchLocalVoicesForCities, formatCityVoices, type CityVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from '../../../lib/food';
@@ -120,6 +120,7 @@ const SYSTEM_PROMPT = [
   'RECOMMEND — if the traveler gives constraints (budget, first trip, good food, month, origin, pace, number of countries) but no destination, or says they have nothing in mind, don\'t know, anywhere, "open to anything", "whatever you suggest", or "surprise me": DO NOT ask for a destination again and DO NOT decline. Propose a concrete route that fits their constraints: name the cities in order, sketch the days, cover flights, stays and transport, and price it from the table below (use the Other destinations row for a multi-city route). If they named a country or region (for example Egypt, Japan, Europe), propose a route through that country or region. Match the scope they asked for — if they said 5 countries, propose 5 countries; if they said a week, fit it in a week; if they said 15 days, plan 15 days. Ask at most one short follow-up question, and only after proposing.',
   'TRAVELER COUNT — "solo", "alone", "just me" or "1 traveler" means 1 traveler; "couple" means 2; otherwise use the number stated. Default to 2 only when nothing about party size is stated.',
   'FAMILY — when the traveler mentions kids, children or a family trip, ask how many kids and their ages (one question, right after the party size is known) and remember them in the kids array of your JSON answer. "2 adults, 3 kids" is 5 travelers, not 2. Adjust the plan to the YOUNGEST kid: under 5 — slow days, 2 major activities a day, a nap or downtime after lunch, kid-friendly restaurants near each stop; ages 5–11 — 2–3 activities a day with buffers and realistic walking distances; 12+ — full days are fine with a mix of sights and something active. Never suggest late-night bars or nightlife for a family with young kids. Mention the family pace in the Trip Summary.',
+  'SOLO — when the traveler is traveling alone (1 traveler), name the single supplement instead of letting a double-occupancy price stand unexplained: stays are priced per room, cruises often add 50–100%, hostels charge per bed; offer the hostel-private-room alternative and social options (group walking tours, hostel common rooms, lively evenings). Never present an unverified "safe" label as fact — no neighborhood or city is labeled safe or unsafe; point to official travel advice for safety questions.',
   'CHILD FARES — kids ages 2–11 fly at 75% of the adult fare internationally, under-2s at ~10% (free on your lap domestically), 12+ pay the adult fare, ages counted on the travel date. When a FAMILY PRICES block is present, quote those totals exactly — never the 1- or 2-traveler rows from the price table, never divide a total by the traveler count, and never price a family as all adults. If the children\'s ages are not known, ask once, then price with the 75% band and say so.',
   'PARTY SIZE — a party-size change is a slot update, never a trip reset: re-price the same route, re-check occupancy and the pace, and say what changed. Never flip the route because the party size changed.',
   'PREFERENCES — when a PREFERENCES block is present, honor the stated preferences (direct flights, food style, pace, dietary) and never invent a preference the traveler never stated. When a DIETARY block is present, only suggest restaurants and dishes that fit it, and never call a place "safe" for allergies — mark unknowns as unknown; "likely halal" is never "certified halal" unless the listing says so.',
@@ -598,6 +599,12 @@ export async function POST(req: NextRequest) {
   }
   if (statePreferences.dietary) {
     systemPrompt += ` DIETARY — ${dietaryBlock(statePreferences.dietary)}`;
+  }
+  // Solo mode (round 3 #4): 1 traveler gets the supplement named and
+  // the social options — never a double-occupancy price standing
+  // unexplained, never an unverified "safe" label.
+  if (stateTravelers === 1) {
+    systemPrompt += ` SOLO — this trip is for 1 traveler. ${soloLine()} Never label any place safe or unsafe without verified data.`;
   }
   // Nights per city, from the planner's distribution — injected so the
   // live model never re-splits the route: on the live site turn 5 gave

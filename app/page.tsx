@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type DiscoveryEntry } from '../lib/discovery';
-import { askFujin, applyRevision, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type Plan, type Revision, type RouteOverride } from '../lib/planner';
+import { askFujin, applyRevision, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type Plan, type Revision, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
@@ -225,7 +225,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string } }) {
   // The opening line — also the line a "New trip" resets to, so the
   // trip switcher and the plan view's "Start a new trip" restart the
   // conversation in exactly the same words.
@@ -2359,6 +2359,17 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   ))}
                 </div>
               )}
+              {/* Solo mode (round 3 #4): the supplement named, the
+                  workaround, the social options, and the safety Q&A —
+                  shown only for 1 traveler. No place is labeled safe. */}
+              {plan.travelers === 1 && (
+                <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 14px' }}>
+                  <strong style={{ fontSize: 14 }}>Traveling solo</strong>
+                  <p className="plan-line">{soloLine()}</p>
+                  <p className="plan-line"><b>Is it safe to travel alone here?</b> FujinTrip doesn&apos;t label places safe or unsafe — check the latest official travel advice for your destination before you go, and stick to well-lit main streets at night.</p>
+                  <p className="plan-line"><b>What if something goes wrong?</b> Your emergency contact is {emergencyContact.name ? `${emergencyContact.name}${emergencyContact.phone ? ` — ${emergencyContact.phone}` : ''}` : 'not set yet — add one in My Trips below'}; on the trip, on-trip mode has the flight-status check and the FujinTrip team follows up on booking requests.</p>
+                </div>
+              )}
               {/* Best time to travel (competitor learning round 2 #5,
                   Kayak): the 12-month strip for this route — price band,
                   crowds and typical temperatures per month, with the best
@@ -2655,6 +2666,19 @@ export default function Home() {
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-profile', JSON.stringify(profile)); } catch {} }, [profile]);
+  // Emergency contact (round 3 #4, solo mode): name + phone, on this
+  // device only — shown on solo trip cards, editable in My Trips.
+  const [emergencyContact, setEmergencyContact] = useState<{ name: string; phone: string }>({ name: '', phone: '' });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-emergency-contact');
+      if (raw) {
+        const c = JSON.parse(raw) as { name?: unknown; phone?: unknown };
+        setEmergencyContact({ name: typeof c.name === 'string' ? c.name.slice(0, 80) : '', phone: typeof c.phone === 'string' ? c.phone.slice(0, 40) : '' });
+      }
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem('fujintrip-emergency-contact', JSON.stringify(emergencyContact)); } catch {} }, [emergencyContact]);
   // Price watches (competitor learning #4): a drop is measured against
   // the live fare when the watch started — never against the planner
   // estimate. Stored in localStorage, like the trips.
@@ -2825,7 +2849,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className={tab === 'Fujin AI' ? 'panel chat-panel' : 'panel'} id="fujin-chat">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
         {composerOpen && (
           <div className="panel" id="reel-composer">
@@ -3022,6 +3046,12 @@ export default function Home() {
             {DIETARY_OPTIONS.map((d) => (
               <button key={d.value} type="button" className={`chip${profile.dietary === d.value ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, dietary: profile.dietary === d.value ? undefined : d.value })}>{d.label}</button>
             ))}
+          </div>
+          <h3 style={{ marginTop: 20 }}>Emergency contact</h3>
+          <p className="plan-muted">For solo trips — who should be reached if something goes wrong? Stored on this device only, shown on your solo trip cards.</p>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <input value={emergencyContact.name} onChange={(e) => setEmergencyContact({ ...emergencyContact, name: e.target.value })} placeholder="Name" aria-label="Emergency contact name" />
+            <input value={emergencyContact.phone} onChange={(e) => setEmergencyContact({ ...emergencyContact, phone: e.target.value })} placeholder="Phone" aria-label="Emergency contact phone" />
           </div>
           <h3 style={{ marginTop: 20 }}>Price watches</h3>
           <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
