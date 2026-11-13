@@ -18,6 +18,7 @@ import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInf
 import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePassportExpiryValue, passportWarningLine, schengenRemaining, type PassportCheck } from '../lib/passport';
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { paceFromProfile } from '../lib/pace';
+import { interfaceState } from '../lib/interface';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
 import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival';
@@ -302,6 +303,19 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // never forced. The pre-paint script in layout.tsx sets the first
   // value; this hook keeps the toggle and the maps in sync with it.
   const [theme, setTheme] = useTheme();
+  // Interface state (interface round §2/§5): S0 no trip, S1 destination
+  // known, S2 plan built. The zones gate on it — nothing renders before
+  // its data exists (M1). hasUserMsg (declared with the chips below)
+  // gates the dietary row off the first paint (M4): the S0 screen is
+  // the greeting, the input, 3 chips and one quiet link — nothing else.
+  const uiState = interfaceState({ lastParsed, plan });
+  // A mobile zone that no longer exists (Trip without a plan, or any
+  // zone at S0) resets to the chat — a zone button must never point
+  // at nothing.
+  useEffect(() => {
+    if (uiState === 'S0' && mobileZone !== 'chat') setMobileZone('chat');
+    if (uiState === 'S1' && mobileZone === 'trip') setMobileZone('chat');
+  }, [uiState, mobileZone]);
   // On-trip flight check (competitor learning #5): flight number/date
   // the traveler typed, and the last checked status ('loading' while it
   // runs). A live status rides with the "my flight was cancelled"
@@ -473,6 +487,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // its one-line confirmation — cleared on the next sent message.
   const [dietaryDismissed, setDietaryDismissed] = useState(false);
   const [dietaryNote, setDietaryNote] = useState('');
+  // The dietary row shows at most 4 options + a "More" chip — 6 options
+  // + a dismiss button is a row of its own, and the first screen has
+  // no room for a second row of chips (M4).
+  const [dietaryMore, setDietaryMore] = useState(false);
   // PDF download state: the $1 rule is decided by the server route.
   const [pdfNotice, setPdfNotice] = useState('');
   const [pdfPay, setPdfPay] = useState(false);
@@ -1713,7 +1731,6 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
         <div className="appbar-brand">
           <SafeImg className="fujin-portrait" src={FUJIN_IMG} alt="Wind God by Ogata Korin — Fujin, the Japanese wind god" label="風" />
           <h1 className="appbar-title">FujinTrip</h1>
-          <span className="appbar-tag">One complete plan. Cheapest, Best value, or Premium.</span>
         </div>
         <div className="appbar-actions">
           <button
@@ -1764,19 +1781,27 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </>
             )}
           </div>
-          <span className="appbar-total">
-            {plan ? (
-              <>
-                <strong>${plan.options[choice].total.toLocaleString()}</strong>
-                <span className="appbar-total-label"> total · {plan.options[choice].name}</span>
-              </>
-            ) : (
-              <span className="appbar-total-label">{lastParsed?.destination ? 'Build your plan to see the total' : 'No trip yet'}</span>
-            )}
-          </span>
-          <button className="primary appbar-book" onClick={bookPlan} disabled={!plan} title={plan ? 'Book this plan with FujinTrip' : 'Build your plan first'}>
-            Book
-          </button>
+          {/* App bar total + Book (interface round §5): S0 shows neither
+              — the first screen is the chat, not a price. S1 shows the
+              hint that the total comes with the plan. S2 shows the total
+              and the Book button. */}
+          {lastParsed?.destination && (
+            <span className="appbar-total">
+              {plan ? (
+                <>
+                  <strong>${plan.options[choice].total.toLocaleString()}</strong>
+                  <span className="appbar-total-label"> total · {plan.options[choice].name}</span>
+                </>
+              ) : (
+                <span className="appbar-total-label">Build your plan to see the total</span>
+              )}
+            </span>
+          )}
+          {plan && (
+            <button className="primary appbar-book" onClick={bookPlan} title="Book this plan with FujinTrip">
+              Book
+            </button>
+          )}
         </div>
       </div>
       {/* Split screen (Nov 11) + trip panel (app shell, Nov 12): the
@@ -1786,23 +1811,32 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           as price tags the traveler can click to read more or add to
           the plan. Below 1200px the zones switch one at a time
           (data-zone); above it all three sit side by side. */}
-      <div className="chatmap" data-zone={mobileZone}>
+      <div className={`chatmap${uiState === 'S0' ? ' chatmap-s0' : ''}`} data-zone={mobileZone}>
         {/* Zone switcher (narrow screens only — CSS hides it above
-            1200px): Chat / Trip / Map. At 901–1200px the chat is always
-            visible, so the Chat button hides and Trip swaps the map
-            zone for the panel; below 900px the active zone is the
-            bottom sheet over the map. */}
-        <div className="zonebar" role="tablist" aria-label="Switch app view">
-          <button type="button" role="tab" aria-selected={mobileZone === 'chat'} className={`zonebar-btn zonebar-chat${mobileZone === 'chat' ? ' selected' : ''}`} onClick={() => setMobileZone('chat')}>
-            Chat
-          </button>
-          <button type="button" role="tab" aria-selected={mobileZone === 'trip'} className={`zonebar-btn${mobileZone === 'trip' ? ' selected' : ''}`} onClick={() => setMobileZone('trip')}>
-            Trip
-          </button>
-          <button type="button" role="tab" aria-selected={mobileZone === 'map'} className={`zonebar-btn${mobileZone === 'map' ? ' selected' : ''}`} onClick={() => setMobileZone('map')}>
-            Map
-          </button>
-        </div>
+            1200px): Chat / Trip / Map. It renders only when ≥2 zones
+            exist (M1): at S0 there is only the chat, so there is nothing
+            to switch between. At 901–1200px the chat is always visible,
+            so the Chat button hides and Trip swaps the map zone for the
+            panel; below 900px the active zone is the bottom sheet over
+            the map. The Trip button needs a plan, the Map button a
+            route — each renders only when its zone exists. */}
+        {uiState !== 'S0' && (
+          <div className="zonebar" role="tablist" aria-label="Switch app view">
+            <button type="button" role="tab" aria-selected={mobileZone === 'chat'} className={`zonebar-btn zonebar-chat${mobileZone === 'chat' ? ' selected' : ''}`} onClick={() => setMobileZone('chat')}>
+              Chat
+            </button>
+            {plan && (
+              <button type="button" role="tab" aria-selected={mobileZone === 'trip'} className={`zonebar-btn${mobileZone === 'trip' ? ' selected' : ''}`} onClick={() => setMobileZone('trip')}>
+                Trip
+              </button>
+            )}
+            {mapCard && (
+              <button type="button" role="tab" aria-selected={mobileZone === 'map'} className={`zonebar-btn${mobileZone === 'map' ? ' selected' : ''}`} onClick={() => setMobileZone('map')}>
+                Map
+              </button>
+            )}
+          </div>
+        )}
         <div className={`chatcol${tripMode ? ' tripmode-on' : ''}`}>
           {/* Offline banner (community round, design §7): a slim banner
               instead of a dead screen — the saved plan still works
@@ -1834,26 +1868,31 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 <span className="tripsummary-label">From</span>
                 <span>{lastParsed.origin || 'Not set yet'}</span>
               </button>
-              <div className="tripsummary-tiers" role="group" aria-label="Plan tier">
-                {(['Cheapest', 'Best value', 'Premium'] as const).map((name, i) => (
-                  <button
-                    key={name}
-                    type="button"
-                    className={`tripsummary-tier ${i === choice ? 'selected' : ''}`}
-                    aria-pressed={i === choice}
-                    disabled={thinking !== null || streamingText !== null}
-                    onClick={() => send(i === 0 ? 'Make it cheaper' : i === 1 ? 'Best value' : 'Upgrade to Premium')}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+              {/* Tier row (interface round §5): only once a plan exists.
+                  At S1 the summary is route/dates/travelers/from only —
+                  tier buttons act on a plan, and there is none yet. */}
+              {plan && (
+                <div className="tripsummary-tiers" role="group" aria-label="Plan tier">
+                  {(['Cheapest', 'Best value', 'Premium'] as const).map((name, i) => (
+                    <button
+                      key={name}
+                      type="button"
+                      className={`tripsummary-tier ${i === choice ? 'selected' : ''}`}
+                      aria-pressed={i === choice}
+                      disabled={thinking !== null || streamingText !== null}
+                      onClick={() => send(i === 0 ? 'Make it cheaper' : i === 1 ? 'Best value' : 'Upgrade to Premium')}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <div className="chat" ref={chatRef} aria-live="polite" aria-label="Conversation with Fujin AI">
             {msgs.map((m, i) => (
               <div key={i} className={`msg ${m.who === 'user' ? 'user' : ''}`}>
-                {m.who === 'ai' ? <div className="bubble">{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
+                {m.who === 'ai' ? <div className={i === 0 && !hasUserMsg ? 'bubble greeting' : 'bubble'}>{formatReply(m.text)}</div> : <span className="bubble">{m.text}</span>}
                 {m.who === 'ai' && m.tips && m.tips.length > 0 && (
                   <ul style={{ fontSize: 13, color: 'var(--muted)', margin: '6px 0 0 12px', paddingLeft: 16, textAlign: 'left' }}>
                     {m.tips.map((t) => <li key={t}>{t}</li>)}
@@ -1917,11 +1956,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               sets the dietary need for this trip and the profile — food
               answers respect it from the next reply. Shown until it is
               set (or dismissed), and only before the plan is built:
-              intake, not a permanent row. */}
-          {!profile.dietary && !dietaryDismissed && !plan && (
+              intake, not a permanent row. It stays OFF the first paint
+              (M4) — the S0 screen is the greeting, the input and 3
+              chips — and appears once the traveler has said something. */}
+          {!profile.dietary && !dietaryDismissed && !plan && hasUserMsg && (
             <div className="chips no-print" role="group" aria-label="Dietary needs" style={{ paddingTop: 2 }}>
               <span style={{ fontSize: 13, color: 'var(--muted)', alignSelf: 'center' }}>Any dietary needs?</span>
-              {DIETARY_OPTIONS.map((d) => (
+              {DIETARY_OPTIONS.slice(0, dietaryMore ? undefined : 4).map((d) => (
                 <button
                   key={d.value}
                   type="button"
@@ -1938,6 +1979,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   {d.label}
                 </button>
               ))}
+              {!dietaryMore && DIETARY_OPTIONS.length > 4 && (
+                <button type="button" className="chip" onClick={() => setDietaryMore(true)}>
+                  More…
+                </button>
+              )}
               <button type="button" className="chip" aria-label="Hide dietary question" onClick={() => setDietaryDismissed(true)}>✕</button>
             </div>
           )}
@@ -1959,7 +2005,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           {/* Start Anywhere (competitor learning round 2 #6, Mindtrip):
               paste a link to a travel article, or paste the text of
               one — the trip is drafted from the places it names. */}
-          <div className="no-print" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+          <div className="no-print" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: 'var(--card)' }}>
             <strong style={{ fontSize: 13 }}>Start from a link</strong>
             <p style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 8px' }}>Paste a link to a travel article, or paste the text of one — I’ll draft the trip from the places it names, with the notes from your link on each stop. (Screenshots and PDF files can’t be read yet — paste a web link or the text instead.)</p>
             <div className="row">
@@ -1993,7 +2039,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               {/* Check my flight (competitor learning #5, TripIt Pro /
                   Romie / Layla): live status, gate + baggage, and the
                   "my flight was cancelled" path to rebooking options. */}
-              <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+              <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: 'var(--card)' }}>
                 <strong style={{ fontSize: 13 }}>Check my flight</strong>
                 <div className="row" style={{ marginTop: 8 }}>
                   <input value={flightNo} onChange={(e) => setFlightNo(e.target.value)} placeholder="Flight number, e.g. UAL123" aria-label="Flight number" style={{ textTransform: 'uppercase' }} />
@@ -2044,7 +2090,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   price band, open-now, walk time, dish and one Wikivoyage
                   quote. Fetched on demand; a place whose hours cannot be
                   verified says so, never guessed open. */}
-              <div id="tonight-near-you" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: '#fff' }}>
+              <div id="tonight-near-you" style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, marginTop: 8, background: 'var(--card)' }}>
                 <strong style={{ fontSize: 13 }}>Tonight near you</strong>
                 <div className="row" style={{ marginTop: 8 }}>
                   <button className="ghost" onClick={fetchTonightPlaces} disabled={tonight === 'loading'}>
@@ -2071,28 +2117,35 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             </div>
           )}
         </div>
-        {/* Live trip panel (app shell): the middle zone — the itinerary
-            as an editable timeline, fed by the same trip card and plan
-            the map and the plan view use. */}
-        <TripPanel
-          card={mapCard}
-          plan={plan}
-          choice={choice}
-          onTier={panelTier}
-          travelers={lastParsed?.travelers ?? 2}
-          onTravelers={panelTravelers}
-          month={lastParsed?.month ?? 0}
-          onMonth={panelMonth}
-          bestTime={lastParsed?.destination ? bestTimeFor(lastParsed.destination) : null}
-          kids={lastParsed?.kids ?? []}
-          onEditStop={panelEditStop}
-          notice={panelNotice}
-          onBuild={build}
-          onBook={bookPlan}
-          busy={thinking !== null || streamingText !== null}
-        />
-        <div className="mapcol no-print">
-          {mapCard ? (
+        {/* Live trip panel (app shell + interface round §5, M1): the
+            middle zone — the itinerary as an editable timeline, fed by
+            the same trip card and plan the map and the plan view use.
+            It renders only when a plan exists; its "No trip yet" empty
+            state is gone — at S0/S1 there is no panel at all. */}
+        {plan && (
+          <TripPanel
+            card={mapCard}
+            plan={plan}
+            choice={choice}
+            onTier={panelTier}
+            travelers={lastParsed?.travelers ?? 2}
+            onTravelers={panelTravelers}
+            month={lastParsed?.month ?? 0}
+            onMonth={panelMonth}
+            bestTime={lastParsed?.destination ? bestTimeFor(lastParsed.destination) : null}
+            kids={lastParsed?.kids ?? []}
+            onEditStop={panelEditStop}
+            notice={panelNotice}
+            onBuild={build}
+            onBook={bookPlan}
+            busy={thinking !== null || streamingText !== null}
+          />
+        )}
+        {/* Map zone (interface round §5, M1): renders only when the
+            trip has a route — at S0 there is no map, no placeholder, no
+            "Open the map" button. The zone appears with the destination. */}
+        {mapCard && (
+          <div className="mapcol no-print">
             <>
               <div className="mapdialog-bar" style={{ marginBottom: 8 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>{mapCard.stops.length} stop{mapCard.stops.length !== 1 ? 's' : ''} · {mapCard.legs.length} price tags</span>
@@ -2189,16 +2242,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 </div>
               )}
             </>
-          ) : (
-            <div className="map-placeholder">
-              <p>
-                <strong>Your trip map</strong>
-              </p>
-              <p>Tell Fujin AI where you want to go, then build the plan — the map fills in with your route, and the flights, stays and cars appear as price tags you can click.</p>
-              <p><button type="button" className="ghost" disabled title="Build a trip to open the full map">⤢ Open the map</button></p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {plan && (
         <div className="plan-print" style={{ marginTop: 20 }}>

@@ -69,13 +69,11 @@ export default function TripPanel({
       <div className="trippanel-head">
         <div>
           <h2 className="trippanel-title">{card ? card.destination : 'Your trip'}</h2>
-          {card ? (
+          {card && (
             <p className="trippanel-sub">
               {fmtDate(card.startDate)} – {fmtDate(card.endDate)} · {card.days} days · {totalNights} nights · {travelers} traveler{travelers > 1 ? 's' : ''}
               {familyNote}
             </p>
-          ) : (
-            <p className="trippanel-sub">No trip yet — tell Fujin AI where to go, or pick a template below.</p>
           )}
         </div>
         {chosen && (

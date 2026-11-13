@@ -279,26 +279,28 @@ html{scroll-padding-bottom:96px}
 
 /* Chat-first split layout (Nov 12 rebuild — the user: "modern layout,
    wide, use all page space, chat is the main space") + trip panel
-   (app shell, Nov 12). The old map-as-background overlay is gone: the
-   chat floated ON TOP of the map and hid its left half (the map heading
-   clipped mid-word, Prague/Vienna markers under the panel). Now the
-   section is a flex row that fills the first screen below the header:
-   a solid chat panel on the left, the editable trip panel in the
-   middle, the map on the right, all full height of the section. The
-   map fits the whole route in its own visible area — no panel covers
-   any of it. Height is 100dvh minus the compact chrome above it
-   (header ~57 + tabs ~68 + app bar ~52 + slack ≈ 240px); below 1200px
+   (app shell, Nov 12) + interface round (state gates, §4/§5). The old
+   map-as-background overlay is gone: the chat floated ON TOP of the map
+   and hid its left half (the map heading clipped mid-word,
+   Prague/Vienna markers under the panel). Now the section is a flex
+   row that fills the first screen below the header: a solid chat panel
+   on the left, the editable trip panel in the middle, the map on the
+   right, all full height of the section. The map fits the whole route
+   in its own visible area — no panel covers any of it. Height is
+   100dvh minus the compact chrome above it (site header ~57 + app bar
+   ~52 + panel margin ≈ 140px — the 8-tab bar is gone, M2); the chat
+   gets ≥85% of viewport height. At S0 the chat is the only zone, so it
+   centers at max 720px instead of hugging the left edge. Below 1200px
    the zones switch one at a time (data-zone) instead of squeezing
    three columns; on a narrow screen the active zone is the bottom
    sheet below, so the top of the map stays visible. */
-.chatmap{position:relative;height:calc(100dvh - 240px);min-height:560px;display:flex;gap:16px}
+.chatmap{position:relative;height:calc(100dvh - 140px);min-height:560px;display:flex;gap:16px}
+.chatmap-s0{justify-content:center}
+.chatmap-s0 .chatcol{width:min(720px,100%)}
 .chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
 .trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px;overflow-y:auto;min-height:0}
 .chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
 .mapcol{position:relative;flex:1 1 auto;min-width:0;height:100%;z-index:0;display:flex;flex-direction:column}
-.map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed var(--line);border-radius:16px;padding:24px;color:var(--ink);background:var(--surface)}
-.map-placeholder p{max-width:340px}
-.map-placeholder p + p{color:var(--muted)}
 .legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 28px rgba(0,0,0,.18)}
 .legcard p{margin:6px 0}
 .maphints{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;gap:8px;max-width:340px}
@@ -321,7 +323,7 @@ html{scroll-padding-bottom:96px}
   .zonebar-chat{display:none}
 }
 @media (max-width:900px){
-  .chatmap{height:calc(100dvh - 200px);min-height:520px}
+  .chatmap{height:calc(100dvh - 160px);min-height:520px}
   .chatcol{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
   .trippanel{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
   .chatmap .chat{max-height:none}
