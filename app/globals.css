@@ -493,3 +493,20 @@ html{scroll-padding-bottom:96px}
    color alone). Counts are the real number of cards in the category. */
 .filter-pills{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
 .chip.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+/* Photo carousel (interface round S3): the counter badge sits on the
+   photo's bottom-right; the numbered thumbs sit below it, same
+   pattern as ReelCard. A single photo has neither — it is just an
+   image. */
+.photocarousel-media{position:relative}
+.photocarousel-count{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.65);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;z-index:1}
+.carousel-thumbs{display:flex;gap:6px;padding:8px 12px 0}
+.carousel-thumbs button{border:1px solid var(--line);background:var(--card);border-radius:999px;min-width:32px;min-height:32px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink);font-family:inherit}
+.carousel-thumbs button.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+/* Quiet text link (interface round S2): the library card's secondary
+   action — a text button, not a pill. */
+.textlink{background:none;border:none;padding:8px 0;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;text-align:left}
+.textlink:hover{color:var(--ink);text-decoration:underline}
+/* Template pagination (interface round S2): numbered pages + prev/next,
+   44px targets, centered under the grid. */
+.pagination{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:20px;flex-wrap:wrap}
+.pagination .page-label{font-size:13px;color:var(--muted)}

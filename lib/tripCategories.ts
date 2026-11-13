@@ -42,11 +42,43 @@ const CATEGORIES: Record<string, TripCategory[]> = {
   Hilo: ['Mountains & nature', 'Beach & islands', 'Food'],
 };
 
+// The 17 planner routes (display names from COUNTRY_ROUTES, keys must
+// match exactly) — one judgment call per route, from its own stops in
+// ROUTE_STOPS (lib/planner.ts). Every route is Cities & culture: each
+// is a multi-city tour of capitals and old towns. Food only where a
+// stop is a food destination in its own right (Osaka, Oaxaca, Porto's
+// wine, Bangkok street food); Beach & islands only where a stop is a
+// coast or island (Sharm El Sheikh, Nice, Santorini/Crete, Krabi,
+// Antalya, Tulum); Mountains & nature only for Cappadocia's valleys.
+// Conservative on purpose — a route with a good meal in it is not a
+// food trip (the Santorini rule above).
+const ROUTE_CATEGORIES: Record<string, TripCategory[]> = {
+  Europe: ['Cities & culture'],
+  'Central Europe': ['Cities & culture'],
+  Portugal: ['Cities & culture', 'Food'],
+  Egypt: ['Cities & culture', 'Beach & islands'],
+  Japan: ['Cities & culture', 'Food'],
+  Italy: ['Cities & culture', 'Food'],
+  France: ['Cities & culture', 'Food', 'Beach & islands'],
+  Spain: ['Cities & culture', 'Food'],
+  Greece: ['Cities & culture', 'Beach & islands'],
+  Thailand: ['Cities & culture', 'Food', 'Beach & islands'],
+  'Southeast Asia': ['Cities & culture', 'Food'],
+  Turkey: ['Cities & culture', 'Mountains & nature', 'Beach & islands'],
+  Morocco: ['Cities & culture', 'Food'],
+  India: ['Cities & culture', 'Food'],
+  UK: ['Cities & culture'],
+  Mexico: ['Cities & culture', 'Food', 'Beach & islands'],
+  USA: ['Cities & culture'],
+};
+
+const ALL_CATEGORIES: Record<string, TripCategory[]> = { ...CATEGORIES, ...ROUTE_CATEGORIES };
+
 // Categories for a destination, or [] when it has none — never
 // guessed: an unknown name gets no categories, so it can only show
 // under "All".
 export function categoriesFor(name: string): TripCategory[] {
-  return CATEGORIES[name] ?? [];
+  return ALL_CATEGORIES[name] ?? [];
 }
 
 export type PackageFilter = TripCategory | 'All';

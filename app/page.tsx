@@ -27,6 +27,7 @@ import Checklist from '../components/Checklist';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import Expandable from '../components/Expandable';
+import PhotoCarousel from '../components/PhotoCarousel';
 import KnowHowBlock from '../components/KnowHow';
 import TripPanel, { type PanelStopEdit } from '../components/TripPanel';
 import OfflineBanner from '../components/OfflineBanner';
@@ -3185,15 +3186,93 @@ export default function Home() {
     );
   };
   const local = useMemo(() => LOCAL_TRIPS[loc] ?? LOCAL_TRIPS.default, [loc]);
+  // Template library (interface round S2): every destination the
+  // planner knows — the 21 discovery entries (17 routes + Bali, St.
+  // George, Tacoma, Hilo) plus the 5 standalone photo destinations
+  // the discovery map does not pin (Santorini, Kyoto, Caribbean,
+  // Maldives, Paris). One card shape: photo (or the fallback
+  // gradient), tag pill, one title line, the route line when there is
+  // more than one stop, one counts line (stays · transports · from $X
+  // total · Best value · 2 travelers · planning estimate), "Make it
+  // yours" primary + a quiet "Plan this trip" text link. A count that
+  // does not exist in the data is omitted from the line, never
+  // guessed. Paginated 12/page; the filter pills carry real counts
+  // from these 26 names.
+  type LibraryEntry = {
+    key: string;
+    name: string;
+    country?: string;
+    tag: string;
+    photos: string[];
+    routeLine?: string;
+    stays: number | null;
+    transports: number | null;
+    total: number | null;
+  };
+  const libraryEntries = useMemo<LibraryEntry[]>(() => {
+    const imageByName = new Map<string, string>([
+      ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
+      ...HIDDEN_GEMS.map((d) => [d.name, d.image] as const),
+    ]);
+    const entries: LibraryEntry[] = [];
+    for (const e of discovery) {
+      const stopPhotos = [...new Set(e.stops.map((s) => s.city).map((c) => imageByName.get(c)).filter((x): x is string => Boolean(x)))];
+      const own = imageByName.get(e.destination);
+      entries.push({
+        key: e.key,
+        name: e.destination,
+        tag: e.tag,
+        photos: own ? [own] : stopPhotos,
+        routeLine: e.stops.length > 1 ? e.stops.map((s) => s.city).join(' → ') : undefined,
+        stays: e.stays,
+        transports: e.transports,
+        total: e.price,
+      });
+    }
+    for (const d of GLOBAL_DESTINATIONS) {
+      if (discovery.some((e) => e.destination === d.name)) continue;
+      const info = cardInfo[d.name];
+      entries.push({
+        key: d.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name: d.name,
+        country: d.country,
+        tag: d.tag,
+        photos: [d.image],
+        routeLine: (info?.cities.length ?? 0) > 1 ? info?.cities.join(' → ') : undefined,
+        stays: info?.hotels ?? null,
+        transports: info?.transports ?? null,
+        total: info?.total ?? null,
+      });
+    }
+    return entries;
+  }, [discovery, cardInfo]);
   // Template filters (Layla-dynamic round): layla.ai's template library
-  // has category pills — ours filter the Global packages the same way,
-  // with honest categories from lib/tripCategories (each card's own
+  // has category pills — ours filter the library the same way, with
+  // honest categories from lib/tripCategories (each card's own
   // itinerary) and real counts. Categories with no cards get no pill,
   // so a filter can never lead to an empty grid.
   const [packageFilter, setPackageFilter] = useState<PackageFilter>('All');
-  const packageNames = useMemo(() => GLOBAL_DESTINATIONS.map((d) => d.name), []);
+  const [packagePage, setPackagePage] = useState(1);
+  const packageNames = useMemo(() => libraryEntries.map((e) => e.name), [libraryEntries]);
   const packageFilterCounts = useMemo(() => categoryCounts(packageNames), [packageNames]);
   const shownPackages = useMemo(() => filterByCategory(packageNames, packageFilter), [packageNames, packageFilter]);
+  const shownEntries = useMemo(() => libraryEntries.filter((e) => shownPackages.includes(e.name)), [libraryEntries, shownPackages]);
+  const LIBRARY_PAGE_SIZE = 12;
+  const libraryPageCount = Math.max(1, Math.ceil(shownEntries.length / LIBRARY_PAGE_SIZE));
+  const libraryPage = Math.min(packagePage, libraryPageCount);
+  const pageEntries = shownEntries.slice((libraryPage - 1) * LIBRARY_PAGE_SIZE, libraryPage * LIBRARY_PAGE_SIZE);
+  const setLibraryFilter = (f: PackageFilter) => {
+    setPackageFilter(f);
+    setPackagePage(1);
+  };
+  const countsLineFor = (e: LibraryEntry): string => {
+    const parts: string[] = [];
+    if (e.stays !== null) parts.push(`${e.stays} stay${e.stays !== 1 ? 's' : ''}`);
+    if (e.transports !== null) parts.push(`${e.transports} transports`);
+    if (e.total !== null) parts.push(`from $${e.total.toLocaleString()} total`);
+    parts.push('Best value · 2 travelers · planning estimate');
+    return parts.join(' · ');
+  };
   return (
     <div>
       <a href="#fujin-chat" className="skip-link">Skip to chat</a>
@@ -3219,39 +3298,50 @@ export default function Home() {
 
         <section>
           <h2>Global packages, in one plan</h2>
-          <p className="sub">Flights, hotels, car rental, sightseeing and more — gathered into a single customized trip, not seven separate bookings.</p>
+          <p className="sub">Flights, hotels, car rental, sightseeing and more — gathered into a single customized trip, not seven separate bookings. {libraryEntries.length} trips to make yours.</p>
           <div className="filter-pills" role="group" aria-label="Filter packages by kind">
-            <button type="button" className={`chip${packageFilter === 'All' ? ' selected' : ''}`} aria-pressed={packageFilter === 'All'} onClick={() => setPackageFilter('All')}>
+            <button type="button" className={`chip${packageFilter === 'All' ? ' selected' : ''}`} aria-pressed={packageFilter === 'All'} onClick={() => setLibraryFilter('All')}>
               All ({packageNames.length})
             </button>
             {packageFilterCounts.map(({ category, count }) => (
-              <button key={category} type="button" className={`chip${packageFilter === category ? ' selected' : ''}`} aria-pressed={packageFilter === category} onClick={() => setPackageFilter(category as TripCategory)}>
+              <button key={category} type="button" className={`chip${packageFilter === category ? ' selected' : ''}`} aria-pressed={packageFilter === category} onClick={() => setLibraryFilter(category as TripCategory)}>
                 {category} ({count})
               </button>
             ))}
           </div>
           <div className="grid">
-            {GLOBAL_DESTINATIONS.filter((d) => shownPackages.includes(d.name)).map((d) => (
-              <article className="card" key={d.name}>
-                <SafeImg src={d.image} alt={d.name} label={d.name} />
-                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p>
-                  {cardInfo[d.name] && (
-                    <>
-                      {(cardInfo[d.name]?.cities.length ?? 0) > 1 && (
-                        <p className="plan-muted">{cardInfo[d.name]?.cities.join(' → ')}</p>
-                      )}
-                      <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
-                      <p className="price">from ${cardInfo[d.name]?.total.toLocaleString()} total</p>
-                      <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>
-                    </>
+            {pageEntries.map((e) => (
+              <article className="card" key={e.key}>
+                <PhotoCarousel photos={e.photos} alt={e.name} />
+                <div className="body"><span className="pill">{e.tag}</span><h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
+                  {e.routeLine && (
+                    <p className="plan-muted">{e.routeLine}</p>
                   )}
-                  {!cardInfo[d.name] && <p className="price">{d.priceFrom}</p>}
-                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>{' '}
-                  <button className="ghost" onClick={() => planThisTrip(d.name, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
+                  <p className="plan-muted">{countsLineFor(e)}</p>
+                  <div style={{ marginTop: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button className="primary" onClick={() => planThisTrip(e.name, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
+                    <button type="button" className="textlink" onClick={() => planThisTrip(e.name)}>Plan this trip</button>
+                  </div>
                 </div>
               </article>
             ))}
           </div>
+          {libraryPageCount > 1 && (
+            <div className="pagination" role="group" aria-label="Template pages">
+              <button type="button" className="ghost" disabled={libraryPage === 1} onClick={() => setPackagePage(libraryPage - 1)} style={{ minHeight: 44 }}>
+                ← Previous
+              </button>
+              {Array.from({ length: libraryPageCount }, (_, i) => (
+                <button key={i + 1} type="button" className={`chip${libraryPage === i + 1 ? ' selected' : ''}`} aria-pressed={libraryPage === i + 1} onClick={() => setPackagePage(i + 1)}>
+                  {i + 1}
+                </button>
+              ))}
+              <button type="button" className="ghost" disabled={libraryPage === libraryPageCount} onClick={() => setPackagePage(libraryPage + 1)} style={{ minHeight: 44 }}>
+                Next →
+              </button>
+              <span className="page-label">Page {libraryPage} of {libraryPageCount}</span>
+            </div>
+          )}
         </section>
 
         {/* "Where to go" discovery map (design #15): the destinations
