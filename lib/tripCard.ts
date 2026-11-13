@@ -15,6 +15,7 @@
 
 import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, fareClassForTier, fareClassLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, serviceFee, stopsForRoute, type Party, type RouteOverride } from './planner';
 import type { DuffelFareOffer, LiveFares } from './duffel';
+import { knowHowForLeg, passKnowHowForRoute, type TransportKnowHow } from './groundTransport';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -158,7 +159,7 @@ export type TripCardStop = {
   intro: string;
   stayEstimate: number;
   days: TripCardDay[];
-  transportIn: { mode: string; from: string; price: number };
+  transportIn: { mode: string; from: string; price: number; knowHow?: TransportKnowHow; knowHowExtra?: TransportKnowHow };
   // Start Anywhere (round 2 #6): the sentence from the traveler's own
   // link or pasted text that named this stop — quoted verbatim, shown
   // under the stop's intro so the trip keeps its source attached.
@@ -184,6 +185,15 @@ export type TripLeg = {
   // until the traveler confirms it.
   fareClass?: string;
   terms?: string;
+  // Ground-transport know-how (ground-transport plan, Nov 12, 2026):
+  // the "How to book" strings from the plan file, keyed to this leg's
+  // mode and the route. Metadata only — prices are untouched, so the
+  // leg-sum invariants (legs sum to card total − activities) hold
+  // exactly as before. knowHowExtra is the rail-pass card on
+  // multi-country Europe trips. A leg with no string (domestic-flight
+  // intercity legs) carries neither — the UI shows the general footer.
+  knowHow?: TransportKnowHow;
+  knowHowExtra?: TransportKnowHow;
 };
 export type TripCard = {
   title: string;
@@ -202,7 +212,7 @@ export type TripCard = {
   familyNote: string;
   stops: TripCardStop[];
   legs: TripLeg[];
-  returnTransport: { mode: string; from: string; price: number };
+  returnTransport: { mode: string; from: string; price: number; knowHow?: TransportKnowHow };
   experiences: number;
   hotels: number;
   transports: number;
@@ -349,6 +359,12 @@ export function buildTripCard(opts: {
 
   let dayCursor = 1;
   let dateCursor = startDate;
+  // Ground-transport know-how (ground-transport plan): one lookup per
+  // leg kind, attached as metadata — prices are untouched, so the
+  // leg-sum invariants hold exactly as before.
+  const airportKnowHow = knowHowForLeg(routeKey, 'flight', '✈️ Flight');
+  const intercityKnowHow = knowHowForLeg(routeKey, 'transport', LEG_MODE[routeKey] ?? '🚆 Train');
+  const passKnowHow = passKnowHowForRoute(routeKey);
   const cardStops: TripCardStop[] = nightPlan.map((s, idx) => {
     const info = CITY_INFO[s.city];
     const stopStart = dateCursor;
@@ -368,8 +384,14 @@ export function buildTripCard(opts: {
     }
     const transportIn =
       idx === 0
-        ? { mode: '✈️ Flight', from: opts.origin || 'Your city', price: legFlightOut }
-        : { mode: LEG_MODE[routeKey] ?? '🚆 Train', from: nightPlan[idx - 1].city, price: legIntercity };
+        ? { mode: '✈️ Flight', from: opts.origin || 'Your city', price: legFlightOut, ...(airportKnowHow ? { knowHow: airportKnowHow } : {}) }
+        : {
+            mode: LEG_MODE[routeKey] ?? '🚆 Train',
+            from: nightPlan[idx - 1].city,
+            price: legIntercity,
+            ...(intercityKnowHow ? { knowHow: intercityKnowHow } : {}),
+            ...(passKnowHow ? { knowHowExtra: passKnowHow } : {}),
+          };
     return {
       city: s.city,
       country: s.country,
@@ -445,6 +467,7 @@ export function buildTripCard(opts: {
       : `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
     fareClass,
     terms: legTerms,
+    ...(airportKnowHow ? { knowHow: airportKnowHow } : {}),
     price: legFlightOut,
     city: cardStops[0].city,
     ...mid(originCoords, firstCoords, firstCoords),
@@ -475,6 +498,8 @@ export function buildTripCard(opts: {
         : `${intercityLiveNote}Travel between cities on the route. Live times and fares arrive with live inventory — until then this is a planning estimate, not a live quote.`,
       ...(isFlightLeg ? { fareClass } : {}),
       terms: legTerms,
+      ...(intercityKnowHow ? { knowHow: intercityKnowHow } : {}),
+      ...(passKnowHow ? { knowHowExtra: passKnowHow } : {}),
       price: legIntercity,
       city: to.city,
       ...mid(coordsFor(from.city), coordsFor(to.city), coordsFor(to.city) ?? firstCoords),
@@ -494,6 +519,7 @@ export function buildTripCard(opts: {
       : `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
     fareClass,
     terms: legTerms,
+    ...(airportKnowHow ? { knowHow: airportKnowHow } : {}),
     price: legFlightBack,
     city: lastStop.city,
     ...mid(lastCoords, originCoords, lastCoords),
@@ -602,6 +628,7 @@ export function buildTripCard(opts: {
       mode: '✈️ Flight',
       from: cardStops[cardStops.length - 1].city,
       price: legFlightBack,
+      ...(airportKnowHow ? { knowHow: airportKnowHow } : {}),
     },
     experiences,
     hotels: cardStops.length,
