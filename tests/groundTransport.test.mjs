@@ -16,6 +16,7 @@ import {
   knowHowKeyForRoute,
   passKnowHowForRoute,
 } from '../lib/groundTransport.ts';
+import { SUPPLIERS, getSupplier, listSuppliers } from '../lib/booking.ts';
 
 const leg = (card, id) => card.legs.find((l) => l.id === id);
 const legSum = (card) =>
@@ -149,6 +150,63 @@ test('tripCard Japan / Greece / Southeast Asia: the right know-how per route, su
     const plan = buildPlan(card.destination, 2, card.days).options[1];
     assert.equal(legSum(card), card.total - plan.activities);
   }
+});
+
+test('registry: the trains category exists, with honest states — nothing live', () => {
+  const trains = listSuppliers('trains').map((s) => s.id);
+  for (const id of [
+    'gopaxo', 'distribusion', 'tictactrip',
+    'trainline-api', 'trainline-affiliate', 'omio', 'rail-europe', 'eurail',
+  ]) {
+    assert.ok(trains.includes(id), `trains category is missing ${id}`);
+  }
+  // Nothing in the trains category is bookable today: the states are
+  // only not_configured (access exists in principle) and not_applied
+  // (needs the user's application) — never live, never faked.
+  for (const s of listSuppliers('trains')) {
+    assert.ok(
+      s.state === 'not_configured' || s.state === 'not_applied',
+      `${s.id}: state ${s.state} — a train supplier must not read as live`
+    );
+  }
+  // The three suppliers that were buses-only now carry trains too.
+  for (const id of ['gopaxo', 'distribusion', 'tictactrip']) {
+    assert.ok(getSupplier(id).categories.includes('trains'), `${id} carries the trains category`);
+    assert.ok(getSupplier(id).categories.includes('buses'), `${id} still carries buses`);
+  }
+  // Gopaxo is #1 for trains + buses; Distribusion carries the newer
+  // ~3,000-carrier figure from the research (not the older 2,000+).
+  assert.match(getSupplier('gopaxo').notes, /#1 for trains \+ buses together/);
+  assert.match(getSupplier('distribusion').data, /~3,000 carriers/);
+  assert.match(getSupplier('trainline-affiliate').notes, /no-code train path/);
+  assert.equal(getSupplier('trainline-affiliate').mode, 'affiliate_link');
+  assert.equal(getSupplier('trainline-affiliate').quickWin, true);
+});
+
+test('registry: Karhoo is the Bolt route, HolidayTaxis is corrected, Grab stays know-how only', () => {
+  const karhoo = getSupplier('karhoo');
+  assert.ok(karhoo, 'Karhoo is in the registry');
+  assert.equal(karhoo.state, 'not_applied');
+  assert.ok(karhoo.categories.includes('taxis'));
+  assert.match(karhoo.notes ?? '', /UNVERIFIED/, 'Karhoo notes flag the Bolt-inventory question as unverified');
+
+  const ht = getSupplier('holidaytaxis');
+  assert.ok(ht, 'HolidayTaxis is in the registry');
+  // The correction: Supplier Connect is supply-side, not a seller API —
+  // so the entry is unavailable for selling, and says so.
+  assert.equal(ht.state, 'unavailable');
+  assert.match(ht.notes ?? '', /SUPPLY-SIDE/);
+  assert.match(ht.notes ?? '', /Do NOT build against it/);
+  assert.match(ht.access, /Hotelbeds transfers/, 'the seller route is via Hotelbeds, flagged unverified');
+
+  // Grab is know-how only (no B2B/partner API was found) — it must not
+  // appear as a supplier the app could book through.
+  assert.equal(getSupplier('grab'), undefined);
+  assert.ok(!SUPPLIERS.some((s) => s.id === 'grab'));
+  // ...but the Grab note IS in the taxi know-how strings (Uber does not
+  // run rides in Southeast Asia).
+  assert.match(TRANSPORT_KNOW_HOW['taxi-airport'].lines[1], /Grab in Southeast Asia/);
+  assert.match(TRANSPORT_KNOW_HOW['taxi-city'].lines[0], /Grab in Southeast Asia/);
 });
 
 test('tripCard with live fares: know-how does not disturb the live-fare labels or totals', () => {

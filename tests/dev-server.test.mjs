@@ -452,3 +452,20 @@ test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and m
   assert.ok(css.includes('panel-in'), 'stylesheet has the panel-entrance keyframes');
   assert.ok(css.includes('.mapdialog'), 'stylesheet has the full-screen map dialog styles');
 });
+
+test('ground transport: checkout status lists the trains category with nothing live', async () => {
+  // The registry now has 38 suppliers (31 + 7 new ground entries:
+  // trainline-api, trainline-affiliate, omio, rail-europe, eurail,
+  // karhoo, holidaytaxis). Nothing in it is live — the trains
+  // category is tracked, not bookable, until the user's partner steps.
+  const r = await fetch(`${BASE}/api/checkout`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.suppliers.total, 38);
+  assert.equal(j.suppliers.live, 0);
+  const ids = j.suppliers.states.map((s) => s.id);
+  for (const id of ['trainline-api', 'trainline-affiliate', 'omio', 'rail-europe', 'eurail', 'karhoo', 'holidaytaxis']) {
+    assert.ok(ids.includes(id), `checkout status lists ${id}`);
+  }
+  assert.equal(j.suppliers.states.find((s) => s.id === 'holidaytaxis').state, 'unavailable');
+});

@@ -24,6 +24,7 @@ export type BookingCategory =
   | 'cars'
   | 'cruises'
   | 'buses'
+  | 'trains'
   | 'taxis'
   | 'activities';
 
@@ -136,7 +137,7 @@ export const SUPPLIERS: SupplierConnector[] = [
     feeModel: 'B2B net rates — true wholesale prices, no retail floor; we set the retail price',
     freeToStart: true, access: 'Partner signup; sandbox immediate on registration (no commercial agreement needed for sandbox)',
     leadTime: 'Days (sandbox); weeks (production)', state: 'not_configured', mode: 'onsite', quickWin: true,
-    envVar: 'HOTELBEDS_API_KEY', notes: 'Net rates give us the best price control in the plan.',
+    envVar: 'HOTELBEDS_API_KEY', notes: 'Net rates give us the best price control in the plan. Also the route for HolidayTaxis-style airport transfers (same HBX Group) — partner route UNVERIFIED, needs direct contact.',
   },
   {
     id: 'booking-demand', name: 'Booking.com Demand API', categories: ['hotels'],
@@ -213,12 +214,12 @@ export const SUPPLIERS: SupplierConnector[] = [
   },
   // -- Buses ----------------------------------------------------------------
   {
-    id: 'distribusion', name: 'Distribusion', categories: ['buses'],
-    data: 'B2B ground-transport marketplace: bus, rail, ferry; 2,000+ carriers, 250+ retailers; single booking API',
+    id: 'distribusion', name: 'Distribusion', categories: ['trains', 'buses'],
+    data: 'B2B ground-transport marketplace: bus, rail, ferry; ~3,000 carriers, 70 markets, 250+ retailers; single booking API (one-way journeys)',
     feeModel: 'Commercial partnership (not published); buses/taxis are very low margin industry-wide',
     freeToStart: false, access: 'Commercial partnership / integration project — no self-serve signup',
     leadTime: 'Weeks–months', state: 'not_applied', mode: 'onsite', quickWin: false,
-    notes: 'Long-term ground backbone (bus + rail + ferry in one API).',
+    notes: 'Long-term ground backbone (bus + rail + ferry in one API). One-way only; seats assigned by the carrier.',
   },
   {
     id: 'busbud', name: 'Busbud', categories: ['buses'],
@@ -237,20 +238,63 @@ export const SUPPLIERS: SupplierConnector[] = [
     notes: 'Dynamic API is the right tier for us.',
   },
   {
-    id: 'gopaxo', name: 'Gopaxo', categories: ['buses'],
-    data: 'European train + bus in one REST API (TGV, Eurostar, Trenitalia, FlixBus, …); search, book, cancel, presales, ticket issuance; 160 countries',
-    feeModel: 'Not published',
-    freeToStart: true, access: 'Partner signup → free sandbox; OpenAPI 3 docs',
-    leadTime: 'Days (sandbox)', state: 'not_configured', mode: 'onsite', quickWin: true,
-    envVar: 'GOPAXO_API_KEY', notes: 'Covers our Europe routes’ rail legs too.',
+    id: 'gopaxo', name: 'Gopaxo', categories: ['trains', 'buses'],
+    data: 'European train + bus in one REST API (TGV, Eurostar, Trenitalia, FlixBus, …); search, book, cancel, presales, ticket issuance (PDF / Apple Wallet / Google Wallet); 800+ carriers, 160 countries',
+    feeModel: 'Commission or subscription — rate not published (unverified until the contract call)',
+    freeToStart: true, access: 'Partner form → 30-min scoping call → sandbox token (24–48 business hours) → contract → production',
+    leadTime: '2–6 weeks to production', state: 'not_configured', mode: 'onsite', quickWin: true,
+    envVar: 'GOPAXO_API_KEY', notes: '#1 for trains + buses together — the fastest real bookable ground inventory. Free sandbox. Pick one of Gopaxo / Tictactrip for Europe ground, not both. Covers our Europe routes’ rail legs.',
   },
   {
-    id: 'tictactrip', name: 'Tictactrip', categories: ['buses'],
+    id: 'tictactrip', name: 'Tictactrip', categories: ['trains', 'buses'],
     data: '250+ European rail + intercity bus carriers (SNCF, Trenitalia, Renfe, FlixBus, BlaBlaCar Bus, ALSA, Ouigo); search → book → ticket PDF',
     feeModel: 'Pricing by volume/carrier mix (not published)',
     freeToStart: false, access: 'Sales contact; OpenAPI spec + Postman collection',
     leadTime: '2–6 weeks to go live', state: 'not_applied', mode: 'onsite', quickWin: false,
-    notes: 'Pick one of Gopaxo / Tictactrip for Europe ground, not both.',
+    notes: 'Pick one of Gopaxo / Tictactrip for Europe ground, not both. Gopaxo relies on the Tictactrip API for some routes (per Gopaxo).',
+  },
+  // -- Trains --------------------------------------------------------------
+  // Trains were never a category in the booking plan — most intercity
+  // legs are trains. Ground-transport plan, Nov 12, 2026.
+  {
+    id: 'trainline-api', name: 'Trainline Partner Solutions — Global API', categories: ['trains'],
+    data: 'REST API for search, booking, real-time information, exchanges, refunds and aftersales; 24+ European countries, 80+ railway carriers',
+    feeModel: 'Commercial partnership — price/commission not published (unverified)',
+    freeToStart: false, access: 'Contact Trainline Partner Solutions for the API agreement + docs; no public API reference exists',
+    leadTime: '~12 weeks average partner integration', state: 'not_applied', mode: 'onsite', quickWin: false,
+    notes: 'The deep Europe rail option — best UK + Europe rail coverage in one API, slowest to land. Apply after Gopaxo is live.',
+  },
+  {
+    id: 'trainline-affiliate', name: 'Trainline Affiliate Programme', categories: ['trains'],
+    data: 'Tracked deep links, banners, widgets to Trainline (trains + coaches, 40+ countries); managed on Partnerize, no joining fee',
+    feeModel: 'Affiliate commission per eligible sale (Partnerize rates; third-party listings report up to 3% new / 1% existing — unverified)',
+    freeToStart: true, access: 'Apply → review → Partnerize dashboard + campaign reference (affiliates@thetrainline.com)',
+    leadTime: 'Days', state: 'not_configured', mode: 'affiliate_link', quickWin: true,
+    notes: 'The no-code train path: a "Book this train" deep link on every rail leg, with commission, while the API integrations are pending.',
+  },
+  {
+    id: 'omio', name: 'Omio B2B', categories: ['trains', 'buses'],
+    data: '3,000+ operators: trains, buses, flights, ferries. Meta Search API (display real-time results, redirect to Omio checkout) and Booking API (full control inside FujinTrip); white-label, 20+ currencies, 30 languages',
+    feeModel: 'Commercial — terms not published (unverified)',
+    freeToStart: false, access: 'B2B contact / sales',
+    leadTime: 'Unverified (no public lead time found)', state: 'not_applied', mode: 'onsite', quickWin: false,
+    notes: 'The multimodal alternative to Gopaxo — evaluate against it and pick one Europe ground backbone, not two. Proposed Rail Europe acquisition announced 2026, not completed.',
+  },
+  {
+    id: 'rail-europe', name: 'Rail Europe API', categories: ['trains'],
+    data: 'Specialist European rail distributor: ~250 rail providers (DB, SNCF, Eurostar, Trenitalia, Renfe, SBB, ÖBB); single connection, after-sales support, group bookings; also sells seat reservations for Eurail/Interrail pass holders',
+    feeModel: 'Commission structures exist but tiers not disclosed (unverified)',
+    freeToStart: false, access: 'Commercial agreement → partner onboarding (reportedly completed within days — reported, not verified)',
+    leadTime: 'Days after agreement (reported)', state: 'not_applied', mode: 'onsite', quickWin: false,
+    notes: 'Best for passes + long-haul rail: the natural home for selling Eurail/Interrail passes and pass-holder seat reservations.',
+  },
+  {
+    id: 'eurail', name: 'Eurail / Interrail distribution', categories: ['trains'],
+    data: 'Mobile Eurail + Interrail passes: unlimited travel on most trains in 33 European countries, 7/14/21 days (also flexi-day versions); sold via API or the Eurail Ticketing System',
+    feeModel: 'Volume-based commission (rates vary by product — unverified)',
+    freeToStart: false, access: 'Via a distributor (Rail Europe) or a direct Eurail distribution partnership',
+    leadTime: 'Weeks (via Rail Europe)', state: 'not_applied', mode: 'onsite', quickWin: false,
+    notes: 'Eurail = non-European residents; Interrail = European residents. Never sell a pass without the seat-reservation warning — a pass does not include mandatory reservations.',
   },
   // -- Taxis ----------------------------------------------------------------
   {
@@ -284,6 +328,22 @@ export const SUPPLIERS: SupplierConnector[] = [
     freeToStart: false, access: 'Partner form', leadTime: 'Weeks',
     state: 'not_applied', mode: 'onsite', quickWin: false,
     notes: 'Airport transfers — the taxi use-case travelers actually need on a trip.',
+  },
+  {
+    id: 'karhoo', name: 'Karhoo', categories: ['taxis'],
+    data: 'B2B mobility marketplace: API / SDK / white-label for on-demand + pre-booked rides from licensed taxi/PHV fleets; ~1.8–2M vehicles, ~3,000–4,000 fleets, 1,500 cities, 125 countries',
+    feeModel: 'Percentage of the fare per booking — rate not published (unverified)',
+    freeToStart: false, access: 'Sales contact',
+    leadTime: 'Unverified', state: 'not_applied', mode: 'onsite', quickWin: false,
+    notes: 'The Bolt route + Europe taxi depth — Bolt has no public API. Whether Bolt inventory specifically flows through Karhoo is UNVERIFIED — ask in the sales call, do not claim it. Partners incl. SNCF, Renfe, Booking.com.',
+  },
+  {
+    id: 'holidaytaxis', name: 'HolidayTaxis', categories: ['taxis'],
+    data: 'Airport transfers in 150+ countries / 21,000+ destinations (private + shared, shuttles, minibuses, wheelchair-accessible, electric); part of HBX Group',
+    feeModel: 'Not applicable — no seller API found',
+    freeToStart: false, access: 'No seller API exists. Seller route: via Hotelbeds transfers (same group) or a HolidayTaxis affiliate/partner programme — UNVERIFIED, needs direct contact',
+    leadTime: 'Unverified', state: 'unavailable', mode: 'redirect', quickWin: false,
+    notes: 'CORRECTION (ground-transport plan, Nov 12, 2026): Supplier Connect API is SUPPLY-SIDE — it lets transfer companies feed bookings INTO HolidayTaxis, not buy transfers. Do NOT build against it. Route transfers through Hotelbeds (already in the plan). Grab is know-how only, not a registry entry: no B2B/partner API was found, so Southeast Asia taxi guidance says "use Grab" in the know-how strings.',
   },
   // -- Activities ------------------------------------------------------------
   {
