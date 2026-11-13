@@ -18,6 +18,7 @@ import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInf
 import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePassportExpiryValue, passportWarningLine, schengenRemaining, type PassportCheck } from '../lib/passport';
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { paceFromProfile } from '../lib/pace';
+import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
 import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival';
 import { auditTrip, checkConnection, departureDayFlags, feasibilitySummary } from '../lib/feasibility';
@@ -297,6 +298,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // records edits that actually happened).
   const [tripsOpen, setTripsOpen] = useState(false);
   const [panelNotice, setPanelNotice] = useState('');
+  // Theme (interface round §6): light by default, dark by preference —
+  // never forced. The pre-paint script in layout.tsx sets the first
+  // value; this hook keeps the toggle and the maps in sync with it.
+  const [theme, setTheme] = useTheme();
   // On-trip flight check (competitor learning #5): flight number/date
   // the traveler typed, and the last checked status ('loading' while it
   // runs). A live status rides with the "my flight was cancelled"
@@ -1711,6 +1716,16 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           <span className="appbar-tag">One complete plan. Cheapest, Best value, or Premium.</span>
         </div>
         <div className="appbar-actions">
+          <button
+            type="button"
+            className="ghost appbar-theme"
+            aria-pressed={theme === 'dark'}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark' ? '☀ Light' : '☾ Dark'}
+          </button>
           <div className="mytrips-menu">
             <button type="button" className="ghost appbar-trips" aria-expanded={tripsOpen} aria-haspopup="true" onClick={() => setTripsOpen((o) => !o)}>
               My Trips ▾
@@ -2095,6 +2110,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     setLegExpanded(false);
                   }}
                   addedLegIds={[...chosenLegs]}
+                  dark={theme === 'dark'}
                 />
               </div>
               {selectedLeg && (
@@ -2166,6 +2182,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                         setLegExpanded(false);
                       }}
                       addedLegIds={[...chosenLegs]}
+                      dark={theme === 'dark'}
                     />
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Click a price tag to read more or add it to your plan — the same tags as on the map beside the chat. Esc closes this view.</p>
@@ -2920,6 +2937,10 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
 export default function Home() {
   const [tab, setTab] = useState<Tab>('Fujin AI');
   const [trips, setTrips] = useState<Trip[]>([]);
+  // Theme (interface round §6): the discovery map follows the same
+  // theme as the trip map — the Chat hook owns the toggle, this hook
+  // just listens (lib/theme.ts dispatches on every change).
+  const [theme] = useTheme();
   // Preference profile (round 3 #2): stated preferences, carried across
   // trips on this device (localStorage, no accounts). Validated on load
   // so a corrupt or foreign value never reaches the chat.
@@ -3173,7 +3194,7 @@ export default function Home() {
           <p className="sub">Not sure where? Tap a price bubble to see what the trip includes, then plan it in the chat. Prices are planning estimates from FujinTrip’s price table, Best value for 2 travelers — not live quotes.</p>
           <div className="discover">
             <div className="discover-map">
-              <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setDiscoveryKey(e.key)} />
+              <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setDiscoveryKey(e.key)} dark={theme === 'dark'} />
             </div>
             {selectedDiscovery && (
               <article className="card discover-panel">

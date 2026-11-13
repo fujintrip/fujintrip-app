@@ -49,19 +49,30 @@ export default function DiscoveryMap({
   pins,
   selectedKey,
   onSelect,
+  dark = false,
 }: {
   pins: DiscoveryEntry[];
   selectedKey: string | null;
   onSelect: (entry: DiscoveryEntry) => void;
+  // Dark mode (§6): CARTO dark_matter tiles, like the trip map.
+  dark?: boolean;
 }) {
   if (!pins.length) return null;
   return (
-    <div style={{ height: '100%', minHeight: 320, borderRadius: 16, overflow: 'hidden', border: '1px solid #e8e8e6' }}>
+    <div style={{ height: '100%', minHeight: 320, borderRadius: 16, overflow: 'hidden', border: '1px solid var(--line)' }}>
       <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomControl={false}>
         <ZoomControl position="topright" />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={
+            dark
+              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }
+          url={
+            dark
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+          }
         />
         {pins.map((p) => (
           <Marker

@@ -3,7 +3,22 @@
    Grotesque display, Inter body, JetBrains Mono for prices you
    compare — self-hosted via next/font/google, system stack fallback.
    Rounded cards, pill buttons, generous space. */
-:root{--ink:#0f0f0f;--muted:#666;--line:#e8e8e6;--line-soft:#f0f0ee;--surface:#f7f7f5;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#1f7a4d;--success-soft:#e9f5ee;--danger:#b3261e;--danger-soft:#fdecea;--font-display:'Bricolage Grotesque';--font-body:'Inter';--font-mono:'JetBrains Mono'}
+:root{--ink:#0f0f0f;--muted:#666;--line:#e8e8e6;--line-soft:#f0f0ee;--surface:#f7f7f5;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#1f7a4d;--success-soft:#e9f5ee;--danger:#b3261e;--danger-soft:#fdecea;--font-display:'Bricolage Grotesque';--font-body:'Inter';--font-mono:'JetBrains Mono';--on-ink:#ffffff;--on-ink-muted:#dddddd;--glass-bg:rgba(255,255,255,.92);--sticky-bg:rgba(255,255,255,.96);--warn-bg:#fff7e8;--warn-line:#ead9a8;--warn-ink:#5c4a12}
+/* Dark mode (interface round §6): tokens only — every component reads
+   the tokens above, so this one block flips the whole page. Light is
+   the default; a stored choice beats the OS preference (the pre-paint
+   script in layout.tsx + lib/theme.ts). Text on an ink background
+   flips with it (--on-ink), so a "selected" pill stays legible in
+   both themes. Small text on accent stays ≥ 4.5:1 in both themes —
+   see tests/interface.test.mjs. */
+[data-theme="dark"]{--ink:#f5f4f0;--muted:#a3a3a3;--line:#2a2a28;--line-soft:#1f1f1d;--surface:#141210;--accent:#fb923c;--accent-soft:#2a1a0e;--card:#141210;--accent-text:#fb923c;--accent-ink:#fdba74;--success:#4ade80;--success-soft:#12291a;--danger:#f87171;--danger-soft:#2a1210;--on-ink:#0b0a09;--on-ink-muted:#525252;--glass-bg:rgba(20,18,16,.92);--sticky-bg:rgba(20,18,16,.96);--warn-bg:#2a1a0e;--warn-line:#5c3a1a;--warn-ink:#fdba74;color-scheme:dark}
+[data-theme="dark"] body{background:#0b0a09}
+[data-theme="dark"] .skeleton{background:linear-gradient(90deg,#1f1f1d 25%,#2a2a28 50%,#1f1f1d 75%)}
+[data-theme="dark"] .img-fallback,[data-theme="dark"] .reel-media-fallback{background:linear-gradient(135deg,#1f1f1d,#2a2a28)}
+[data-theme="dark"] .leaflet-container{background:#0b0a09}
+[data-theme="dark"] .leaflet-bar a{background:#141210;color:#f5f4f0;border-color:#2a2a28}
+[data-theme="dark"] .leaflet-control-attribution{background:rgba(20,18,16,.8);color:#a3a3a3}
+[data-theme="dark"] .leaflet-control-attribution a{color:#a3a3a3}
    /* Accent split by use: --accent (#ea580c) is display-only (logo dot, big
       totals) — white on it is 3.56:1 and fails AA for small text. Small
       text and filled tags use --accent-text (#c2410c): white on it is
@@ -11,11 +26,11 @@
       is 7.31:1 on white (AAA). Retired: --faint #a1a1a1 (2.58:1, unused)
       — never text. */
 *{box-sizing:border-box}
-body{margin:0;background:#fff;color:var(--ink);font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6}
+body{margin:0;background:var(--card);color:var(--ink);font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6}
 h1,h2,h3{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:700;line-height:1.15;margin:0;letter-spacing:-.02em}
 a{color:var(--ink)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-header{border-bottom:1px solid var(--line);background:#fff}
+header{border-bottom:1px solid var(--line);background:var(--card)}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 24px}
 .logo{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
 .logo span{color:var(--accent)}
@@ -39,12 +54,12 @@ header{border-bottom:1px solid var(--line);background:#fff}
 .tabs{display:flex;gap:4px;overflow-x:auto;padding:4px;background:var(--surface);border-radius:999px;margin:0 0 20px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto;border:none;background:transparent;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
-.tab.active{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.tab.active{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px;margin-bottom:40px;box-shadow:0 2px 16px rgba(0,0,0,.04)}
-.chat{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff;min-height:120px;margin:12px 0}
+.chat{border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--card);min-height:120px;margin:12px 0}
 .msg{margin:10px 0;font-size:15px}
 .msg.user{text-align:right}
-.msg .bubble{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.msg .bubble{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 /* S0 greeting headline (interface round §5): before the traveler has
    typed, the greeting is not a bubble — it is the headline, bare text
    in the display face, like Layla's hero line. Once the traveler
@@ -56,11 +71,11 @@ header{border-bottom:1px solid var(--line);background:#fff}
    chip ("Surprise me" was clipped, not reachable). A tapped chip sends
    as typed text. */
 .chips{display:flex;flex-wrap:wrap;gap:8px;padding:10px 2px 2px}
-.chip{flex:0 0 auto;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-height:40px;font-family:inherit;transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
+.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;min-height:40px;font-family:inherit;transition:transform var(--dur) var(--ease),border-color var(--dur) var(--ease),background-color var(--dur) var(--ease)}
 .chip:hover{border-color:var(--ink);transform:translateY(-1px)}
 .chip:active{transform:translateY(1px)}
 .chip:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-.msg.user .bubble{background:var(--ink);color:#fff;border-color:var(--ink)}
+.msg.user .bubble{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 /* Motion (design #5 — the 2026 baseline: every interactive element has a
    state change; 150–300ms, ease-out, transform + opacity only, never
    layout). Buttons lift on hover and press in on click; cards lift and
@@ -80,7 +95,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .card img{transition:transform 300ms var(--ease)}
 .card:hover img{transform:scale(1.02)}
 .compare .box{transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),transform var(--dur) var(--ease)}
-.compare .box:hover{border-color:#c9c9c6}
+.compare .box:hover{border-color:var(--line)}
 @keyframes msg-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 .msg{animation:msg-in 200ms var(--ease)}
 /* Price tags on the map (Leaflet divIcon inner div): scale on hover so
@@ -107,12 +122,12 @@ button:disabled{opacity:.4;cursor:not-allowed}
 input,select,button{font-family:inherit;font-size:15px}
 button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 img{max-width:100%}
-input,select{flex:1;border:1px solid var(--line);border-radius:999px;padding:12px 16px;background:#fff;min-width:0}
-button.primary{background:var(--ink);color:#fff;border:none;border-radius:999px;padding:12px 22px;cursor:pointer;font-weight:600}
-button.ghost{background:#fff;border:1px solid #d9d9d6;color:var(--ink);border-radius:999px;padding:10px 18px;cursor:pointer;font-weight:600}
+input,select{flex:1;border:1px solid var(--line);border-radius:999px;padding:12px 16px;background:var(--card);color:var(--ink);min-width:0}
+button.primary{background:var(--ink);color:var(--on-ink);border:none;border-radius:999px;padding:12px 22px;cursor:pointer;font-weight:600}
+button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:10px 18px;cursor:pointer;font-weight:600}
 .selling{font-size:14px;color:var(--muted);text-align:center;margin:8px 0 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
-.card{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 6px rgba(0,0,0,.04)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 6px rgba(0,0,0,.04)}
 .card img{width:100%;height:180px;object-fit:cover;display:block}
 .card .body{padding:18px;flex:1;display:flex;flex-direction:column}
 .card .body .ghost{margin-top:auto;align-self:flex-start}
@@ -144,16 +159,16 @@ section{padding:28px 0}
 section h2{font-size:28px;margin-bottom:8px}
 section .sub{color:var(--muted);margin:0 0 20px}
 .compare{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.compare .box{border:1px solid var(--line);border-radius:16px;padding:20px;background:#fff}
-.compare .box.best{border:2px solid var(--ink);background:#fafafa}
+.compare .box{border:1px solid var(--line);border-radius:16px;padding:20px;background:var(--card)}
+.compare .box.best{border:2px solid var(--ink);background:var(--surface)}
 /* Tier boxes (design #6): the three tiers are a radiogroup, not three
    <div onClick>s. Tab reaches them, arrows move, Space/Enter selects,
    the chosen box shows a visible check + aria-checked so a keyboard or
    screen-reader traveler can make the core commercial choice. */
 .compare .box.tier{cursor:pointer;position:relative}
 .compare .box.tier:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-.tier-check{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
-.tier-badge{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
+.tier-check{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.tier-badge{display:inline-block;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
 .tier-price{font-family:var(--font-mono,'JetBrains Mono'),ui-monospace,monospace;font-size:26px;margin:8px 0;font-weight:600;font-variant-numeric:tabular-nums}
 /* Plan card on the tokens (design §2.2): the plan markup bypassed the
    design system with dozens of inline font sizes, hex colors and
@@ -165,19 +180,19 @@ section .sub{color:var(--muted);margin:0 0 20px}
 .plan-muted{font-size:13px;color:var(--muted)}
 .plan-section{border-top:1px solid var(--line-soft);padding:12px 0}
 .plan-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:12px}
-.notice{font-size:13px;color:var(--muted);margin-top:12px}
+.notice{font-size:13px;color:var(--warn-ink);margin-top:12px}
 table{width:100%;border-collapse:collapse;font-size:14px}
-td{padding:6px 0;border-bottom:1px solid #f0f0ee}
+td{padding:6px 0;border-bottom:1px solid var(--line-soft)}
 td:last-child{text-align:right;font-weight:600}
-footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px;background:#fff}
+footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);font-size:13px;background:var(--card)}
 .adslot{margin:32px 0;text-align:center}
-.mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f0f0ee;font-size:14px}
+.mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
 /* Skip link: keyboard users jump straight to the chat, past the
    header and hero. Visually hidden until focused. */
-.skip-link{position:absolute;left:-9999px;top:0;background:var(--ink);color:#fff;padding:10px 16px;border-radius:0 0 12px 0;z-index:100;font-size:14px;font-weight:600;text-decoration:none}
+.skip-link{position:absolute;left:-9999px;top:0;background:var(--ink);color:var(--on-ink);padding:10px 16px;border-radius:0 0 12px 0;z-index:100;font-size:14px;font-weight:600;text-decoration:none}
 .skip-link:focus{left:0}
 .hero-cta{margin-top:18px}
-.hero-cta a{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.hero-cta a{display:inline-block;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
 .hero-cta a:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
 @media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}.card .body .primary{width:100%;text-align:center}}
 /* Screen only: .print-only lines (your choice, full booking URLs) are
@@ -187,7 +202,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
    homepage sections, header, footer and ads are hidden; the plan block
    and its traveler notes print in full. */
 @media print{
-  body{background:#fff}
+  body{background:var(--card)}
   header,footer,.hero,.tabs,.adslot,section,.chat,.row,.selling,.no-print{display:none !important}
   .panel{border:none;box-shadow:none;padding:0;margin:0}
   .plan-print{display:block !important}
@@ -207,7 +222,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
    bottom-right. html scroll-padding-bottom keeps a focused element from
    ever hiding under it (the Airbnb sticky-bar lesson). */
 html{scroll-padding-bottom:96px}
-.stickybar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,255,255,.96);border-top:1px solid var(--line);padding:10px 16px;box-shadow:0 -4px 20px rgba(0,0,0,.08)}
+.stickybar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sticky-bg);border-top:1px solid var(--line);padding:10px 16px;box-shadow:0 -4px 20px rgba(0,0,0,.08)}
 .stickybar .total{font-size:14px;color:var(--muted)}
 .stickybar .total strong{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .stickybar button{min-height:48px}
@@ -216,16 +231,16 @@ html{scroll-padding-bottom:96px}
 /* Trip Summary card (design #14): the trip as a thing you can see and
    edit, pinned above the chat messages. A tapped line asks Fujin AI to
    change that slot; the tier row switches the plan tier. */
-.tripsummary{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;background:#fff;flex:0 0 auto}
+.tripsummary{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;background:var(--card);flex:0 0 auto}
 .tripsummary-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
 .tripsummary-line{display:flex;gap:8px;width:100%;text-align:left;background:none;border:none;padding:6px 4px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;border-radius:8px}
 .tripsummary-line:hover{background:var(--surface)}
 .tripsummary-line:disabled{cursor:default;opacity:.6}
 .tripsummary-label{flex:0 0 72px;color:var(--muted);font-size:13px}
 .tripsummary-tiers{display:flex;gap:6px;margin-top:8px}
-.tripsummary-tier{flex:1;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:6px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.tripsummary-tier{flex:1;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 .tripsummary-tier:hover{border-color:var(--ink)}
-.tripsummary-tier.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tripsummary-tier.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .tripsummary-tier:disabled{cursor:default;opacity:.6}
 
 /* App bar (app shell, Nov 12): the app's own bar on top of the chat
@@ -245,9 +260,10 @@ html{scroll-padding-bottom:96px}
 .appbar-total{font-size:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .appbar-total strong{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;color:var(--ink)}
 .appbar-book{min-height:44px}
+.appbar-theme{min-height:44px;white-space:nowrap}
 .mytrips-menu{position:relative}
 .menu-backdrop{position:fixed;inset:0;background:transparent;border:none;cursor:default;z-index:59;padding:0}
-.mytrips-dropdown{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:280px;max-width:min(320px,calc(100vw - 48px));background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px}
+.mytrips-dropdown{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:280px;max-width:min(320px,calc(100vw - 48px));background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px}
 .mytrips-dropdown button{display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;border-radius:10px}
 .mytrips-dropdown button:hover:not(:disabled){background:var(--surface)}
 .mytrips-dropdown button:disabled{cursor:default;opacity:.55}
@@ -276,25 +292,25 @@ html{scroll-padding-bottom:96px}
    three columns; on a narrow screen the active zone is the bottom
    sheet below, so the top of the map stays visible. */
 .chatmap{position:relative;height:calc(100dvh - 240px);min-height:560px;display:flex;gap:16px}
-.chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
-.trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px;overflow-y:auto;min-height:0}
+.chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
+.trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px;overflow-y:auto;min-height:0}
 .chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
 .mapcol{position:relative;flex:1 1 auto;min-width:0;height:100%;z-index:0;display:flex;flex-direction:column}
-.map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed #d9d9d6;border-radius:16px;padding:24px;color:var(--ink);background:var(--surface)}
+.map-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:1px dashed var(--line);border-radius:16px;padding:24px;color:var(--ink);background:var(--surface)}
 .map-placeholder p{max-width:340px}
 .map-placeholder p + p{color:var(--muted)}
-.legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid rgba(255,255,255,.9);border-radius:14px;padding:12px 14px;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 28px rgba(0,0,0,.18)}
+.legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 28px rgba(0,0,0,.18)}
 .legcard p{margin:6px 0}
 .maphints{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;gap:8px;max-width:340px}
-.maphint{font-size:13px;color:var(--muted);margin:0;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.maphint{font-size:13px;color:var(--muted);margin:0;background:var(--glass-bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
 /* Zone switcher (app shell): hidden on wide screens, where all three
    zones sit side by side. A floating pill over the map, clear of the
    leg card (top-right) and the map hints (bottom-right). */
 .zonebar{display:none}
 @media (max-width:1200px){
-  .zonebar{display:flex;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:4;background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+  .zonebar{display:flex;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:4;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(0,0,0,.12)}
   .zonebar-btn{border:none;background:transparent;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;min-height:40px}
-  .zonebar-btn.selected{background:var(--ink);color:#fff}
+  .zonebar-btn.selected{background:var(--ink);color:var(--on-ink)}
   .chatcol{width:min(500px,45%)}
   /* The trip panel swaps the map zone — the chat always stays. */
   .chatmap:not([data-zone="trip"]) .trippanel{display:none}
@@ -332,27 +348,27 @@ html{scroll-padding-bottom:96px}
 .trippanel-total strong{display:block;font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
 .trippanel-total span{font-size:12px;color:var(--muted)}
 .panel-tier{display:flex;gap:6px;margin-bottom:12px}
-.panel-tier-btn{flex:1;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:8px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:40px}
-.panel-tier-btn.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.panel-tier-btn{flex:1;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:40px}
+.panel-tier-btn.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .panel-slots{display:flex;gap:12px;margin-bottom:12px}
 .panel-slot{flex:1;display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600}
-.panel-slot select{border:1px solid #d9d9d6;border-radius:10px;padding:8px;font-size:14px;font-family:inherit;background:#fff;min-height:40px}
+.panel-slot select{border:1px solid var(--line);border-radius:10px;padding:8px;font-size:14px;font-family:inherit;background:var(--card);min-height:40px}
 .panel-stepper{display:inline-flex;align-items:center;gap:8px}
-.panel-stepper button{width:36px;height:36px;border:1px solid #d9d9d6;background:#fff;border-radius:50%;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1}
+.panel-stepper button{width:36px;height:36px;border:1px solid var(--line);background:var(--card);border-radius:50%;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1}
 .panel-stepper button:hover:not(:disabled){border-color:var(--ink)}
 .panel-stepper strong{min-width:28px;text-align:center;font-variant-numeric:tabular-nums}
-.panel-notice{background:#fff7e8;border:1px solid #ead9a8;border-radius:10px;padding:8px 12px;font-size:13px;color:#5c4a12;margin:0 0 12px}
+.panel-notice{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--warn-ink);margin:0 0 12px}
 .panel-timeline{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .panel-stop{border-top:1px solid var(--line-soft);padding:10px 0 4px}
 .panel-stop:first-child{border-top:none;padding-top:2px}
 .panel-stop-row{display:flex;align-items:center;gap:8px}
-.panel-stop-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.panel-stop-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
 .panel-stop-city{flex:1 1 auto;min-width:0}
 .panel-stop-city strong{display:block;font-size:15px}
 .panel-stop-city span{font-size:12px;color:var(--muted)}
 .panel-nights strong{min-width:24px}
 .panel-stop-actions{display:flex;gap:4px;flex:0 0 auto}
-.panel-stop-actions button{width:32px;height:32px;border:1px solid #d9d9d6;background:#fff;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
+.panel-stop-actions button{width:32px;height:32px;border:1px solid var(--line);background:var(--card);border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
 .panel-stop-actions button:hover:not(:disabled){border-color:var(--ink)}
 .panel-stop-detail{margin-top:6px}
 .panel-transport{font-size:13px;color:var(--muted);margin:8px 0 4px;padding-left:34px}
@@ -361,7 +377,7 @@ html{scroll-padding-bottom:96px}
 
 /* --- Portable plan / on-trip "Today" view (community round, design §7) --- */
 /* Offline banner: a slim banner instead of a dead screen. */
-.offline-banner{background:#fff7e8;border:1px solid #ead9a8;border-radius:10px;padding:8px 12px;font-size:13px;color:#5c4a12;margin-bottom:8px;flex:0 0 auto}
+.offline-banner{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--warn-ink);margin-bottom:8px;flex:0 0 auto}
 /* On-trip mode: the chat messages and the Today view share the panel —
    each scrolls inside its own region instead of pushing the other out. */
 .chatcol.tripmode-on .chat{flex:1 1 38%}
@@ -370,26 +386,26 @@ html{scroll-padding-bottom:96px}
 .today-head{margin-bottom:8px}
 .today-days{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
 .today-days::-webkit-scrollbar{display:none}
-.today-day{flex:0 0 auto;border:1px solid #d9d9d6;background:#fff;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:44px}
+.today-day{flex:0 0 auto;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:44px}
 .today-day span{display:block;font-size:11px;color:var(--muted);font-weight:400}
-.today-day.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
-.today-day.selected span{color:#ddd}
+.today-day.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.today-day.selected span{color:var(--on-ink-muted)}
 .today-now{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
-.today-now-label{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;margin-bottom:6px}
+.today-now-label{display:inline-block;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;margin-bottom:6px}
 .today-now strong{display:block;font-size:15px}
 .today-now a{font-size:13px;font-weight:600}
 .today-timeline{list-style:none;margin:0 0 8px;padding:0}
 .today-timeline li{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line-soft)}
 .today-timeline li.done{opacity:.55}
 .today-timeline li.done .today-block strong{text-decoration:line-through}
-.today-done{flex:0 0 28px;width:28px;height:28px;border-radius:50%;border:1.5px solid #c9c9c6;background:#fff;cursor:pointer;font-size:14px;font-weight:700;color:var(--success);margin-top:2px}
+.today-done{flex:0 0 28px;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-size:14px;font-weight:700;color:var(--success);margin-top:2px}
 .today-done[aria-pressed="true"]{background:var(--success-soft);border-color:var(--success)}
 .today-block{flex:1;min-width:0}
 .today-block-time{display:block;font-size:12px;font-weight:700;color:var(--muted)}
 .today-block strong{font-size:14px}
 .today-block a{font-size:13px;font-weight:600}
 .today-map{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin:12px 0}
-.today-essentials{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.today-essentials{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
 .today-portable{border-top:1px solid var(--line-soft);padding-top:12px}
 .today-portable input{width:100%;margin-top:4px}
 
@@ -398,14 +414,14 @@ html{scroll-padding-bottom:96px}
 .reels-strip{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 12px;scrollbar-width:none}
 .reels-strip::-webkit-scrollbar{display:none}
 .reels-strip .reelcard{flex:0 0 280px}
-.reelcard{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04);display:flex;flex-direction:column}
+.reelcard{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.04);display:flex;flex-direction:column}
 .reelcard.compact{flex:0 0 280px}
-.reelcard img,.reelcard video{width:100%;max-height:320px;object-fit:cover;display:block;background:#f0f0ee}
+.reelcard img,.reelcard video{width:100%;max-height:320px;object-fit:cover;display:block;background:var(--line-soft)}
 .reelcard.compact img,.reelcard.compact video{max-height:200px}
 .reel-media-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-size:20px;font-weight:700;min-height:180px;text-align:center;padding:16px}
 .reel-thumbs{display:flex;gap:6px;padding:8px 12px 0}
-.reel-thumbs button{border:1px solid #d9d9d6;background:#fff;border-radius:999px;min-width:32px;min-height:32px;font-size:12px;font-weight:700;cursor:pointer}
-.reel-thumbs button.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.reel-thumbs button{border:1px solid var(--line);background:var(--card);border-radius:999px;min-width:32px;min-height:32px;font-size:12px;font-weight:700;cursor:pointer}
+.reel-thumbs button.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .reel-body{padding:14px 16px 16px;flex:1;display:flex;flex-direction:column}
 .reel-author{font-size:14px;margin:0}
 .reel-badge{display:inline-block;background:var(--success-soft);color:var(--success);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-left:8px}
@@ -414,10 +430,10 @@ html{scroll-padding-bottom:96px}
 .reel-actions .ghost{padding:8px 14px;min-height:44px}
 .reel-share,.reel-report{margin-top:10px;border-top:1px solid var(--line-soft);padding-top:10px}
 .reel-share a.ghost{text-decoration:none;display:inline-block}
-.reel-empty{background:var(--surface);border:1px dashed #d9d9d6;border-radius:16px;padding:20px;text-align:center}
-.reel-composer{border:1px solid var(--line);border-radius:16px;padding:18px;background:#fff}
-.reel-composer input[type="file"]{border:1px dashed #d9d9d6;border-radius:12px;padding:12px;background:#fff}
-.reel-composer textarea{border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:15px;resize:vertical}
+.reel-empty{background:var(--surface);border:1px dashed var(--line);border-radius:16px;padding:20px;text-align:center}
+.reel-composer{border:1px solid var(--line);border-radius:16px;padding:18px;background:var(--card)}
+.reel-composer input[type="file"]{border:1px dashed var(--line);border-radius:12px;padding:12px;background:var(--card)}
+.reel-composer textarea{border:1px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-size:15px;resize:vertical;background:var(--card);color:var(--ink)}
 @media(max-width:640px){.reels-strip .reelcard{flex-basis:240px}}
 /* "Where to go" discovery map (design #15): map beside the essentials
    on desktop, stacked on a phone. The chips are the keyboard and small-
@@ -429,7 +445,7 @@ html{scroll-padding-bottom:96px}
 .discover-panel{height:100%}
 .discover-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .discover-chip{min-height:44px}
-.discover-chip.selected{border-color:var(--ink);background:#fafafa;font-weight:700}
+.discover-chip.selected{border-color:var(--ink);background:var(--surface);font-weight:700}
 @media(max-width:900px){.discover{grid-template-columns:1fr}.discover-map{height:380px}}
 
 /* --- Layla-dynamic round (Nov 12): flexible, not static --- */
@@ -458,7 +474,7 @@ html{scroll-padding-bottom:96px}
 /* Full-screen map dialog: the whole screen is the map, same route and
    price tags as the inline map. Fixed above everything (the sticky
    bar is z-50); the inline map stays mounted behind it. */
-.mapdialog{position:fixed;inset:0;z-index:200;background:#fff;display:flex;flex-direction:column;padding:16px 24px}
+.mapdialog{position:fixed;inset:0;z-index:200;background:var(--card);display:flex;flex-direction:column;padding:16px 24px}
 .mapdialog-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
 .mapdialog-bar strong{font-size:16px}
 .mapdialog-map{flex:1;min-height:0}
@@ -467,4 +483,4 @@ html{scroll-padding-bottom:96px}
    chips, selected reads as pressed (ink fill + aria-pressed, never
    color alone). Counts are the real number of cards in the category. */
 .filter-pills{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
-.chip.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}

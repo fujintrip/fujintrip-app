@@ -90,12 +90,18 @@ export default function TripMap({
   selectedLegId = null,
   onSelectLeg,
   addedLegIds = [],
+  dark = false,
 }: {
   stops: MapStop[];
   legs?: TripLeg[];
   selectedLegId?: string | null;
   onSelectLeg?: (leg: TripLeg) => void;
   addedLegIds?: string[];
+  // Dark mode (§6): CARTO dark_matter tiles + a light route line, so
+  // the map stays readable when the page goes dark. The white price
+  // pills stay white in both themes — they are tags on the map, and
+  // white-on-dark is the highest-contrast read there.
+  dark?: boolean;
 }) {
   if (!stops.length) return null;
   const positions: Array<[number, number]> = stops.map((s) => [s.lat, s.lng]);
@@ -104,17 +110,25 @@ export default function TripMap({
   // stack of readable pills instead of one overlapping pile.
   const anchors = priceTagAnchorY(legs);
   return (
-    <div style={{ height: '100%', minHeight: 320, borderRadius: 16, overflow: 'hidden', border: '1px solid #e8e8e6' }}>
+    <div style={{ height: '100%', minHeight: 320, borderRadius: 16, overflow: 'hidden', border: '1px solid var(--line)' }}>
       <MapContainer center={center} zoom={3} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomControl={false}>
         {/* Zoom buttons (design #8): scroll-wheel zoom is off so the page
             scrolls; the +/- sits top-right, and the leg card docks
             below it (see .legcard in globals.css). */}
         <ZoomControl position="topright" />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={
+            dark
+              ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }
+          url={
+            dark
+              ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+              : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+          }
         />
-        {stops.length > 1 && <Polyline positions={positions} color="#111" weight={3} dashArray="6 6" />}
+        {stops.length > 1 && <Polyline positions={positions} color={dark ? '#f5f4f0' : '#111'} weight={3} dashArray="6 6" />}
         {stops.map((s, i) => (
           <Marker key={s.city} position={[s.lat, s.lng]} icon={numberedIcon(i + 1)} />
         ))}
