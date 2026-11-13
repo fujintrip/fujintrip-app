@@ -19,6 +19,7 @@ import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePas
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { paceFromProfile } from '../lib/pace';
 import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
+import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival';
 import Checklist from '../components/Checklist';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -244,7 +245,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const inputRef = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string>; passportExpiry?: { month: number; year: number } } | null>(null);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string>; passportExpiry?: { month: number; year: number }; landingTime?: string; departureTime?: string } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
   // Typing indicator + streaming (design #2): the send is followed by
   // ~3.4s of silence today. The indicator shows within 200ms of Send;
@@ -478,7 +479,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     try {
       const t = localStorage.getItem('fujintrip-current-trip');
       if (t) {
-        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown; routeOverride?: unknown; sourceTips?: unknown; passportExpiry?: unknown };
+        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown; routeOverride?: unknown; sourceTips?: unknown; passportExpiry?: unknown; landingTime?: unknown; departureTime?: unknown };
         if (typeof p.destination === 'string' && typeof p.travelers === 'number') {
           // Restore the revised route (if any) — same validation as the
           // server reply, so a stale or corrupt value never breaks the page.
@@ -508,6 +509,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           // Restore the passport expiry (round 3 #5) — month/year only,
           // validated; a corrupt or foreign value is dropped.
           const restoredExpiry = parsePassportExpiryValue(p.passportExpiry);
+          // Restore the landing / departure times (round 4 #3) — 'HH:MM'
+          // only, validated the same way.
+          const restoredLanding = parseHHMM(p.landingTime);
+          const restoredDeparture = parseHHMM(p.departureTime);
           setLastParsed({
             destination: p.destination,
             travelers: p.travelers,
@@ -519,6 +524,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             ...(restoredOverride ? { routeOverride: restoredOverride } : {}),
             ...(restoredSourceTips ? { sourceTips: restoredSourceTips } : {}),
             ...(restoredExpiry ? { passportExpiry: restoredExpiry } : {}),
+            ...(restoredLanding ? { landingTime: restoredLanding } : {}),
+            ...(restoredDeparture ? { departureTime: restoredDeparture } : {}),
           });
           onParsed?.({ destination: p.destination, travelers: p.travelers });
           // Restore the bundle (round 2 #7): only when the saved bundle
@@ -698,6 +705,16 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     const expiryFromMsg = parsePassportExpiry(text);
     const passportExpiry = expiryFromMsg ?? lastParsed?.passportExpiry;
     if (expiryFromMsg) setLastParsed((p) => (p ? { ...p, passportExpiry: expiryFromMsg } : p));
+    // Arrival-time anchoring (round 4 #3): the landing and departure
+    // times, from the traveler's own words ("we land at 7am", "flight
+    // home at 10am") — they ride along in tripState like the origin,
+    // and persist on the trip so the plan anchors to them.
+    const landingFromMsg = parseLandingTime(contextText);
+    const landingTime = landingFromMsg ?? lastParsed?.landingTime;
+    if (landingFromMsg) setLastParsed((p) => (p ? { ...p, landingTime: landingFromMsg } : p));
+    const departureFromMsg = parseDepartureTime(contextText);
+    const departureTime = departureFromMsg ?? lastParsed?.departureTime;
+    if (departureFromMsg) setLastParsed((p) => (p ? { ...p, departureTime: departureFromMsg } : p));
     // The price watch for this trip, if one exists — its own past checks
     // ride along in tripState so the trend read is from real checks.
     const tripWatch = lastParsed ? watchFor(lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0) : undefined;
@@ -719,7 +736,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       // along, so the first reply already honors what the traveler
       // told us (an empty destination in tripState is ignored).
       ...(lastParsed
-        ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(profileSummary(profileForRequest) ? { preferences: profileForRequest } : {}), ...(passportExpiry ? { passportExpiry } : {}), ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } }
+        ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(profileSummary(profileForRequest) ? { preferences: profileForRequest } : {}), ...(passportExpiry ? { passportExpiry } : {}), ...(landingTime ? { landingTime } : {}), ...(departureTime ? { departureTime } : {}), ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } }
         : profileSummary(profileForRequest)
           ? { tripState: { destination: '', travelers: 2, preferences: profileForRequest } }
           : passportExpiry
@@ -1185,6 +1202,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             // that break the traveler's pace.
             pace: paceFromProfile(profile),
             ...(profile.maxSightsPerDay ? { maxSightsPerDay: profile.maxSightsPerDay } : {}),
+            // Arrival-time anchoring (round 4 #3): Day 1 from the
+            // landing time, the last day at the airport.
+            ...(lastParsed?.landingTime ? { landingTime: lastParsed.landingTime } : {}),
+            ...(lastParsed?.departureTime ? { departureTime: lastParsed.departureTime } : {}),
           })
         : null,
     [plan, lastParsed, choice, liveFares, profile]
@@ -1213,6 +1234,8 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             liveFares,
             pace: paceFromProfile(profile),
             ...(profile.maxSightsPerDay ? { maxSightsPerDay: profile.maxSightsPerDay } : {}),
+            ...(lastParsed?.landingTime ? { landingTime: lastParsed.landingTime } : {}),
+            ...(lastParsed?.departureTime ? { departureTime: lastParsed.departureTime } : {}),
           })
         : null,
     [lastParsed, choice, liveFares, profile]
@@ -2217,6 +2240,18 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     ) : (
                       <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                     )}
+                    {/* Arrival-time anchoring (round 4 #3): Day 1 starts
+                        from the landing time — set it here or tell Fujin
+                        in the chat ("we land at 7am"). */}
+                    {si === 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        <label style={{ fontSize: 13 }}>
+                          When does your flight land?{' '}
+                          <input type="time" value={lastParsed?.landingTime ?? ''} onChange={(e) => { const v = e.target.value; setLastParsed((p) => (p ? { ...p, ...(v ? { landingTime: v } : { landingTime: undefined }) } : p)); }} aria-label="Landing time" />
+                        </label>
+                        <p className="plan-line" style={{ marginTop: 4 }}>{(displayCard ?? tripCard).arrival.line}</p>
+                      </div>
+                    )}
                     <KnowHowBlock entries={[stop.transportIn.knowHow, stop.transportIn.knowHowExtra]} />
                   </Expandable>
                   <Expandable
@@ -2377,6 +2412,16 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 ) : (
                   <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                 )}
+                {/* Arrival-time anchoring (round 4 #3): the last day ends
+                    at the airport — set the departure time and the plan
+                    tells you when to leave for it. */}
+                <div style={{ marginTop: 6 }}>
+                  <label style={{ fontSize: 13 }}>
+                    When does your flight home leave?{' '}
+                    <input type="time" value={lastParsed?.departureTime ?? ''} onChange={(e) => { const v = e.target.value; setLastParsed((p) => (p ? { ...p, ...(v ? { departureTime: v } : { departureTime: undefined }) } : p)); }} aria-label="Departure time" />
+                  </label>
+                  <p className="plan-line" style={{ marginTop: 4 }}>{tripCard.departure.line}</p>
+                </div>
                 <KnowHowBlock entries={[tripCard.returnTransport.knowHow]} />
               </Expandable>
               {/* Live fares, reconciled (finish-the-web-version round):

@@ -129,7 +129,8 @@ export function dayBlocks(card: TripCard, dayIndex: number): DayBlock[] {
   const { stop, day } = found;
   const coords = cityCoords(stop.city);
   // Departure day: no day entry — the flight home and check-out, not an
-  // invented activity.
+  // invented activity. The last day ends at the airport (round 4 #3):
+  // the leave-by time rides on the flight block when it is known.
   if (!day) {
     const back = card.legs.find((l) => l.id === 'flight-back');
     return [
@@ -139,7 +140,9 @@ export function dayBlocks(card: TripCard, dayIndex: number): DayBlock[] {
         time: BLOCK_WINDOWS.travel,
         label: 'Travel',
         title: back ? `${back.label}` : `Flight ${stop.city} → ${card.origin || 'your city'}`,
-        detail: back ? `from $${back.price.toLocaleString()} (estimate)` : 'Flight home',
+        detail: back
+          ? `from $${back.price.toLocaleString()} (estimate)${card.departure?.leaveBy ? ` · leave for the airport by ${card.departure.leaveBy}` : ''}`
+          : 'Flight home',
         city: stop.city,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
@@ -160,26 +163,39 @@ export function dayBlocks(card: TripCard, dayIndex: number): DayBlock[] {
   const stopIdx = card.stops.indexOf(stop);
   const isFirstDayOfStop = day.day === stop.days[0].day;
   const blocks: DayBlock[] = [];
+  // Arrival-time anchoring (round 4 #3): Day 1 starts from the landing
+  // time — the travel block runs landing → hotel, and the activity
+  // block starts after the transfer + buffer, not at a generic 09:00.
+  // Without a landing time the day keeps the suggested windows.
+  const isDayOne = dayIndex === 0 && stopIdx === 0;
+  // A snapshot saved before this round has no arrival block — the
+  // optional chain keeps it on the suggested windows, never a crash.
+  const anchored = isDayOne && card.arrival?.anchored && card.arrival.landingTime && card.arrival.atHotel && card.arrival.firstActivityFrom;
   if (isFirstDayOfStop) {
     blocks.push({
       id: `${dayIndex}:travel`,
       kind: 'travel',
-      time: BLOCK_WINDOWS.travel,
+      time: anchored ? `${card.arrival.landingTime}–${card.arrival.atHotel}` : BLOCK_WINDOWS.travel,
       label: 'Travel',
-      title: stopIdx === 0 ? `Arrive — ${stop.transportIn.mode} ${stop.transportIn.from} → ${stop.city}` : `${stop.transportIn.mode} ${stop.transportIn.from} → ${stop.city}`,
-      detail: `from $${stop.transportIn.price.toLocaleString()} (estimate)`,
+      title: anchored
+        ? `Land in ${stop.city} — ${card.arrival.landingTime}`
+        : stopIdx === 0 ? `Arrive — ${stop.transportIn.mode} ${stop.transportIn.from} → ${stop.city}` : `${stop.transportIn.mode} ${stop.transportIn.from} → ${stop.city}`,
+      detail: anchored
+        ? `about an hour to the hotel (a typical transfer — confirm with your transfer) · from $${stop.transportIn.price.toLocaleString()} (estimate)`
+        : `from $${stop.transportIn.price.toLocaleString()} (estimate)`,
       city: stop.city,
       lat: coords?.lat ?? null,
       lng: coords?.lng ?? null,
     });
   }
+  const beforeCheckIn = anchored && card.arrival.firstActivityFrom! < '15:00';
   blocks.push({
     id: `${dayIndex}:activity`,
     kind: 'activity',
-    time: BLOCK_WINDOWS.activity,
+    time: anchored ? `${card.arrival.firstActivityFrom}–12:00` : BLOCK_WINDOWS.activity,
     label: 'Morning',
     title: day.title,
-    detail: `${day.experiences} experiences · ${day.weatherF ? `${day.weatherF}°F typical` : 'weather not shown'}`,
+    detail: `${day.experiences} experiences · ${day.weatherF ? `${day.weatherF}°F typical` : 'weather not shown'}${beforeCheckIn ? ' · Check-in is typically 3pm — explore first, your room isn\'t ready yet' : ''}`,
     city: stop.city,
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,

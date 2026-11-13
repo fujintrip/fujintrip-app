@@ -17,6 +17,7 @@ import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distribute
 import type { DuffelFareOffer, LiveFares } from './duffel';
 import { knowHowForLeg, passKnowHowForRoute, type TransportKnowHow } from './groundTransport';
 import { paceWarningsForCard, type PaceLevel, type PaceWarning } from './pace';
+import { arrivalAnchor, departureAnchor, type ArrivalInfo, type DepartureInfo } from './arrival';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -223,6 +224,11 @@ export type TripCard = {
   // Pace guard (round 4 #1): the days over the traveler's pace, with
   // the count and the max named — the day cards show the warning.
   paceWarnings: PaceWarning[];
+  // Arrival-time anchoring (round 4 #3): Day 1 starts from the
+  // landing time + transfer + check-in, and the last day ends at the
+  // airport — never a generic morning, never an invented flight time.
+  arrival: ArrivalInfo;
+  departure: DepartureInfo;
   stops: TripCardStop[];
   legs: TripLeg[];
   returnTransport: { mode: string; from: string; price: number; knowHow?: TransportKnowHow };
@@ -296,6 +302,12 @@ export function buildTripCard(opts: {
   // the day cards warn on the days that break it.
   pace?: PaceLevel;
   maxSightsPerDay?: number;
+  // Arrival-time anchoring (round 4 #3): the landing time ('HH:MM',
+  // as stated by the traveler) and the flight-home departure time.
+  // Flight times come from the traveler, never from a fare — live
+  // fares carry no times, so no time is ever taken from one.
+  landingTime?: string;
+  departureTime?: string;
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -625,6 +637,17 @@ export function buildTripCard(opts: {
     const day = cardStops.find((s) => s.city === w.city)?.days.find((d) => d.day === w.day);
     if (day) day.paceWarning = w.warning;
   }
+  // Arrival-time anchoring (round 4 #3): Day 1 from the landing time,
+  // the last day at the airport. International is origin country vs
+  // last city country — an unknown origin defaults to international
+  // (3 hours), labeled as a default.
+  const arrivalFirstCity = cardStops[0]?.city ?? opts.destination;
+  const arrivalLastCity = cardStops[cardStops.length - 1]?.city ?? opts.destination;
+  const originCountry = opts.origin ? CITY_INFO[opts.origin]?.country : undefined;
+  const lastCountry = cardStops[cardStops.length - 1]?.country;
+  const international = originCountry && lastCountry ? originCountry !== lastCountry : true;
+  const arrival = arrivalAnchor({ landingTime: opts.landingTime, firstCity: arrivalFirstCity });
+  const departure = departureAnchor({ departureTime: opts.departureTime, lastCity: arrivalLastCity, international });
   const routeLine = [
     opts.origin ? `${opts.origin} ✈️` : '',
     ...cardStops.map((st, i) => `${st.city} (${st.nights} night${st.nights > 1 ? 's' : ''})${i < cardStops.length - 1 ? ` ${legIcon}` : ''}`),
@@ -649,6 +672,8 @@ export function buildTripCard(opts: {
     kids,
     familyNote: familyPaceLine(kids),
     paceWarnings,
+    arrival,
+    departure,
     stops: cardStops,
     legs,
     returnTransport: {
