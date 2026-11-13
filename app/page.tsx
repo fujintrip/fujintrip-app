@@ -18,6 +18,8 @@ import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInf
 import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePassportExpiryValue, passportWarningLine, schengenRemaining, type PassportCheck } from '../lib/passport';
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { paceFromProfile } from '../lib/pace';
+import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
+import Checklist from '../components/Checklist';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import Expandable from '../components/Expandable';
@@ -1460,6 +1462,18 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     try { localStorage.setItem('fujintrip-schengen-used', String(schengenUsed)); } catch {}
   }, [schengenUsed]);
   const schengen = schengenRemaining(schengenUsed, schengenTripDays);
+  // Pre-departure checklist (round 4 #2): generated from the trip's
+  // own facts — passport, visa deadlines, insurance, weather-driven
+  // packing, kids' ages, activities. The display card is the source
+  // (weather swaps included); ticks persist per trip on this device.
+  const checklist = useMemo(() => {
+    const card = displayCard ?? tripCard;
+    if (!card || !plan) return { items: [] as ChecklistItem[], key: '' };
+    return {
+      items: buildChecklist({ card, visaInfos, passportExpiry: lastParsed?.passportExpiry, passportChecks }),
+      key: checklistKeyFor(card.destination, card.travelers, card.days),
+    };
+  }, [displayCard, tripCard, plan, visaInfos, lastParsed, passportChecks]);
   // Swapped-day tags: "city|day" -> the day it swapped with.
   const swappedDays = useMemo(() => {
     const m = new Map<string, number>();
@@ -2470,6 +2484,15 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       </p>
                     </div>
                   )}
+                </div>
+              )}
+              {/* Pre-departure checklist (round 4 #2): generated from
+                  this trip — passport, visa deadlines, insurance,
+                  weather-driven packing, kids' ages, activities. */}
+              {checklist.items.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: '4px 0' }}>Before you go — checklist</h3>
+                  <Checklist items={checklist.items} storageKey={checklist.key} />
                 </div>
               )}
               {/* Solo mode (round 3 #4): the supplement named, the

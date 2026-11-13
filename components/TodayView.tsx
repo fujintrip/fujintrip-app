@@ -32,6 +32,9 @@ import {
   snapshotFor,
   todaySummary,
 } from '../lib/today';
+import { buildChecklist, checklistKeyFor } from '../lib/checklist';
+import { visaForDestination } from '../lib/visa';
+import Checklist from './Checklist';
 
 const TripMap = dynamic(() => import('./TripMap'), {
   ssr: false,
@@ -140,6 +143,14 @@ export default function TodayView({
 
   const blocks = useMemo(() => dayBlocks(card, selectedDay), [card, selectedDay]);
   const essentials = useMemo(() => essentialsFor(card, selectedDay, new Date()), [card, selectedDay]);
+  // Pre-departure checklist (round 4 #2): the same generated list as
+  // the plan view, keyed per trip so ticks sync between the two views
+  // on this device. No passport expiry on file here — the item is to
+  // check it, not a verdict.
+  const checklist = useMemo(
+    () => buildChecklist({ card, visaInfos: visaForDestination(destination) }),
+    [card, destination]
+  );
   const dayDate = useMemo(() => {
     const d = new Date(card.startDate);
     d.setDate(d.getDate() + selectedDay);
@@ -180,6 +191,16 @@ export default function TodayView({
           );
         })}
       </div>
+
+      {/* Before you go (round 4 #2): the generated checklist — passport,
+          visa deadlines, insurance, packing — while the trip is still
+          ahead. The same list and the same ticks as the plan view. */}
+      {summary.status === 'before' && checklist.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <strong style={{ fontSize: 15 }}>Before you go</strong>
+          <Checklist items={checklist} storageKey={checklistKeyFor(destination, travelers, days)} readOnly={readOnly} />
+        </div>
+      )}
 
       {/* Now / Next — the day's next step is the first thing on screen. */}
       {isToday && summary.nowBlock && (
