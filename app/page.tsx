@@ -20,6 +20,7 @@ import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, pr
 import { paceFromProfile } from '../lib/pace';
 import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
 import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival';
+import { auditTrip, checkConnection, departureDayFlags, feasibilitySummary } from '../lib/feasibility';
 import Checklist from '../components/Checklist';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -1497,6 +1498,23 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       key: checklistKeyFor(card.destination, card.travelers, card.days),
     };
   }, [displayCard, tripCard, plan, visaInfos, lastParsed, passportChecks]);
+  // Feasibility guardrail (round 4 #5): the departure-day flags and
+  // the chat-vs-card audit for this trip — the plan view shows the
+  // same check the chat quotes.
+  const feasibility = useMemo(() => {
+    const card = displayCard ?? tripCard;
+    if (!card) return null;
+    const flags = departureDayFlags(card, lastParsed?.departureTime);
+    const audit = auditTrip(card);
+    return { flags, audit, summary: feasibilitySummary(flags, audit) };
+  }, [displayCard, tripCard, lastParsed]);
+  // Connection checker (round 4 #5): the traveler's own connection,
+  // checked against the rule minimums — 90 min international, 60
+  // domestic. The 55-minute default is the report's LAX case.
+  const [connMinutes, setConnMinutes] = useState(55);
+  const [connIntl, setConnIntl] = useState(false);
+  const [connTerminal, setConnTerminal] = useState(false);
+  const [connSeparate, setConnSeparate] = useState(false);
   // Swapped-day tags: "city|day" -> the day it swapped with.
   const swappedDays = useMemo(() => {
     const m = new Map<string, number>();
@@ -2486,6 +2504,50 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     Real trip total: about ${((displayCard ?? tripCard).total + (displayCard ?? tripCard).forgotten.total).toLocaleString()} <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(planning estimates — the lines above are estimates, not live quotes)</span>
                   </p>
                   <p className="plan-note">{(displayCard ?? tripCard).forgotten.feeWarning}</p>
+                </div>
+              )}
+              {/* Feasibility guardrail (round 4 #5, S half): the
+                  departure-day flags and the chat-vs-card audit for
+                  this trip, plus a connection checker for the
+                  traveler's own connection. The M half (per-airport
+                  MCT data, transit-visa check) is still to come. */}
+              {feasibility && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: '4px 0' }}>Feasibility checks</h3>
+                  <p className="plan-line">{feasibility.summary}</p>
+                  {feasibility.flags.map((f, i) => (
+                    <p key={i} className="plan-line" style={{ color: 'var(--accent-text)', fontWeight: 600 }}>⚠️ {f}</p>
+                  ))}
+                  {!feasibility.audit.ok && feasibility.audit.issues.map((issue, i) => (
+                    <p key={i} className="plan-line" style={{ color: 'var(--accent-text)', fontWeight: 600 }}>⚠️ {issue.message}</p>
+                  ))}
+                  <div style={{ marginTop: 8 }}>
+                    <strong style={{ fontSize: 14 }}>Check a connection</strong>
+                    <p className="plan-note">The minimum is 90 minutes international, 60 domestic — the rule version of minimum connection time. Real per-airport MCT data is still to come.</p>
+                    <div className="row" style={{ flexWrap: 'wrap' }}>
+                      <label style={{ fontSize: 13 }}>
+                        Minutes between flights{' '}
+                        <input type="number" min={0} max={600} value={connMinutes} onChange={(e) => setConnMinutes(Math.max(0, Number(e.target.value) || 0))} aria-label="Minutes between flights" style={{ width: 72 }} />
+                      </label>
+                      <label style={{ fontSize: 13 }}>
+                        <input type="checkbox" checked={connIntl} onChange={(e) => setConnIntl(e.target.checked)} /> International
+                      </label>
+                      <label style={{ fontSize: 13 }}>
+                        <input type="checkbox" checked={connTerminal} onChange={(e) => setConnTerminal(e.target.checked)} /> Terminal change
+                      </label>
+                      <label style={{ fontSize: 13 }}>
+                        <input type="checkbox" checked={connSeparate} onChange={(e) => setConnSeparate(e.target.checked)} /> Separate tickets
+                      </label>
+                    </div>
+                    {(() => {
+                      const c = checkConnection({ minutes: connMinutes, international: connIntl, terminalChange: connTerminal, separateTicket: connSeparate });
+                      return c.ok ? (
+                        <p className="plan-line">That connection is fine — {connMinutes} minutes meets the {connIntl ? 90 : 60}-minute minimum.</p>
+                      ) : (
+                        c.flags.map((f, i) => <p key={i} className="plan-line" style={{ color: 'var(--accent-text)', fontWeight: 600 }}>⚠️ {f}</p>)
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
               {visaInfos.length > 0 && (
