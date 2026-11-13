@@ -3394,7 +3394,6 @@ export default function Home() {
   return (
     <div>
       <a href="#fujin-chat" className="skip-link">Skip to chat</a>
-      <header><div className="topbar"><div><div className="logo">Fujin<span>Trip</span></div><div className="tag">Ride the wind. Pay less. · fujintrip.com</div></div><div className="tag">Quality + affordable prices</div></div></header>
       {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12;
           interface round M2 — the 8-tab bar is gone): the chat section
           is full-bleed — header and chat panel span the viewport, and

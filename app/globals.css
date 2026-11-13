@@ -195,13 +195,13 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
 .adslot{margin:32px 0;text-align:center}
 .mytrips li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:14px}
 /* Skip link: keyboard users jump straight to the chat, past the
-   header and hero. Visually hidden until focused. */
+   app bar. Visually hidden until focused. */
 .skip-link{position:absolute;left:-9999px;top:0;background:var(--ink);color:var(--on-ink);padding:10px 16px;border-radius:0 0 12px 0;z-index:100;font-size:14px;font-weight:600;text-decoration:none}
 .skip-link:focus{left:0}
 .hero-cta{margin-top:18px}
 .hero-cta a{display:inline-block;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
 .hero-cta a:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
-@media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.topbar>div:last-child{display:none}.card .body .ghost{width:100%;text-align:center}.card .body .primary{width:100%;text-align:center}}
+@media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.card .body .ghost{width:100%;text-align:center}.card .body .primary{width:100%;text-align:center}}
 /* Section spacing (interface round S5): 64px desktop, 40px mobile —
    each below-fold section breathes, separated by whitespace not rules. */
 @media(max-width:900px){section{padding:40px 0}}
@@ -297,18 +297,19 @@ html{scroll-padding-bottom:96px}
    map-as-background overlay is gone: the chat floated ON TOP of the map
    and hid its left half (the map heading clipped mid-word,
    Prague/Vienna markers under the panel). Now the section is a flex
-   row that fills the first screen below the header: a solid chat panel
+   row that fills the first screen below the app bar: a solid chat panel
    on the left, the editable trip panel in the middle, the map on the
    right, all full height of the section. The map fits the whole route
    in its own visible area — no panel covers any of it. Height is
-   100dvh minus the compact chrome above it (site header ~57 + app bar
-   ~52 + panel margin ≈ 140px — the 8-tab bar is gone, M2); the chat
-   gets ≥85% of viewport height. At S0 the chat is the only zone, so it
-   centers at max 720px instead of hugging the left edge. Below 1200px
-   the zones switch one at a time (data-zone) instead of squeezing
-   three columns; on a narrow screen the active zone is the bottom
-   sheet below, so the top of the map stays visible. */
-.chatmap{position:relative;height:calc(100dvh - 140px);min-height:560px;display:flex;gap:16px}
+   100dvh minus the compact chrome above it (app bar ~52 + panel
+   margin ≈ 84px — the site header is gone, first-screen rebuild
+   Nov 13; the 8-tab bar is gone, M2); the chat gets ≥85% of viewport
+   height. At S0 the chat is the only zone, so it centers at max 720px
+   instead of hugging the left edge. Below 1200px the zones switch one
+   at a time (data-zone) instead of squeezing three columns; on a
+   narrow screen the active zone is the bottom sheet below, so the top
+   of the map stays visible. */
+.chatmap{position:relative;height:calc(100dvh - 84px);min-height:560px;display:flex;gap:16px}
 .chatmap-s0{justify-content:center}
 .chatmap-s0 .chatcol{width:min(720px,100%)}
 .chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 2px 16px rgba(0,0,0,.06);padding:16px}
@@ -337,7 +338,7 @@ html{scroll-padding-bottom:96px}
   .zonebar-chat{display:none}
 }
 @media (max-width:900px){
-  .chatmap{height:calc(100dvh - 160px);min-height:520px}
+  .chatmap{height:calc(100dvh - 104px);min-height:520px}
   .chatcol{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
   .trippanel{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
   .chatmap .chat{max-height:none}

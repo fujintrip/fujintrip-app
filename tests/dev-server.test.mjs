@@ -298,6 +298,11 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   assert.ok(!html.includes('mapcol'), 'the map zone does not render before a route exists');
   assert.ok(!html.includes('zonebar'), 'the zone switcher does not render with one zone');
   assert.ok(!html.includes('zonebar-btn'), 'no zone button renders at S0 (the "Trip" in "FujinTrip" is the logo, not a zone button)');
+  // The site header is gone (first-screen rebuild, Nov 13) — one bar,
+  // brand once: the app bar is the only header at first paint. (The
+  // privacy page keeps its own topbar; this is the homepage.)
+  assert.ok(!html.includes('topbar'), 'the site header is gone — one bar, brand once');
+  assert.ok(!html.includes('Quality + affordable prices'), 'the site-header tagline is gone with it');
   // The app bar has no total and no Book at S0 (M3) — the first screen
   // is the chat, not a price.
   assert.ok(!html.includes('appbar-book'), 'the app bar Book action does not render before a plan exists');
