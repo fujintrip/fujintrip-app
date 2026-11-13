@@ -340,6 +340,31 @@ test('interface round S0 busy budget: at most 10 interactive elements in the fir
   assert.ok(!shell.includes('Build my plan'), 'Build my plan waits for the first message');
 });
 
+test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exist with a trip', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The SOS button lives in the trip panel, the Today view and the map
+  // bar — all S1/S2 — and the sheet mounts only while open, so at S0
+  // the first screen is the chat and nothing SOS-shaped is in the SSR.
+  assert.ok(!html.includes('sos-btn'), 'no SOS button at S0');
+  assert.ok(!html.includes('sosdialog'), 'no emergency sheet at S0');
+  assert.ok(!html.includes('Emergency — get help'), 'no sheet label at S0');
+  // But the stylesheet the page serves carries the SOS styles, so the
+  // button renders styled the moment a trip exists.
+  const cssHref = html.match(/href="([^"]+\.css[^"]*)"/)?.[1];
+  let css = '';
+  if (cssHref) {
+    css = await (await fetch(cssHref.startsWith('http') ? cssHref : `${BASE}${cssHref}`)).text();
+  }
+  if (!css.includes('.sos-btn')) {
+    css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  }
+  assert.ok(css.includes('.sos-btn'), 'stylesheet has the SOS button styles');
+  assert.ok(css.includes('.sosdialog'), 'stylesheet has the emergency sheet styles');
+  assert.ok(css.includes('.sos-missed'), 'stylesheet has the missed check-in banner');
+});
+
 test('template library (interface round S2): 26 cards, real filter counts, 12 per page', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
