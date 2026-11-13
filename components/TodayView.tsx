@@ -35,6 +35,7 @@ import {
 import { buildChecklist, checklistKeyFor } from '../lib/checklist';
 import { visaForDestination } from '../lib/visa';
 import Checklist from './Checklist';
+import { SosButton } from './EmergencySheet';
 
 const TripMap = dynamic(() => import('./TripMap'), {
   ssr: false,
@@ -57,6 +58,7 @@ export default function TodayView({
   choice,
   onFindDinner,
   readOnly = false,
+  onSos,
 }: {
   card: TripCard;
   destination: string;
@@ -67,6 +69,10 @@ export default function TodayView({
   choice: number;
   onFindDinner?: () => void;
   readOnly?: boolean;
+  // SOS (emergency-button build): the sheet lives in Home; the shared
+  // plan page (readOnly) does not pass it, so its copy has no SOS
+  // button — the traveler's contacts live on their own device.
+  onSos?: () => void;
 }) {
   const summary = useMemo(() => todaySummary(card, new Date()), [card]);
   const [selectedDay, setSelectedDay] = useState(summary.dayIndex);
@@ -167,9 +173,12 @@ export default function TodayView({
 
   return (
     <div className="today" aria-label="Today on your trip">
-      <div className="today-head">
-        <strong style={{ fontSize: 15 }}>Today on your trip</strong>
-        <p className="plan-note">{statusLine}</p>
+      <div className="today-head" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <strong style={{ fontSize: 15 }}>Today on your trip</strong>
+          <p className="plan-note">{statusLine}</p>
+        </div>
+        {onSos && <SosButton onOpen={onSos} compact />}
       </div>
 
       {/* Day selector — the traveler can look at any day, not just today. */}

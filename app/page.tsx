@@ -235,7 +235,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string } }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact, onSos }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string }; onSos?: () => void }) {
   // The opening line — also the line a "New trip" resets to, so the
   // trip switcher and the plan view's "Start a new trip" restart the
   // conversation in exactly the same words.
@@ -2103,6 +2103,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   month={lastParsed.month ?? 0}
                   origin={lastParsed.origin ?? ''}
                   choice={choice}
+                  onSos={onSos}
                   onFindDinner={() => {
                     void fetchTonightPlaces();
                     setTimeout(() => document.getElementById('tonight-near-you')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
