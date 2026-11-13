@@ -11,6 +11,7 @@
 // live-inventory note, exactly as the plan view renders them.
 'use client';
 import Expandable from './Expandable';
+import KnowHowBlock from './KnowHow';
 import { MONTH_NAMES } from '../lib/planner';
 import type { Plan } from '../lib/planner';
 import type { BestTime } from '../lib/bestTime';
@@ -260,6 +261,7 @@ export default function TripPanel({
                   ) : (
                     <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                   )}
+                  <KnowHowBlock entries={[stop.transportIn.knowHow, stop.transportIn.knowHowExtra]} />
                   <p className="plan-line">
                     <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()}
                   </p>
@@ -272,16 +274,26 @@ export default function TripPanel({
                   ))}
                 </Expandable>
                 {si < stops.length - 1 && stops[si + 1] && (
-                  <p className="panel-transport">
-                    {stops[si + 1].transportIn.mode} {stops[si + 1].transportIn.from} → {stops[si + 1].city} · {fmtDate(stops[si + 1].startDate)} · from $
-                    {stops[si + 1].transportIn.price.toLocaleString()}
-                  </p>
+                  <>
+                    <p className="panel-transport">
+                      {stops[si + 1].transportIn.mode} {stops[si + 1].transportIn.from} → {stops[si + 1].city} · {fmtDate(stops[si + 1].startDate)} · from $
+                      {stops[si + 1].transportIn.price.toLocaleString()}
+                    </p>
+                    <Expandable className="panel-transport-detail" summary={<>How to book</>}>
+                      <KnowHowBlock entries={[stops[si + 1].transportIn.knowHow, stops[si + 1].transportIn.knowHowExtra]} />
+                    </Expandable>
+                  </>
                 )}
                 {si === stops.length - 1 && card.returnTransport && (
-                  <p className="panel-transport">
-                    {card.returnTransport.mode} {card.returnTransport.from} → home · from ${card.returnTransport.price.toLocaleString()}
-                    {card.flight.back.live ? ` · Duffel test fare — ${card.flight.back.airline}` : ''}
-                  </p>
+                  <>
+                    <p className="panel-transport">
+                      {card.returnTransport.mode} {card.returnTransport.from} → home · from ${card.returnTransport.price.toLocaleString()}
+                      {card.flight.back.live ? ` · Duffel test fare — ${card.flight.back.airline}` : ''}
+                    </p>
+                    <Expandable className="panel-transport-detail" summary={<>How to book</>}>
+                      <KnowHowBlock entries={[card.returnTransport.knowHow]} />
+                    </Expandable>
+                  </>
                 )}
               </li>
             ))}

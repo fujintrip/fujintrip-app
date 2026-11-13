@@ -20,6 +20,7 @@ import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, pr
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import Expandable from '../components/Expandable';
+import KnowHowBlock from '../components/KnowHow';
 import TripPanel, { type PanelStopEdit } from '../components/TripPanel';
 import OfflineBanner from '../components/OfflineBanner';
 import TodayView from '../components/TodayView';
@@ -2055,6 +2056,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   {selectedLeg.terms && (
                     <p className="plan-note">{selectedLeg.terms}</p>
                   )}
+                  {(selectedLeg.kind === 'flight' || selectedLeg.kind === 'transport') && (
+                    <KnowHowBlock entries={[selectedLeg.knowHow, selectedLeg.knowHowExtra]} />
+                  )}
                   {legExpanded && <p style={{ fontSize: 14 }}>{selectedLeg.more}</p>}
                   <div className="row">
                     <button className="ghost" onClick={() => setLegExpanded((e) => !e)}>
@@ -2192,6 +2196,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     ) : (
                       <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                     )}
+                    <KnowHowBlock entries={[stop.transportIn.knowHow, stop.transportIn.knowHowExtra]} />
                   </Expandable>
                   <Expandable
                     className="plan-row"
@@ -2347,6 +2352,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 ) : (
                   <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                 )}
+                <KnowHowBlock entries={[tripCard.returnTransport.knowHow]} />
               </Expandable>
               {/* Live fares, reconciled (finish-the-web-version round):
                   the card's flight legs are the Duffel test fares the
