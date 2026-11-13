@@ -15,6 +15,7 @@ import { appendObservation, parseLiveFares, trendLine, type LiveFares, type Tren
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
+import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import Expandable from '../components/Expandable';
@@ -224,7 +225,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[] }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void }) {
   // The opening line — also the line a "New trip" resets to, so the
   // trip switcher and the plan view's "Start a new trip" restart the
   // conversation in exactly the same words.
@@ -249,6 +250,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const thinkingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Preference profile (round 3 #2): the "Using what you told me last
+  // time…" line, captured BEFORE this message's own signals are merged
+  // — a trip that starts with "direct flights please" should not
+  // announce the preference the traveler just stated as if it were
+  // from last time. Set in send(), read once in handleParsed.
+  const profileLineRef = useRef('');
   const stopThinking = () => {
     if (thinkingTimerRef.current) clearTimeout(thinkingTimerRef.current);
     thinkingTimerRef.current = null;
@@ -450,6 +457,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   }, []);
   // Confirmation line for the plan actions below (share / watch / hold / human).
   const [actionMsg, setActionMsg] = useState('');
+  // Dietary slot at intake (round 3 #3): the row under the chips, and
+  // its one-line confirmation — cleared on the next sent message.
+  const [dietaryDismissed, setDietaryDismissed] = useState(false);
+  const [dietaryNote, setDietaryNote] = useState('');
   // PDF download state: the $1 rule is decided by the server route.
   const [pdfNotice, setPdfNotice] = useState('');
   const [pdfPay, setPdfPay] = useState(false);
@@ -625,7 +636,14 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       // The price-comparison section below follows the AI's trip.
       onParsed?.({ destination: parsed.destination, travelers: parsed.travelers, ...(kidsOut.length ? { kids: kidsOut } : {}) });
     }
-    setMsgs((m) => [...m, { who: 'ai', text: parsed.reply + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
+    // Preference profile (round 3 #2): a fresh trip with a profile from
+    // before — Fujin says what it is using, so the traveler can correct
+    // it. Only on a fresh trip, never mid-conversation, and never on a
+    // decline (parsed.destination is empty there).
+    const isFreshTrip = !lastParsed || parsed.destination !== lastParsed.destination;
+    const profileNote = isFreshTrip && profileLineRef.current ? `\n\n${profileLineRef.current}` : '';
+    profileLineRef.current = '';
+    setMsgs((m) => [...m, { who: 'ai', text: parsed.reply + profileNote + (parsed.missing.length ? ` To finish the plan I still need: ${parsed.missing.join(', ')}.` : ' Tap Build my plan below.'), tips: parsed.tips }]);
   };
 
   const send = async (textOverride?: string, statusOverride?: FlightStatusData | null) => {
@@ -635,6 +653,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     // streaming, the Send button is a Stop button instead.
     if (thinking !== null || streamingText !== null) return;
     setInput('');
+    setDietaryNote('');
     // Show your message right away; the AI reply is added when it arrives,
     // so a slow server never looks like the message didn't send.
     setMsgs((m) => [...m, { who: 'user', text }]);
@@ -652,6 +671,17 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     // Kids' ages, from everything said so far — the pace depends on them,
     // and they ride along in tripState like the origin.
     const kids = parseKidAges(contextText).length ? parseKidAges(contextText) : lastParsed?.kids ?? [];
+    // Preference profile (round 3 #2): signals in this message ("direct
+    // flights", "street food") join the profile — and the profile line
+    // for a new trip is captured BEFORE the merge, so a preference
+    // stated just now is never announced as if it were from last time.
+    // The merged profile rides in tripState so the server can use it
+    // on this very reply.
+    const signals = parsePreferenceSignals(text);
+    const hasSignals = Object.keys(signals).length > 0;
+    if (!hasSignals) profileLineRef.current = profileLine(profile);
+    const profileForRequest = hasSignals ? mergeProfile(profile, signals) : profile;
+    if (hasSignals) onProfileChange(profileForRequest);
     // The price watch for this trip, if one exists — its own past checks
     // ride along in tripState so the trend read is from real checks.
     const tripWatch = lastParsed ? watchFor(lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0) : undefined;
@@ -668,8 +698,15 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       history: msgs.slice(-10).map((m) => ({ role: m.who === 'user' ? 'user' : 'assistant', content: m.text })),
       // Durable trip memory: the trip already established (destination
       // + travelers + departure city) goes with EVERY request, so it
-      // survives history scrolling off the window.
-      ...(lastParsed ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } } : {}),
+      // survives history scrolling off the window. On the very first
+      // message there is no trip yet — but the profile still rides
+      // along, so the first reply already honors what the traveler
+      // told us (an empty destination in tripState is ignored).
+      ...(lastParsed
+        ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(profileSummary(profileForRequest) ? { preferences: profileForRequest } : {}), ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } }
+        : profileSummary(profileForRequest)
+          ? { tripState: { destination: '', travelers: 2, preferences: profileForRequest } }
+          : {}),
       // On-trip mode: tell the server the traveler is already there.
       ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
       // Disruption report: the checked flight status rides along so
@@ -1746,6 +1783,35 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               </button>
             ))}
           </div>
+          {/* Dietary slot at intake (round 3 #3, Layla/Triply): one tap
+              sets the dietary need for this trip and the profile — food
+              answers respect it from the next reply. Shown until it is
+              set (or dismissed), and only before the plan is built:
+              intake, not a permanent row. */}
+          {!profile.dietary && !dietaryDismissed && !plan && (
+            <div className="chips no-print" role="group" aria-label="Dietary needs" style={{ paddingTop: 2 }}>
+              <span style={{ fontSize: 13, color: 'var(--muted)', alignSelf: 'center' }}>Any dietary needs?</span>
+              {DIETARY_OPTIONS.map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  className="chip"
+                  onClick={() => {
+                    onProfileChange({ ...profile, dietary: d.value });
+                    setDietaryNote(
+                      d.value === 'none'
+                        ? 'Noted — no dietary needs.'
+                        : `Noted — ${d.label.toLowerCase()}. Food suggestions will respect this; menus are not checked, so ask the restaurant.`
+                    );
+                  }}
+                >
+                  {d.label}
+                </button>
+              ))}
+              <button type="button" className="chip" aria-label="Hide dietary question" onClick={() => setDietaryDismissed(true)}>✕</button>
+            </div>
+          )}
+          {dietaryNote && <p className="no-print" style={{ fontSize: 13, color: 'var(--muted)', margin: '2px 0 0' }}>{dietaryNote}</p>}
           {/* One trust line under the input (design §2.2): the
               no-hidden-margin line used to repeat here, in the plan
               section and in the footer — it now lives once, near the
@@ -2578,6 +2644,17 @@ function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) => void
 export default function Home() {
   const [tab, setTab] = useState<Tab>('Fujin AI');
   const [trips, setTrips] = useState<Trip[]>([]);
+  // Preference profile (round 3 #2): stated preferences, carried across
+  // trips on this device (localStorage, no accounts). Validated on load
+  // so a corrupt or foreign value never reaches the chat.
+  const [profile, setProfile] = useState<TravelerProfile>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-profile');
+      if (raw) setProfile(parseProfile(JSON.parse(raw)));
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem('fujintrip-profile', JSON.stringify(profile)); } catch {} }, [profile]);
   // Price watches (competitor learning #4): a drop is measured against
   // the live fare when the watch started — never against the planner
   // estimate. Stored in localStorage, like the trips.
@@ -2748,7 +2825,7 @@ export default function Home() {
           {TABS.map((t) => (<button key={t} role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>))}
         </div>
         <div className={tab === 'Fujin AI' ? 'panel chat-panel' : 'panel'} id="fujin-chat">
-          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} /> : <SearchForm tab={tab} onSave={saveTrip} />}
+          {tab === 'Fujin AI' ? <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} /> : <SearchForm tab={tab} onSave={saveTrip} />}
         </div>
         {composerOpen && (
           <div className="panel" id="reel-composer">
@@ -2919,6 +2996,33 @@ export default function Home() {
               {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
             </ul>
           )}
+          <h3 style={{ marginTop: 20 }}>Your travel preferences</h3>
+          <p className="plan-muted">What you tell Fujin here carries across trips — on this device, no account. Only what you picked or said in the chat is ever used; nothing is guessed. Tap a chip again to clear it.</p>
+          {profileSummary(profile) ? (
+            <p style={{ fontSize: 14 }}>Now using: <strong>{profileSummary(profile)}</strong></p>
+          ) : (
+            <p style={{ fontSize: 14, color: 'var(--muted)' }}>Nothing set yet — pick below, or just tell Fujin in the chat (“direct flights”, “street food”).</p>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} role="group" aria-label="Flight preference">
+            <button type="button" className={`chip${profile.flightStyle === 'direct' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, flightStyle: profile.flightStyle === 'direct' ? undefined : 'direct' })}>Direct flights</button>
+            <button type="button" className={`chip${profile.flightStyle === 'cheapest' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, flightStyle: profile.flightStyle === 'cheapest' ? undefined : 'cheapest' })}>Cheapest flights</button>
+            <button type="button" className={`chip${profile.seat === 'window' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, seat: profile.seat === 'window' ? undefined : 'window' })}>Window seat</button>
+            <button type="button" className={`chip${profile.seat === 'aisle' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, seat: profile.seat === 'aisle' ? undefined : 'aisle' })}>Aisle seat</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }} role="group" aria-label="Food and pace preference">
+            <button type="button" className={`chip${profile.foodStyle === 'street' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, foodStyle: profile.foodStyle === 'street' ? undefined : 'street' })}>Street food</button>
+            <button type="button" className={`chip${profile.foodStyle === 'local' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, foodStyle: profile.foodStyle === 'local' ? undefined : 'local' })}>Local spots</button>
+            <button type="button" className={`chip${profile.foodStyle === 'fine' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, foodStyle: profile.foodStyle === 'fine' ? undefined : 'fine' })}>Fine dining</button>
+            <button type="button" className={`chip${profile.pace === 'slow' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, pace: profile.pace === 'slow' ? undefined : 'slow' })}>Slow pace</button>
+            <button type="button" className={`chip${profile.pace === 'relaxed' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, pace: profile.pace === 'relaxed' ? undefined : 'relaxed' })}>Relaxed pace</button>
+            <button type="button" className={`chip${profile.pace === 'fast' ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, pace: profile.pace === 'fast' ? undefined : 'fast' })}>Fast pace</button>
+            <button type="button" className={`chip${profile.localGemsOnly ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, localGemsOnly: profile.localGemsOnly ? undefined : true })}>Local gems only</button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }} role="group" aria-label="Dietary needs">
+            {DIETARY_OPTIONS.map((d) => (
+              <button key={d.value} type="button" className={`chip${profile.dietary === d.value ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, dietary: profile.dietary === d.value ? undefined : d.value })}>{d.label}</button>
+            ))}
+          </div>
           <h3 style={{ marginTop: 20 }}>Price watches</h3>
           <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
           {watches.length === 0 ? <p style={{ color: 'var(--muted)' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (

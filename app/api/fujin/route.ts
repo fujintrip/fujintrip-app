@@ -6,6 +6,7 @@ import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from 
 import { bestTimeLine } from '../../../lib/bestTime';
 import { disruptionTemplate, type DisruptionStatus } from '../../../lib/disruption';
 import { visaLine } from '../../../lib/visa';
+import { dietaryBlock, parseProfile, preferencesBlock, DIETARY_LABELS, type Dietary } from '../../../lib/preferences';
 import { buildTripCard, suggestedStart } from '../../../lib/tripCard';
 import { checkTripWeather, swapLine, weatherBlock, type WeatherCheck } from '../../../lib/daySwap';
 
@@ -121,6 +122,7 @@ const SYSTEM_PROMPT = [
   'FAMILY — when the traveler mentions kids, children or a family trip, ask how many kids and their ages (one question, right after the party size is known) and remember them in the kids array of your JSON answer. "2 adults, 3 kids" is 5 travelers, not 2. Adjust the plan to the YOUNGEST kid: under 5 — slow days, 2 major activities a day, a nap or downtime after lunch, kid-friendly restaurants near each stop; ages 5–11 — 2–3 activities a day with buffers and realistic walking distances; 12+ — full days are fine with a mix of sights and something active. Never suggest late-night bars or nightlife for a family with young kids. Mention the family pace in the Trip Summary.',
   'CHILD FARES — kids ages 2–11 fly at 75% of the adult fare internationally, under-2s at ~10% (free on your lap domestically), 12+ pay the adult fare, ages counted on the travel date. When a FAMILY PRICES block is present, quote those totals exactly — never the 1- or 2-traveler rows from the price table, never divide a total by the traveler count, and never price a family as all adults. If the children\'s ages are not known, ask once, then price with the 75% band and say so.',
   'PARTY SIZE — a party-size change is a slot update, never a trip reset: re-price the same route, re-check occupancy and the pace, and say what changed. Never flip the route because the party size changed.',
+  'PREFERENCES — when a PREFERENCES block is present, honor the stated preferences (direct flights, food style, pace, dietary) and never invent a preference the traveler never stated. When a DIETARY block is present, only suggest restaurants and dishes that fit it, and never call a place "safe" for allergies — mark unknowns as unknown; "likely halal" is never "certified halal" unless the listing says so.',
   'GROUP — whenever a price is quoted for more than one traveler, give the per-person price AND the whole-trip total together, never one without the other. For a family, split it per person by age (adults at the adult total, each kid at their own child-fare total from the FAMILY PRICES block) — never divide a total by the traveler count when kids are in the party. For adults only, the per-person price is the total divided by the traveler count, and it must multiply back to the total exactly.',
   'PROACTIVE FOLLOW-UP — end an answer that opens a next step with ONE concrete offer tied to an open slot ("Want me to watch this fare and tell you if it drops?", "Would you like me to check if your hotel offers parking?") — not a generic "anything else?".',
   'MONEY — always name what is in a total; never hide the service fee; prices are in USD. When a price is shown, add the currency line once: "Prices in USD. If you pay in the local currency, your bank converts at its rate — paying in the local currency is usually cheaper than letting the hotel or airline convert for you."',
@@ -176,7 +178,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
 // with voices, fares, trend and food appended) — the atomic path wraps it
 // in NextResponse.json, and the streaming path sends the same payload as
 // the final `done` event after chunking its reply text.
-function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[]) {
+function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[], dietary?: Dietary) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -257,8 +259,13 @@ function fallbackPayload(message: string, label: string, voices?: LocalVoices, v
   }
   // Tonight's food (round 2 #4): the places open now, from Wikivoyage —
   // appended when the server fetched them for tonight's question.
+  // Dietary (round 3 #3): the listings do not verify dietary safety,
+  // so the note marks the gap instead of calling any place safe.
   if (contextFood?.places.length && !declinedOffTopic) {
     reply += `\n\n${foodReply(contextFood)}`;
+    if (dietary && dietary !== 'none') {
+      reply += `\nDietary: ${DIETARY_LABELS[dietary]} — these places come from Wikivoyage listings, which do not verify dietary safety; check the menu before ordering.`;
+    }
   }
   // Weather / closures (round 2 #10): when the traveler asked about
   // weather or closures, the check's swaps and the forecast gap — the
@@ -418,6 +425,10 @@ export async function POST(req: NextRequest) {
   // delta vs this tier.
   const stateTier =
     typeof tripState.tier === 'number' && [0, 1, 2].includes(tripState.tier) ? tripState.tier : undefined;
+  // Preference profile (round 3 #2): stated preferences from this
+  // device, carried in tripState — validated, so a corrupt or foreign
+  // value never reaches the model.
+  const statePreferences = parseProfile(tripState.preferences);
   // The watch's own past fare checks for this trip (round 2 #3) — the
   // cheapest live out+back total on each check date, sent by the page
   // with every request so the trend read is always from real checks.
@@ -578,6 +589,16 @@ export async function POST(req: NextRequest) {
   if (stateDestination) {
     systemPrompt += ` TRIP SO FAR — the traveler is already planning this trip: destination ${stateDestination}, ${stateTravelers || 2} travelers${stateOrigin ? `, flying from ${stateOrigin}` : ''}${stateKids.length ? `, kids ages ${stateKids.join(', ')}` : ''}${stateTier !== undefined ? `, on the ${['Cheapest', 'Best value', 'Premium'][stateTier]} plan` : ''}${stateRouteOverride?.cities.length ? `, route stops ${stateRouteOverride.cities.join(' → ')}` : ''}. Remember this across turns — do not ask for the destination, traveler count, or departure city again unless the traveler says it changed. If the current message changes the destination, party size, or origin, use the NEW one.`;
   }
+  // Preference profile (round 3 #2) + dietary (round 3 #3): stated
+  // preferences ride in tripState — the model honors them, and the
+  // dietary block carries the never-"safe" rule.
+  const prefBlock = preferencesBlock(statePreferences);
+  if (prefBlock) {
+    systemPrompt += ` PREFERENCES — ${prefBlock}`;
+  }
+  if (statePreferences.dietary) {
+    systemPrompt += ` DIETARY — ${dietaryBlock(statePreferences.dietary)}`;
+  }
   // Nights per city, from the planner's distribution — injected so the
   // live model never re-splits the route: on the live site turn 5 gave
   // Prague 4 / Vienna 4 / Budapest 4 plus filler days and turn 6 gave
@@ -716,7 +737,7 @@ export async function POST(req: NextRequest) {
               food,
               checkedStatus,
               weather,
-              cityVoices
+              cityVoices, statePreferences.dietary
             );
             // Chunk the reply at word boundaries so the client renders
             // flowing text, not characters.
@@ -851,7 +872,7 @@ export async function POST(req: NextRequest) {
       food,
       checkedStatus,
       weather,
-      cityVoices
+      cityVoices, statePreferences.dietary
     );
   }
   const apiKey = provider.apiKey;
@@ -905,14 +926,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary);
     }
 
     return NextResponse.json({
@@ -927,7 +948,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary);
   }
 }
 
