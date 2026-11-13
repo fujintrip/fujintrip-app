@@ -36,6 +36,13 @@ export type TravelerProfile = {
   pace?: 'slow' | 'relaxed' | 'fast';
   localGemsOnly?: boolean;
   dietary?: Dietary;
+  // Pace guard (round 4 #1): the energy slots. latestStart is the
+  // earliest the traveler starts the day, 'HH:MM' 24-hour; maxSightsPerDay
+  // (1–10) overrides the pace default; napWindow protects a rest block
+  // after lunch for families with a child under 5.
+  latestStart?: string;
+  maxSightsPerDay?: number;
+  napWindow?: boolean;
 };
 
 // Dietary needs, from the traveler's own words. 'none' is a real
@@ -70,6 +77,33 @@ export function parsePreferenceSignals(text: string): Partial<TravelerProfile> {
   if (/\blocal gems only\b|\bhidden gems\b|\boff the beaten (path|track)\b|\bavoid tourist traps\b/.test(lower)) out.localGemsOnly = true;
   const dietary = parseDietary(lower);
   if (dietary) out.dietary = dietary;
+  // Pace guard (round 4 #1): the energy slots, from the traveler's own
+  // words — "don't start before 10", "at most 3 sights a day", "nap
+  // after lunch". Times are 24-hour 'HH:MM'; a bare hour without am/pm
+  // is a morning hour (a day never starts at 10pm). Clamped to sane
+  // ranges, never guessed past the words.
+  const startMatch = lower.match(/(?:start(?:ing)?|begin)(?: no earlier than| after| at| from)?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?|don'?t start before\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?|no earlier than\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+  if (startMatch) {
+    const hour = Number(startMatch[1] ?? startMatch[4] ?? startMatch[7] ?? 0);
+    const mins = Number(startMatch[2] ?? startMatch[5] ?? startMatch[8] ?? 0);
+    const meridiem = startMatch[3] ?? startMatch[6] ?? startMatch[9];
+    if (hour >= 1 && hour <= 12 && mins >= 0 && mins <= 59) {
+      let h24 = hour % 12;
+      if (meridiem === 'pm') h24 += 12;
+      // A bare "start at 10" is 10am; "start at 2" without am/pm is
+      // 2pm only when the traveler says so — otherwise it is 2am and
+      // out of range, so it is dropped below by the clamp.
+      if (h24 >= 5 && h24 <= 12) {
+        out.latestStart = `${String(h24).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      }
+    }
+  }
+  const sightsMatch = lower.match(/(?:at most|max|no more than)\s+(\d{1,2})\s+(?:main\s+)?(?:sights?|attractions?|activities?)\s+(?:a|per|each)\s+day/);
+  if (sightsMatch) {
+    const n = Number(sightsMatch[1]);
+    if (n >= 1 && n <= 10) out.maxSightsPerDay = n;
+  }
+  if (/\bnap\b/.test(lower) && /(?:after lunch|window|protect|nap time)/.test(lower)) out.napWindow = true;
   return out;
 }
 
@@ -91,6 +125,13 @@ export function parseProfile(value: unknown): TravelerProfile {
   if (typeof o.dietary === 'string' && (DIETARY_OPTIONS as Array<{ value: string }>).some((d) => d.value === o.dietary)) {
     out.dietary = o.dietary as Dietary;
   }
+  // Pace guard (round 4 #1): the energy slots, validated like the rest
+  // — a malformed time or an out-of-range count is dropped, never kept.
+  if (typeof o.latestStart === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(o.latestStart)) out.latestStart = o.latestStart;
+  if (typeof o.maxSightsPerDay === 'number' && Number.isInteger(o.maxSightsPerDay) && o.maxSightsPerDay >= 1 && o.maxSightsPerDay <= 10) {
+    out.maxSightsPerDay = o.maxSightsPerDay;
+  }
+  if (o.napWindow === true) out.napWindow = true;
   return out;
 }
 
@@ -110,6 +151,10 @@ export function profileSummary(profile: TravelerProfile): string {
   else if (profile.pace === 'fast') bits.push('fast pace');
   if (profile.localGemsOnly) bits.push('local gems only');
   if (profile.dietary && profile.dietary !== 'none') bits.push(DIETARY_LABELS[profile.dietary]);
+  // Pace guard (round 4 #1): only the slots that are set.
+  if (profile.latestStart) bits.push(`starts no earlier than ${profile.latestStart}`);
+  if (profile.maxSightsPerDay) bits.push(`max ${profile.maxSightsPerDay} sights a day`);
+  if (profile.napWindow) bits.push('nap window after lunch');
   return bits.join(', ');
 }
 

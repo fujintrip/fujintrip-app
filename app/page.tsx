@@ -17,6 +17,7 @@ import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
 import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePassportExpiryValue, passportWarningLine, schengenRemaining, type PassportCheck } from '../lib/passport';
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
+import { paceFromProfile } from '../lib/pace';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
 import Expandable from '../components/Expandable';
@@ -1178,9 +1179,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             // The same live fares the chat quotes for this trip — the
             // card validates them against its own trip before using them.
             liveFares,
+            // Pace guard (round 4 #1): the day cards warn on the days
+            // that break the traveler's pace.
+            pace: paceFromProfile(profile),
+            ...(profile.maxSightsPerDay ? { maxSightsPerDay: profile.maxSightsPerDay } : {}),
           })
         : null,
-    [plan, lastParsed, choice, liveFares]
+    [plan, lastParsed, choice, liveFares, profile]
   );
   // Live map preview (Nov 11, user: "the map doesn't reflect as i'm
   // talking to the ai like lyla"): the map used to appear only after
@@ -1204,9 +1209,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             routeOverride: lastParsed?.routeOverride,
             sourceTips: lastParsed?.sourceTips,
             liveFares,
+            pace: paceFromProfile(profile),
+            ...(profile.maxSightsPerDay ? { maxSightsPerDay: profile.maxSightsPerDay } : {}),
           })
         : null,
-    [lastParsed, choice, liveFares]
+    [lastParsed, choice, liveFares, profile]
   );
   const mapCard = tripCard ?? previewCard;
   // Live trip panel (Layla-dynamic round): the map's props are stable
@@ -2222,6 +2229,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       }
                     >
                       <p className="plan-line">{d.experiences} experience{d.experiences !== 1 ? 's' : ''} planned — {d.title}</p>
+                      {/* Pace guard (round 4 #1): a day over the
+                          traveler's pace says so on its own card, with
+                          the count, the max and the choice. */}
+                      {d.paceWarning ? <p className="plan-line" style={{ color: 'var(--accent-text)', fontWeight: 600 }}>⚠️ {d.paceWarning}</p> : null}
                       {d.weatherF ? <p className="plan-line">Typical high {d.weatherF}°F in {MONTH_NAMES[d.date.getMonth()]} — a seasonal average, not a forecast.</p> : null}
                       {swappedDays.get(`${stop.city}|${d.day}`) ? <p className="plan-line">Swapped with Day {swappedDays.get(`${stop.city}|${d.day}`)} by the weather / closure check.</p> : null}
                     </Expandable>
@@ -3148,6 +3159,23 @@ export default function Home() {
             {DIETARY_OPTIONS.map((d) => (
               <button key={d.value} type="button" className={`chip${profile.dietary === d.value ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, dietary: profile.dietary === d.value ? undefined : d.value })}>{d.label}</button>
             ))}
+          </div>
+          {/* Pace guard (round 4 #1): the energy slots — latest start,
+              max sights a day, and the nap window for families. The
+              day cards warn when a day breaks the pace you set here. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }} role="group" aria-label="Pace and energy">
+            <label style={{ fontSize: 13 }}>
+              Start no earlier than{' '}
+              <select aria-label="Earliest start time" value={profile.latestStart ?? ''} onChange={(e) => setProfile({ ...profile, latestStart: e.target.value || undefined })}>
+                <option value="">Any time</option>
+                {['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'].map((t) => (<option key={t} value={t}>{t}</option>))}
+              </select>
+            </label>
+            <label style={{ fontSize: 13 }}>
+              Max sights a day{' '}
+              <input type="number" min={1} max={10} value={profile.maxSightsPerDay ?? ''} onChange={(e) => { const n = Number(e.target.value); setProfile({ ...profile, maxSightsPerDay: n >= 1 && n <= 10 ? n : undefined }); }} placeholder="6" aria-label="Maximum main sights per day" style={{ width: 56 }} />
+            </label>
+            <button type="button" className={`chip${profile.napWindow ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, napWindow: profile.napWindow ? undefined : true })}>Nap window after lunch</button>
           </div>
           <h3 style={{ marginTop: 20 }}>Emergency contact</h3>
           <p className="plan-muted">For solo trips — who should be reached if something goes wrong? Stored on this device only, shown on your solo trip cards.</p>

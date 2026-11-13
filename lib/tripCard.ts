@@ -16,6 +16,7 @@
 import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, fareClassForTier, fareClassLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, serviceFee, stopsForRoute, type Party, type RouteOverride } from './planner';
 import type { DuffelFareOffer, LiveFares } from './duffel';
 import { knowHowForLeg, passKnowHowForRoute, type TransportKnowHow } from './groundTransport';
+import { paceWarningsForCard, type PaceLevel, type PaceWarning } from './pace';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -149,7 +150,16 @@ export function addDays(d: Date, n: number): Date {
   return c;
 }
 
-export type TripCardDay = { day: number; date: Date; title: string; experiences: number; weatherF: number };
+export type TripCardDay = {
+  day: number;
+  date: Date;
+  title: string;
+  experiences: number;
+  weatherF: number;
+  // Pace guard (round 4 #1): the warning when this day is over the
+  // traveler's pace — set by buildTripCard, read by the day card.
+  paceWarning?: string;
+};
 export type TripCardStop = {
   city: string;
   country: string;
@@ -210,6 +220,9 @@ export type TripCard = {
   // the plan view, derived from the kids' ages, never invented venues.
   kids: number[];
   familyNote: string;
+  // Pace guard (round 4 #1): the days over the traveler's pace, with
+  // the count and the max named — the day cards show the warning.
+  paceWarnings: PaceWarning[];
   stops: TripCardStop[];
   legs: TripLeg[];
   returnTransport: { mode: string; from: string; price: number; knowHow?: TransportKnowHow };
@@ -278,6 +291,11 @@ export function buildTripCard(opts: {
   // travelers, origin, first city, dates) so a stale fare for another
   // trip is never shown; anything else falls back to the estimate.
   liveFares?: LiveFares | null;
+  // Pace guard (round 4 #1): the traveler's pace level (default
+  // moderate) and an optional max-sights override from the profile —
+  // the day cards warn on the days that break it.
+  pace?: PaceLevel;
+  maxSightsPerDay?: number;
 }): TripCard | null {
   const days = Math.min(30, Math.max(2, opts.days || 3));
   const routeKey = routeKeyForDestination(opts.destination);
@@ -599,6 +617,14 @@ export function buildTripCard(opts: {
   }
 
   const experiences = cardStops.reduce((s, st) => s + st.days.reduce((a, d) => a + d.experiences, 0), 0);
+  // Pace guard (round 4 #1): days over the traveler's pace get a
+  // warning — attached to the day (the day card shows it) and listed
+  // on the card (the chat and the plan view can both quote it).
+  const paceWarnings = paceWarningsForCard({ stops: cardStops }, opts.pace ?? 'moderate', opts.maxSightsPerDay);
+  for (const w of paceWarnings) {
+    const day = cardStops.find((s) => s.city === w.city)?.days.find((d) => d.day === w.day);
+    if (day) day.paceWarning = w.warning;
+  }
   const routeLine = [
     opts.origin ? `${opts.origin} ✈️` : '',
     ...cardStops.map((st, i) => `${st.city} (${st.nights} night${st.nights > 1 ? 's' : ''})${i < cardStops.length - 1 ? ` ${legIcon}` : ''}`),
@@ -622,6 +648,7 @@ export function buildTripCard(opts: {
     travelers: opts.travelers,
     kids,
     familyNote: familyPaceLine(kids),
+    paceWarnings,
     stops: cardStops,
     legs,
     returnTransport: {
