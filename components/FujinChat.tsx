@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
 import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type DiscoveryEntry } from '../lib/discovery';
-import { askFujin, applyRevision, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type Plan, type Revision, type RouteOverride } from '../lib/planner';
+import { askFujin, applyRevision, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, fareClassForTier, findMonth, findOrigin, findOriginAnswer, MONTH_NAMES, optionsLine, parseDuration, parseKidAges, passengerTotals, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, tripDays, type Plan, type Revision, type RouteOverride } from '../lib/planner';
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
@@ -934,8 +934,11 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     const dest = lastParsed?.destination ?? 'Kyoto';
     const people = lastParsed?.travelers ?? 2;
     // The plan's day cards span the trip length the traveler gave
-    // (14 days → 14 day cards), not a fixed 3.
-    setPlan(buildPlan(dest, people, lastParsed?.durationDays ?? 3, { kids: lastParsed?.kids ?? [] }));
+    // (14 days → 14 day cards), not a fixed 3 — and when no length was
+    // given, tripDays() supplies the same 14-day default the summary
+    // and the preview already show, so the built plan can never
+    // disagree with its own summary.
+    setPlan(buildPlan(dest, people, tripDays(lastParsed?.durationDays), { kids: lastParsed?.kids ?? [] }));
     // A new plan means new dates — the old weather check no longer applies.
     setWeatherCheck(null);
     setActionMsg('');
@@ -1074,9 +1077,11 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     const key = routeKeyForDestination(lastParsed.destination);
     const stops = stopsForRoute(key, lastParsed.routeOverride);
     if (!stops.length) return;
-    // The visible card's day count: the built plan uses durationDays
-    // (3 when unknown), the live preview assumes 14.
-    const days = plan ? lastParsed.durationDays ?? 3 : lastParsed.durationDays ?? 14;
+    // The visible card's day count — tripDays(), the same day count
+    // the summary, the preview and the built plan all use, whether a
+    // plan exists yet or not. Before this, the built plan used 3 when
+    // the length was unknown while the preview assumed 14.
+    const days = tripDays(lastParsed.durationDays);
     const currentNights = (city: string) =>
       distributeNightsForStops(stops, days).find((s) => s.city === city)?.nights ?? 0;
     const refuse = (reason: string) => setPanelNotice(reason);
@@ -1147,7 +1152,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     const next = Math.max(1, Math.min(12, n));
     if (next === lastParsed.travelers) return;
     const dest = lastParsed.destination;
-    const days = lastParsed.durationDays ?? 3;
+    const days = tripDays(lastParsed.durationDays);
     const kids = lastParsed.kids ?? [];
     const nextPlan = plan ? buildPlan(dest, next, days, { kids }) : null;
     if (nextPlan) setPlan(nextPlan);
@@ -1228,7 +1233,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
         ? buildTripCard({
             destination: plan.destination,
             travelers: plan.travelers,
-            days: lastParsed?.durationDays ?? 3,
+            days: tripDays(lastParsed?.durationDays),
             month: lastParsed?.month ?? 0,
             origin: lastParsed?.origin ?? '',
             // The map's price tags show the tier the traveler picked.
@@ -1257,15 +1262,15 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   // the map shows the trip as soon as the chat knows a destination —
   // the route, the markers and the price tags update with every turn,
   // and the full plan card takes over once "Build my plan" is tapped.
-  // The preview assumes 14 days when the length is not known yet; once
-  // the traveler gives it, the preview and the plan use the same length.
+  // The preview and the plan read the same tripDays() — one length for
+  // the summary, the preview and the built plan, known or not yet.
   const previewCard: TripCard | null = useMemo(
     () =>
       lastParsed?.destination
         ? buildTripCard({
             destination: lastParsed.destination,
             travelers: lastParsed.travelers,
-            days: lastParsed.durationDays ?? 14,
+            days: tripDays(lastParsed.durationDays),
             month: lastParsed.month ?? 0,
             origin: lastParsed.origin ?? '',
             tier: choice,
@@ -1403,7 +1408,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   // app is open, the sheet surfaces once, with the alert ready. It
   // does nothing while the app is closed, and the sheet says so.
   const [sosOpen, setSosOpen] = useState(false);
-  const tripCheckInKey = lastParsed ? checkInKeyFor(lastParsed.destination, lastParsed.travelers, lastParsed.durationDays ?? 14) : '';
+  const tripCheckInKey = lastParsed ? checkInKeyFor(lastParsed.destination, lastParsed.travelers, tripDays(lastParsed.durationDays)) : '';
   const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
   useEffect(() => {
     if (!hydrated) return;
@@ -1513,7 +1518,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
       const r = await fetch('/api/weather', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destination: plan.destination, travelers: plan.travelers, days: lastParsed.durationDays ?? 3, month: lastParsed.month ?? 0, origin: lastParsed.origin ?? '', kids: lastParsed.kids ?? [], ...(lastParsed.routeOverride ? { routeOverride: lastParsed.routeOverride } : {}) }),
+        body: JSON.stringify({ destination: plan.destination, travelers: plan.travelers, days: tripDays(lastParsed.durationDays), month: lastParsed.month ?? 0, origin: lastParsed.origin ?? '', kids: lastParsed.kids ?? [], ...(lastParsed.routeOverride ? { routeOverride: lastParsed.routeOverride } : {}) }),
       });
       const j = (await r.json()) as WeatherResult;
       setWeatherCheck(j);
@@ -1647,7 +1652,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   const summaryRoute = useMemo(() => {
     if (!lastParsed?.destination) return '';
     const key = routeKeyForDestination(lastParsed.destination);
-    const days = lastParsed.durationDays ?? 14;
+    const days = tripDays(lastParsed.durationDays);
     try {
       if (lastParsed.routeOverride?.cities.length) {
         const stops = stopsForRoute(key, lastParsed.routeOverride);
@@ -2112,7 +2117,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                   card={mapCard}
                   destination={lastParsed.destination}
                   travelers={lastParsed.travelers}
-                  days={lastParsed.durationDays ?? 14}
+                  days={tripDays(lastParsed.durationDays)}
                   month={lastParsed.month ?? 0}
                   origin={lastParsed.origin ?? ''}
                   choice={choice}
@@ -3090,7 +3095,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
           destination={lastParsed.destination}
           routeLine={mapCard.stops.map((s) => s.city).join(' → ')}
           travelers={lastParsed.travelers}
-          days={lastParsed.durationDays ?? mapCard.days}
+          days={tripDays(lastParsed.durationDays)}
           datesLine={`${fmtDate(mapCard.startDate)}–${fmtDate(mapCard.endDate)}`}
           origin={lastParsed.origin ?? ''}
           contact={emergencyContact}
