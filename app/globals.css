@@ -68,6 +68,17 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
    in the display face, like Layla's hero line. Once the traveler
    replies it renders as a normal bubble again. */
 .msg .bubble.greeting{background:transparent;border:none;box-shadow:none;padding:0;max-width:100%;font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.02em}
+/* First screen (Nov 13): the S0 greeting is a short headline at
+   Layla scale — two lines, display face, much larger than body
+   text — not a paragraph. And on a wide screen the S0 chat column
+   and the messages box drop their card frames, so the headline sits
+   on the bare page and the input card below is the only box. On a
+   phone the column stays a card (bottom sheet). */
+.chatmap-s0 .msg .bubble.greeting{font-size:clamp(40px,4.6vw,60px);line-height:1.08}
+@media (min-width:901px){
+  .chatmap-s0 .chatcol{border:0;background:transparent;box-shadow:none}
+  .chatmap-s0 .chat{border:0;background:transparent;box-shadow:none;padding:16px 0}
+}
 /* Chips — quick replies (design #1, NN/g prompt controls): tappable
    answers under the input, 3–4 at a time, so the traveler never faces a
    blank box. They WRAP to two rows — the old one-row scroll hid the 4th

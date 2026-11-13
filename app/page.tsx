@@ -241,7 +241,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // The opening line — also the line a "New trip" resets to, so the
   // trip switcher and the plan view's "Start a new trip" restart the
   // conversation in exactly the same words.
-  const GREETING = 'Hi, I’m Fujin AI. Tell me where you want to go, for how many people — I’ll gather flights, hotels, cars and sightseeing into one plan, in Cheapest / Best value / Premium.';
+  const GREETING = 'Tell me where. I’ll plan the rest.';
   const [msgs, setMsgs] = useState<{ who: string; text: string; tips?: string[] }[]>([{ who: 'ai', text: GREETING }]);
   const [input, setInput] = useState('');
   // Chips fill, don't fire (Layla-dynamic round): a chip puts its full
@@ -2074,8 +2074,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           {/* One trust line under the input (design §2.2): the
               no-hidden-margin line used to repeat here, in the plan
               section and in the footer — it now lives once, near the
-              prices in the plan section and in the footer. */}
-          <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
+              prices in the plan section and in the footer. At S0 the
+              first screen ends after the chips, so the line waits for
+              a trip (first-screen rebuild, Nov 13). */}
+          {uiState !== 'S0' && <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>}
           {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: 'var(--muted)' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
           <p className="no-print" style={{ marginTop: 16 }}>
             {/* Progressive reveal (M4/S0 budget): "Build my plan" with

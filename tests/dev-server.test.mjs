@@ -311,8 +311,14 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   // under the chat input instead.
   assert.ok(!html.includes('class="tabs"'), 'the 8-tab bar is gone');
   assert.ok(html.includes('Prefer forms?'), 'the Prefer forms disclosure renders');
-  // The greeting is a headline, not a bubble (S0).
+  // The greeting is a headline, not a bubble (S0) — and since the
+  // first-screen rebuild it is a SHORT headline: two lines of promise,
+  // not a paragraph explaining the product, and the tiers leave the
+  // first screen entirely.
   assert.ok(html.includes('bubble greeting'), 'the S0 greeting renders as a headline');
+  assert.ok(html.includes('Tell me where. I’ll plan the rest.'), 'the S0 greeting is a short headline');
+  assert.ok(!html.includes('I’ll gather flights, hotels, cars'), 'the old paragraph greeting is gone');
+  assert.ok(!html.includes('Gathers everything into one plan'), 'the S0 tagline is gone from the first screen');
   // Templates are one click from the app: every library card on page 1
   // (12) plus the discovery panel (1) and the hidden gems (3) offer
   // "Make it yours".
