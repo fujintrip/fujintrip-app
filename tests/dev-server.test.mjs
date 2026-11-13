@@ -255,14 +255,16 @@ test('chat-first layout: full-bleed shell, app bar, wrapped chips, short placeho
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The chat section is full-bleed (chat-shell), not the 1080px .wrap;
   // the app bar is the top strip now — the slim hero was folded into
-  // it, so it no longer pushes the app down. The "Start planning" CTA
-  // is gone — the chat is right there.
+  // it, so it no longer pushes the app down. The old hero CTA is gone
+  // — but the chat's own send action reads "Start planning" at S0
+  // (first-screen rebuild, Nov 13), so the first screen still has
+  // one clear action.
   assert.ok(html.includes('chat-shell'), 'the chat shell is full-bleed');
   assert.ok(html.includes('appbar'), 'the app bar renders');
   assert.ok(!html.includes('hero-slim'), 'the slim hero is gone — folded into the app bar');
   assert.ok(html.includes('My Trips'), 'the My Trips switcher renders in the app bar');
   assert.ok(html.includes('panel chat-panel'), 'the chat panel drops the bordered card');
-  assert.ok(!html.includes('Start planning'), 'the hero CTA is gone — the chat is right there');
+  assert.ok(html.includes('Start planning'), 'the S0 send action reads Start planning');
   // Three starter chips (interface round M4) — the old fourth chip
   // ("Family of 4, $2,000") is gone; the chips wrap to two rows.
   for (const label of ['Central Europe in January', 'Warm beach in February', 'Surprise me']) {
@@ -348,7 +350,7 @@ test('interface round S0 busy budget: at most 10 interactive elements in the fir
   const interactive = shell.match(/<(button|input|select|textarea|a)([\s>])/g) || [];
   assert.ok(interactive.length <= 10, `S0 first viewport has ${interactive.length} interactive elements (budget 10): ${interactive.join(' ')}`);
   // And the one that must be there is.
-  assert.ok(shell.includes('Try: Bali, 2 travelers, surf and food'), 'the chat input is in the first viewport');
+  assert.ok(shell.includes('Start planning'), 'the Start planning action is in the first viewport');
   // "Prefer forms?" and "Start from a link" are NOT in the first
   // viewport — they live below the fold now — but they still exist on
   // the page, one scroll down.

@@ -2019,7 +2019,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
               In your plan so far: {chosenLegs.size} of {mapCard.legs.length} items · ${bundleTotal(bundle).toLocaleString()}
             </p>
           )}
-          <div className="row">
+          <div className="row hero-input">
             <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder={tripMode ? `On your trip in ${lastParsed?.destination ?? '…'} — ask anything…` : 'Try: Bali, 2 travelers, surf and food'} aria-label="Ask Fujin AI" />
             {/* While Fujin AI is thinking or streaming, Send becomes Stop:
                 the traveler can cut off a wrong or overlong answer instantly
@@ -2027,9 +2027,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             <button
               className="primary"
               onClick={() => ((thinking !== null || streamingText !== null) ? streamAbortRef.current?.abort() : send())}
-              aria-label={thinking !== null || streamingText !== null ? 'Stop generating' : 'Send'}
+              aria-label={thinking !== null || streamingText !== null ? 'Stop generating' : (uiState === 'S0' && !hasUserMsg ? 'Start planning' : 'Send')}
             >
-              {thinking !== null || streamingText !== null ? 'Stop' : 'Send'}
+              {thinking !== null || streamingText !== null ? 'Stop' : (uiState === 'S0' && !hasUserMsg ? 'Start planning →' : 'Send')}
             </button>
           </div>
           <div className="chips no-print" role="group" aria-label="Quick replies">

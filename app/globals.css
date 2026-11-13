@@ -385,6 +385,15 @@ html{scroll-padding-bottom:96px}
    Same width as the S0 chat column, centered. */
 .below-fold-tools{max-width:720px;margin:28px auto 0;padding:0 4px}
 
+/* Hero input (first-screen rebuild, Nov 13): at S0 the input is a
+   big soft card, not a pill row — taller field, larger type, a
+   prominent Start action, like Layla's input card. At S1/S2 the
+   chat is a narrow column and the input stays compact. */
+.chatmap-s0 .hero-input{flex-wrap:nowrap;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:8px;box-shadow:0 8px 28px rgba(0,0,0,.08)}
+.chatmap-s0 .hero-input:focus-within{border-color:var(--ink)}
+.chatmap-s0 .hero-input input{flex:1 1 auto;min-width:0;min-height:56px;font-size:17px;border:0;background:transparent}
+.chatmap-s0 .hero-input .primary{min-height:56px;padding:0 28px;font-size:16px;border-radius:14px;white-space:nowrap}
+
 /* Trip panel (app shell): the live itinerary — header with the running
    total, tier + travelers + month controls, then the timeline. The
    steppers are 36px touch targets; the move/remove buttons 32px. */
