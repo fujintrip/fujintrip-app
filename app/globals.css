@@ -606,3 +606,11 @@ html{scroll-padding-bottom:96px}
 .link-box p{color:var(--muted);margin:0 0 14px}
 .link-note{margin:12px 0 0;font-size:14px}
 @media(max-width:900px){.hero-ta{flex-direction:column;align-items:stretch;padding:40px 20px 28px}.hero-ta-photo{flex:none}}
+
+/* Hero search suggestions (TripAdvisor homepage, commit 4). */
+.hero-ta-searchbox{position:relative}
+.hero-suggestions{position:absolute;left:0;right:0;top:calc(100% + 6px);margin:0;padding:6px;list-style:none;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:20}
+.hero-suggestions li button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:none;border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--ink);font-family:inherit}
+.hero-suggestions li button strong{font-size:15px;font-weight:600}
+.hero-suggestions li button span{font-size:13px;color:var(--muted)}
+.hero-suggestions li.active button,.hero-suggestions li button:hover{background:var(--accent-soft)}

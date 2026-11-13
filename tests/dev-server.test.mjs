@@ -81,6 +81,9 @@ test('homepage hero: one question, one search box, 7 category actions, exactly o
   // was three; the chat itself is not on this page.
   assert.equal((html.match(/Ask Fujin AI/g) || []).length, 1, 'exactly one Ask Fujin AI');
   assert.ok(html.includes('href="/chat"'), 'the AI entry point leads to /chat');
+  // The search box is a combobox: typing offers known destinations.
+  assert.ok(html.includes('role="combobox"'), 'hero search is a combobox');
+  assert.ok(html.includes('aria-controls="hero-suggestions"'), 'hero search controls the suggestions list');
   // The chat shell, panel and map live on /chat only.
   assert.ok(!html.includes('fujin-chat'), 'no chat panel on the homepage');
   assert.ok(!html.includes('chat-shell'), 'no chat shell on the homepage');

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS, TABS, type Tab } from '../lib/data';
@@ -7,6 +7,7 @@ import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type Discover
 import { buildPlan, comparisonFor, MONTH_NAMES } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
 import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
+import { heroSuggestions, seedForDestination, type HeroSuggestion } from '../lib/heroSearch';
 import { appendObservation, trendLine } from '../lib/duffel';
 import { DIETARY_OPTIONS, parseProfile, profileSummary, type TravelerProfile } from '../lib/preferences';
 import { useTheme } from '../lib/theme';
@@ -204,6 +205,44 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
   // A typed destination rides to /chat as a pending message; a
   // suggestion pick (commit 4) seeds the trip directly instead.
   const [heroInput, setHeroInput] = useState('');
+  // Hero suggestions (commit 4): the dropdown over the places
+  // FujinTrip already knows. Picking one seeds /chat with the
+  // route; Enter with no pick sends the typed text as a message.
+  const [heroOpen, setHeroOpen] = useState(false);
+  const [heroActive, setHeroActive] = useState(-1);
+  const heroBoxRef = useRef<HTMLDivElement>(null);
+  const suggestions = useMemo(() => heroSuggestions(heroInput), [heroInput]);
+  const pickSuggestion = (s: HeroSuggestion) => {
+    const seed = seedForDestination(s.name) ?? { destination: s.name, cities: s.cities };
+    setHeroOpen(false);
+    seedChat(seed.destination, undefined, seed.cities);
+  };
+  const heroKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown' && suggestions.length) {
+      e.preventDefault();
+      setHeroOpen(true);
+      setHeroActive((a) => (a + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp' && suggestions.length) {
+      e.preventDefault();
+      setHeroOpen(true);
+      setHeroActive((a) => (a <= 0 ? suggestions.length - 1 : a - 1));
+    } else if (e.key === 'Escape') {
+      setHeroOpen(false);
+      setHeroActive(-1);
+    } else if (e.key === 'Enter' && heroActive >= 0 && suggestions[heroActive]) {
+      e.preventDefault();
+      pickSuggestion(suggestions[heroActive]);
+    }
+  };
+  // Close the suggestions when the traveler clicks elsewhere.
+  useEffect(() => {
+    if (!heroOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (heroBoxRef.current && !heroBoxRef.current.contains(e.target as Node)) setHeroOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [heroOpen]);
   const [homeFormTab, setHomeFormTab] = useState<Tab>('Flights');
   const [homeLinkInput, setHomeLinkInput] = useState('');
   const [homeLinkBusy, setHomeLinkBusy] = useState(false);
@@ -252,10 +291,10 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
   // The chat lives on /chat now — a template, pin or shared link hands
   // its seed over through localStorage and navigates there. Same seed
   // shape the chat already understands: destination + ordered cities.
-  const seedChat = (name: string, sourceTips?: Record<string, string>) => {
+  const seedChat = (name: string, sourceTips?: Record<string, string>, cities?: string[]) => {
     const info = cardInfo[name];
     try {
-      localStorage.setItem(CHAT_SEED_KEY, JSON.stringify({ destination: name, cities: info?.cities ?? [name], ...(sourceTips ? { sourceTips } : {}) }));
+      localStorage.setItem(CHAT_SEED_KEY, JSON.stringify({ destination: name, cities: cities ?? info?.cities ?? [name], ...(sourceTips ? { sourceTips } : {}) }));
     } catch {}
     router.push('/chat');
   };
@@ -471,10 +510,24 @@ export default function FujinApp({ variant }: { variant: 'home' | 'chat' }) {
           <div className="hero-ta-copy">
             <h1>Where to?</h1>
             <p className="hero-ta-sub">One trip, one plan — flights, stays, cars and sightseeing gathered for you.</p>
-            <form className="hero-ta-search" onSubmit={(e) => { e.preventDefault(); submitHeroSearch(); }}>
-              <input value={heroInput} onChange={(e) => setHeroInput(e.target.value)} placeholder="Places to go, things to do, hotels…" aria-label="Where to?" autoComplete="off" />
-              <button type="submit" className="primary">Search</button>
-            </form>
+            <div className="hero-ta-searchbox" ref={heroBoxRef}>
+              <form className="hero-ta-search" role="search" onSubmit={(e) => { e.preventDefault(); submitHeroSearch(); }}>
+                <input value={heroInput} onChange={(e) => { setHeroInput(e.target.value); setHeroOpen(true); setHeroActive(-1); }} onFocus={() => setHeroOpen(true)} onKeyDown={heroKeyDown} placeholder="Places to go, things to do, hotels…" aria-label="Where to?" autoComplete="off" role="combobox" aria-expanded={heroOpen && suggestions.length > 0} aria-controls="hero-suggestions" aria-activedescendant={heroActive >= 0 && suggestions[heroActive] ? `hero-sugg-${heroActive}` : undefined} />
+                <button type="submit" className="primary">Search</button>
+              </form>
+              {heroOpen && suggestions.length > 0 && (
+                <ul className="hero-suggestions" id="hero-suggestions" role="listbox" aria-label="Destinations">
+                  {suggestions.map((s, i) => (
+                    <li key={s.name} id={`hero-sugg-${i}`} role="option" aria-selected={i === heroActive} className={i === heroActive ? 'active' : undefined}>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }} onMouseEnter={() => setHeroActive(i)}>
+                        <strong>{s.name}</strong>
+                        <span>{s.detail}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <div className="category-row" role="group" aria-label="Book something directly">
               {CATEGORY_ACTIONS.map((c) => (
                 <button key={c.tab} type="button" className="chip category-btn" onClick={() => openBookingCategory(c.tab)}>
