@@ -2336,7 +2336,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     className="plan-row"
                     summary={
                       <>
-                        <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{si === 0 && (displayCard ?? tripCard).flight.out.live ? `(Duffel test fare — ${(displayCard ?? tripCard).flight.out.airline})` : '(estimate)'}</span>
+                        {stop.transportIn.mode} · {fmtDate(stop.startDate)} · {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{si === 0 && (displayCard ?? tripCard).flight.out.live ? `(Duffel test fare — ${(displayCard ?? tripCard).flight.out.airline})` : '(estimate)'}</span>
                       </>
                     }
                   >
@@ -2369,7 +2369,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                     className="plan-row"
                     summary={
                       <>
-                        <b>Stay:</b> {stop.nights} night{stop.nights > 1 ? 's' : ''} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()} <span style={{ color: 'var(--muted)' }}>(planning estimate)</span>
+                        Stay from ${stop.stayEstimate.toLocaleString()} · {stop.nights} night{stop.nights > 1 ? 's' : ''} <span style={{ color: 'var(--muted)' }}>(planning estimate)</span>
                       </>
                     }
                   >
@@ -2387,7 +2387,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       className="plan-row plan-day"
                       summary={
                         <>
-                          Day {d.day} · {fmtDate(d.date)}{d.weatherF ? ` · ${d.weatherF}°F typical` : ''} · {d.experiences} experiences — {d.title}
+                          Day {d.day} · {fmtDate(d.date)} · {d.experiences} experiences — {d.title}
                           {swappedDays.get(`${stop.city}|${d.day}`) ? ` ↔ swapped with Day ${swappedDays.get(`${stop.city}|${d.day}`)}` : ''}
                         </>
                       }
@@ -2512,7 +2512,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                 className="plan-section"
                 summary={
                   <>
-                    <b>Depart:</b> ✈️ Flight {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{tripCard.flight.back.live ? `(Duffel test fare — ${tripCard.flight.back.airline})` : '(estimate)'}</span>
+                    {tripCard.returnTransport.mode} · {fmtDate(tripCard.endDate)} · {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{tripCard.flight.back.live ? `(Duffel test fare — ${tripCard.flight.back.airline})` : '(estimate)'}</span>
                   </>
                 }
               >

@@ -274,7 +274,7 @@ export default function TripPanel({
                 {si < stops.length - 1 && stops[si + 1] && (
                   <>
                     <p className="panel-transport">
-                      {stops[si + 1].transportIn.mode} {stops[si + 1].transportIn.from} → {stops[si + 1].city} · {fmtDate(stops[si + 1].startDate)} · from $
+                      {stops[si + 1].transportIn.mode} · {fmtDate(stops[si + 1].startDate)} · {stops[si + 1].transportIn.from} → {stops[si + 1].city} · from $
                       {stops[si + 1].transportIn.price.toLocaleString()}
                     </p>
                     <Expandable className="panel-transport-detail" summary={<>How to book</>}>
@@ -285,7 +285,7 @@ export default function TripPanel({
                 {si === stops.length - 1 && card.returnTransport && (
                   <>
                     <p className="panel-transport">
-                      {card.returnTransport.mode} {card.returnTransport.from} → home · from ${card.returnTransport.price.toLocaleString()}
+                      {card.returnTransport.mode} · {fmtDate(card.endDate)} · {card.returnTransport.from} → home · from ${card.returnTransport.price.toLocaleString()}
                       {card.flight.back.live ? ` · Duffel test fare — ${card.flight.back.airline}` : ''}
                     </p>
                     <Expandable className="panel-transport-detail" summary={<>How to book</>}>
