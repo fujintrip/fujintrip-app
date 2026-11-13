@@ -1,7 +1,9 @@
 /* FujinTrip — modern, Layla-like. White, near-black type, one warm
-   accent, soft gray surfaces, system sans (like Layla: no display
-   serif, no gold leaf). Rounded cards, pill buttons, generous space. */
-:root{--ink:#0f0f0f;--muted:#666;--line:#e8e8e6;--line-soft:#f0f0ee;--surface:#f7f7f5;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#1f7a4d;--success-soft:#e9f5ee;--danger:#b3261e;--danger-soft:#fdecea}
+   accent, soft gray surfaces. Type (interface round): Bricolage
+   Grotesque display, Inter body, JetBrains Mono for prices you
+   compare — self-hosted via next/font/google, system stack fallback.
+   Rounded cards, pill buttons, generous space. */
+:root{--ink:#0f0f0f;--muted:#666;--line:#e8e8e6;--line-soft:#f0f0ee;--surface:#f7f7f5;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#1f7a4d;--success-soft:#e9f5ee;--danger:#b3261e;--danger-soft:#fdecea;--font-display:'Bricolage Grotesque';--font-body:'Inter';--font-mono:'JetBrains Mono'}
    /* Accent split by use: --accent (#ea580c) is display-only (logo dot, big
       totals) — white on it is 3.56:1 and fails AA for small text. Small
       text and filled tags use --accent-text (#c2410c): white on it is
@@ -9,13 +11,13 @@
       is 7.31:1 on white (AAA). Retired: --faint #a1a1a1 (2.58:1, unused)
       — never text. */
 *{box-sizing:border-box}
-body{margin:0;background:#fff;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6}
-h1,h2,h3{font-weight:700;line-height:1.15;margin:0;letter-spacing:-.02em}
+body{margin:0;background:#fff;color:var(--ink);font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6}
+h1,h2,h3{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:700;line-height:1.15;margin:0;letter-spacing:-.02em}
 a{color:var(--ink)}
 .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
 header{border-bottom:1px solid var(--line);background:#fff}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 24px}
-.logo{font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.logo{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
 .logo span{color:var(--accent)}
 .tag{font-size:13px;color:var(--muted)}
 .hero{padding:64px 0 32px;text-align:center}
@@ -43,6 +45,11 @@ header{border-bottom:1px solid var(--line);background:#fff}
 .msg{margin:10px 0;font-size:15px}
 .msg.user{text-align:right}
 .msg .bubble{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+/* S0 greeting headline (interface round §5): before the traveler has
+   typed, the greeting is not a bubble — it is the headline, bare text
+   in the display face, like Layla's hero line. Once the traveler
+   replies it renders as a normal bubble again. */
+.msg .bubble.greeting{background:transparent;border:none;box-shadow:none;padding:0;max-width:100%;font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.02em}
 /* Chips — quick replies (design #1, NN/g prompt controls): tappable
    answers under the input, 3–4 at a time, so the traveler never faces a
    blank box. They WRAP to two rows — the old one-row scroll hid the 4th
@@ -78,7 +85,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .msg{animation:msg-in 200ms var(--ease)}
 /* Price tags on the map (Leaflet divIcon inner div): scale on hover so
    the most-tapped surface in the product feels alive. */
-.fujin-price-tag div{transition:transform var(--dur) var(--ease)}
+.fujin-price-tag div{transition:transform var(--dur) var(--ease);font-family:var(--font-mono,'JetBrains Mono'),ui-monospace,monospace;font-weight:600}
 .fujin-price-tag div:hover{transform:scale(1.06)}
 /* Typing indicator dots (design #2): three dots bounce in sequence while
    Fujin AI works. */
@@ -117,7 +124,7 @@ button.ghost{background:#fff;border:1px solid #d9d9d6;color:var(--ink);border-ra
 .card summary{cursor:pointer;font-weight:600}
 /* Graceful image fallback: soft gray with the destination name instead
    of a broken-image icon. */
-.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-size:22px;font-weight:700;text-align:center;padding:16px}
+.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;text-align:center;padding:16px}
 .card .img-fallback{height:180px;width:100%}
 .img-fallback.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.15);margin:0 auto 18px;font-size:26px}
 /* Loading state for images (design #9): a warm shimmer tile with the
@@ -131,7 +138,7 @@ button.ghost{background:#fff;border:1px solid #d9d9d6;color:var(--ink);border-ra
 .map-skeleton{height:100%;min-height:320px;display:flex;flex-direction:column;gap:12px}
 .card .body h3{font-size:20px}
 .card .body p{font-size:14px;color:var(--muted)}
-.price{font-weight:700;color:var(--ink)}
+.price{font-family:var(--font-mono,'JetBrains Mono'),ui-monospace,monospace;font-weight:600;color:var(--ink)}
 .pill{display:inline-block;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:8px}
 section{padding:28px 0}
 section h2{font-size:28px;margin-bottom:8px}
@@ -147,7 +154,7 @@ section .sub{color:var(--muted);margin:0 0 20px}
 .compare .box.tier:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .tier-check{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
 .tier-badge{display:inline-block;background:var(--ink);color:#fff;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
-.tier-price{font-size:26px;margin:8px 0;font-weight:700;font-variant-numeric:tabular-nums}
+.tier-price{font-family:var(--font-mono,'JetBrains Mono'),ui-monospace,monospace;font-size:26px;margin:8px 0;font-weight:600;font-variant-numeric:tabular-nums}
 /* Plan card on the tokens (design §2.2): the plan markup bypassed the
    design system with dozens of inline font sizes, hex colors and
    margins. The repeated patterns now live here as classes — a value
@@ -202,7 +209,7 @@ footer{border-top:1px solid var(--line);padding:32px 0 48px;color:var(--muted);f
 html{scroll-padding-bottom:96px}
 .stickybar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,255,255,.96);border-top:1px solid var(--line);padding:10px 16px;box-shadow:0 -4px 20px rgba(0,0,0,.08)}
 .stickybar .total{font-size:14px;color:var(--muted)}
-.stickybar .total strong{font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+.stickybar .total strong{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .stickybar button{min-height:48px}
 @media(min-width:901px){.stickybar{left:auto;right:24px;bottom:24px;width:auto;border:1px solid var(--line);border-radius:999px;padding:8px 8px 8px 20px;box-shadow:0 8px 28px rgba(0,0,0,.14)}}
 
@@ -210,7 +217,7 @@ html{scroll-padding-bottom:96px}
    edit, pinned above the chat messages. A tapped line asks Fujin AI to
    change that slot; the tier row switches the plan tier. */
 .tripsummary{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;background:#fff;flex:0 0 auto}
-.tripsummary-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.tripsummary-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
 .tripsummary-line{display:flex;gap:8px;width:100%;text-align:left;background:none;border:none;padding:6px 4px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;border-radius:8px}
 .tripsummary-line:hover{background:var(--surface)}
 .tripsummary-line:disabled{cursor:default;opacity:.6}
@@ -231,12 +238,12 @@ html{scroll-padding-bottom:96px}
 .appbar-brand{display:flex;align-items:center;gap:10px;min-width:0}
 .appbar-brand .fujin-portrait{width:32px;height:32px;margin:0;flex:0 0 auto}
 .appbar-brand .img-fallback.fujin-portrait{width:32px;height:32px;margin:0;font-size:16px}
-.appbar-title{font-size:18px;margin:0;white-space:nowrap}
+.appbar-title{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:20px;font-weight:800;margin:0;white-space:nowrap}
 .appbar-tag{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .appbar-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
 .appbar-trips{white-space:nowrap}
 .appbar-total{font-size:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
-.appbar-total strong{font-size:18px;color:var(--ink)}
+.appbar-total strong{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;color:var(--ink)}
 .appbar-book{min-height:44px}
 .mytrips-menu{position:relative}
 .menu-backdrop{position:fixed;inset:0;background:transparent;border:none;cursor:default;z-index:59;padding:0}
@@ -322,7 +329,7 @@ html{scroll-padding-bottom:96px}
 .trippanel-title{font-size:18px;margin:0}
 .trippanel-sub{font-size:13px;color:var(--muted);margin:4px 0 0}
 .trippanel-total{text-align:right;flex:0 0 auto}
-.trippanel-total strong{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.trippanel-total strong{display:block;font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
 .trippanel-total span{font-size:12px;color:var(--muted)}
 .panel-tier{display:flex;gap:6px;margin-bottom:12px}
 .panel-tier-btn{flex:1;border:1px solid #d9d9d6;background:#fff;border-radius:999px;padding:8px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:40px}
