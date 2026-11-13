@@ -388,6 +388,30 @@ test('fujin: a multi-stop trip carries per-city voices (round 3 #1)', async () =
   }
 });
 
+test('fujin: a tight passport expiry warns on the Europe Trip Summary (round 3 #5)', async () => {
+  // The trip returns 2027-01-18 (first Monday of January 2027 + 14
+  // days); a passport expiring March 2027 is only ~2 months past the
+  // return, so the Schengen 3-month rule fails — the fallback reply
+  // must carry the warning on the Trip Summary, and must never ask
+  // for the passport number. The message is a fresh trip (no
+  // tripState destination): with an established trip, a budget mention
+  // is a budget REVISION and the reply is the budget fit, not the
+  // Trip Summary — so the expiry rides in tripState alone.
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Central Europe in January for 14 days, flying from New York, budget $2000',
+      tripState: { passportExpiry: { month: 3, year: 2027 } },
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(j.reply.includes('Passport check'), 'the warning is on the reply');
+  assert.ok(j.reply.includes('denied boarding'), 'the consequence is named');
+  assert.ok(!j.reply.toLowerCase().includes('passport number'), 'never asks for the number');
+});
+
 test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and motion CSS are served', async () => {
   // SSR-visible markers only — the plan view's expandable rows and the
   // map dialog render client-side (after "Build my plan"), so they are

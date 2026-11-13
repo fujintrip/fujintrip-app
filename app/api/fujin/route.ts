@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type RouteOverride } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, MONTH_NAMES, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, fetchLocalVoicesForCities, formatCityVoices, type CityVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from '../../../lib/food';
@@ -7,7 +7,8 @@ import { bestTimeLine } from '../../../lib/bestTime';
 import { disruptionTemplate, type DisruptionStatus } from '../../../lib/disruption';
 import { visaLine } from '../../../lib/visa';
 import { dietaryBlock, parseProfile, preferencesBlock, DIETARY_LABELS, type Dietary } from '../../../lib/preferences';
-import { buildTripCard, suggestedStart } from '../../../lib/tripCard';
+import { checkPassportValidity, parsePassportExpiryValue, passportWarningLine } from '../../../lib/passport';
+import { buildTripCard, CITY_INFO, suggestedStart } from '../../../lib/tripCard';
 import { checkTripWeather, swapLine, weatherBlock, type WeatherCheck } from '../../../lib/daySwap';
 
 /**
@@ -179,7 +180,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
 // with voices, fares, trend and food appended) — the atomic path wraps it
 // in NextResponse.json, and the streaming path sends the same payload as
 // the final `done` event after chunking its reply text.
-function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[], dietary?: Dietary) {
+function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[], dietary?: Dietary, passportWarning?: string) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -227,6 +228,11 @@ function fallbackPayload(message: string, label: string, voices?: LocalVoices, v
   if (destination && reply.includes('Here is your trip —')) {
     const v = visaLine(destination);
     if (v) reply += `\n\n${v}`;
+  }
+  // Passport warning (round 3 #5), on the Trip Summary only — the
+  // check needs the destination and the dates, which the summary has.
+  if (destination && reply.includes('Here is your trip —') && passportWarning) {
+    reply += `\n\n${passportWarning}`;
   }
   // Even when the live model is down, fresh traveler material still helps —
   // but never on a decline, where it would read as an answer, and never on
@@ -550,6 +556,22 @@ export async function POST(req: NextRequest) {
     cityList.length >= 2
       ? fetchLocalVoicesForCities(cityList).catch(() => [] as CityVoices[])
       : Promise.resolve([] as CityVoices[]);
+  // Passport-validity check (round 3 #5): expiry month/year only
+  // (never the number) from tripState, against each route country's
+  // verified rule, on the trip's return date. Needs the destination
+  // and the dates — without them there is nothing to check, and the
+  // model is told nothing.
+  const passportExpiry = parsePassportExpiryValue(tripState.passportExpiry);
+  const passportCountries: string[] = cityRouteKey
+    ? stopsForRoute(cityRouteKey, stateRouteOverride).map((s) => s.country)
+    : voicesDest && CITY_INFO[voicesDest]
+      ? [CITY_INFO[voicesDest].country]
+      : [];
+  const passportChecks =
+    passportExpiry && returnDate && passportCountries.length
+      ? checkPassportValidity(passportExpiry, returnDate, passportCountries)
+      : [];
+  const passportWarning = passportWarningLine(passportChecks);
   const [voices, liveFares, food, weather, cityVoices] = await Promise.all([voicesPromise, faresPromise, foodPromise, weatherPromise, cityVoicesPromise]);
 
   // System prompt for this request: base prompt + fresh traveler material
@@ -605,6 +627,14 @@ export async function POST(req: NextRequest) {
   // unexplained, never an unverified "safe" label.
   if (stateTravelers === 1) {
     systemPrompt += ` SOLO — this trip is for 1 traveler. ${soloLine()} Never label any place safe or unsafe without verified data.`;
+  }
+  // Passport validity (round 3 #5): the warning is computed from the
+  // verified rules, never guessed by the model — it states the warning
+  // and the renewal action. No ETA/ETIAS/EES dates are stated here:
+  // the VISA block carries the verified ETIAS/EES notes, and anything
+  // unverified is "check before you go".
+  if (passportWarning && passportExpiry) {
+    systemPrompt += ` PASSPORT — ${passportWarning} The traveler's passport expires ${MONTH_NAMES[passportExpiry.month - 1]} ${passportExpiry.year} (month/year only — the passport number is never asked for or stored). State the warning above and the renewal action; never invent a validity rule.`;
   }
   // Nights per city, from the planner's distribution — injected so the
   // live model never re-splits the route: on the live site turn 5 gave
@@ -744,7 +774,7 @@ export async function POST(req: NextRequest) {
               food,
               checkedStatus,
               weather,
-              cityVoices, statePreferences.dietary
+              cityVoices, statePreferences.dietary, passportWarning
             );
             // Chunk the reply at word boundaries so the client renders
             // flowing text, not characters.
@@ -879,7 +909,7 @@ export async function POST(req: NextRequest) {
       food,
       checkedStatus,
       weather,
-      cityVoices, statePreferences.dietary
+      cityVoices, statePreferences.dietary, passportWarning
     );
   }
   const apiKey = provider.apiKey;
@@ -933,14 +963,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning);
     }
 
     return NextResponse.json({
@@ -955,7 +985,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning);
   }
 }
 

@@ -15,6 +15,7 @@ import { appendObservation, parseLiveFares, trendLine, type LiveFares, type Tren
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
+import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePassportExpiryValue, passportWarningLine, schengenRemaining, type PassportCheck } from '../lib/passport';
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -239,7 +240,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   const inputRef = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [choice, setChoice] = useState(1);
-  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string> } | null>(null);
+  const [lastParsed, setLastParsed] = useState<{ destination: string; travelers: number; origin?: string; month?: number; durationDays?: number; routeKey?: string; kids?: number[]; routeOverride?: RouteOverride; sourceTips?: Record<string, string>; passportExpiry?: { month: number; year: number } } | null>(null);
   const [aiLive, setAiLive] = useState<boolean | null>(null);
   // Typing indicator + streaming (design #2): the send is followed by
   // ~3.4s of silence today. The indicator shows within 200ms of Send;
@@ -473,7 +474,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     try {
       const t = localStorage.getItem('fujintrip-current-trip');
       if (t) {
-        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown; routeOverride?: unknown; sourceTips?: unknown };
+        const p = JSON.parse(t) as { destination?: unknown; travelers?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown; routeKey?: unknown; kids?: unknown; routeOverride?: unknown; sourceTips?: unknown; passportExpiry?: unknown };
         if (typeof p.destination === 'string' && typeof p.travelers === 'number') {
           // Restore the revised route (if any) — same validation as the
           // server reply, so a stale or corrupt value never breaks the page.
@@ -500,6 +501,9 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             );
             return Object.keys(tips).length ? tips : undefined;
           })();
+          // Restore the passport expiry (round 3 #5) — month/year only,
+          // validated; a corrupt or foreign value is dropped.
+          const restoredExpiry = parsePassportExpiryValue(p.passportExpiry);
           setLastParsed({
             destination: p.destination,
             travelers: p.travelers,
@@ -510,6 +514,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             ...(Array.isArray(p.kids) ? { kids: p.kids.filter((k): k is number => typeof k === 'number' && k >= 0 && k <= 17).slice(0, 6) } : {}),
             ...(restoredOverride ? { routeOverride: restoredOverride } : {}),
             ...(restoredSourceTips ? { sourceTips: restoredSourceTips } : {}),
+            ...(restoredExpiry ? { passportExpiry: restoredExpiry } : {}),
           });
           onParsed?.({ destination: p.destination, travelers: p.travelers });
           // Restore the bundle (round 2 #7): only when the saved bundle
@@ -682,6 +687,13 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     if (!hasSignals) profileLineRef.current = profileLine(profile);
     const profileForRequest = hasSignals ? mergeProfile(profile, signals) : profile;
     if (hasSignals) onProfileChange(profileForRequest);
+    // Passport expiry (round 3 #5): month/year only, from the
+    // traveler's own words ("my passport expires in March 2027") —
+    // never the number. It rides along in tripState and persists on
+    // the trip so the panel can check it against the return date.
+    const expiryFromMsg = parsePassportExpiry(text);
+    const passportExpiry = expiryFromMsg ?? lastParsed?.passportExpiry;
+    if (expiryFromMsg) setLastParsed((p) => (p ? { ...p, passportExpiry: expiryFromMsg } : p));
     // The price watch for this trip, if one exists — its own past checks
     // ride along in tripState so the trend read is from real checks.
     const tripWatch = lastParsed ? watchFor(lastParsed.destination, lastParsed.travelers, lastParsed.origin ?? '', lastParsed.month ?? 0, lastParsed.durationDays ?? 0) : undefined;
@@ -703,10 +715,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       // along, so the first reply already honors what the traveler
       // told us (an empty destination in tripState is ignored).
       ...(lastParsed
-        ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(profileSummary(profileForRequest) ? { preferences: profileForRequest } : {}), ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } }
+        ? { tripState: { ...lastParsed, ...(origin ? { origin } : {}), tier: choice, ...(profileSummary(profileForRequest) ? { preferences: profileForRequest } : {}), ...(passportExpiry ? { passportExpiry } : {}), ...(tripWatch && tripWatch.history.length ? { priceHistory: tripWatch.history } : {}) } }
         : profileSummary(profileForRequest)
           ? { tripState: { destination: '', travelers: 2, preferences: profileForRequest } }
-          : {}),
+          : passportExpiry
+            ? { tripState: { destination: '', travelers: 2, passportExpiry } }
+            : {}),
       // On-trip mode: tell the server the traveler is already there.
       ...(tripMode && lastParsed ? { tripContext: lastParsed.destination } : {}),
       // Disruption report: the checked flight status rides along so
@@ -1400,6 +1414,44 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     () => (tripCard && weatherCheck && weatherCheck !== 'loading' && weatherCheck.swaps.length ? applySwaps(tripCard, weatherCheck.swaps) : tripCard),
     [tripCard, weatherCheck]
   );
+  // Passport-validity check + Schengen 90/180 counter (round 3 #5,
+  // Sherpa/IATA, Staywise): expiry month/year only (never the number),
+  // checked against each route country's verified rule on the trip's
+  // return date. The Schengen counter is "you've used X of 90 days" in
+  // the last 180 days, minus this trip's Schengen days.
+  const passportChecks: PassportCheck[] = useMemo(
+    () => {
+      const expiry = lastParsed?.passportExpiry;
+      const card = displayCard ?? tripCard;
+      if (!expiry || !card) return [];
+      return checkPassportValidity(expiry, card.endDate, card.stops.map((s) => s.country));
+    },
+    [lastParsed, tripCard, displayCard]
+  );
+  const passportWarn = passportWarningLine(passportChecks);
+  const schengenStops = useMemo(
+    () => (displayCard ?? tripCard)?.stops.filter((s) => isSchengenCountry(s.country)) ?? [],
+    [tripCard, displayCard]
+  );
+  const schengenTripDays = useMemo(() => {
+    const card = displayCard ?? tripCard;
+    if (!card || !schengenStops.length) return 0;
+    const nights = schengenStops.reduce((a, s) => a + s.nights, 0);
+    // Nights at Schengen stops + the departure day when the trip ends
+    // in Schengen (a 13-night all-Schengen trip is 14 days in Schengen).
+    return nights + (isSchengenCountry(card.stops[card.stops.length - 1].country) ? 1 : 0);
+  }, [tripCard, displayCard, schengenStops]);
+  const [schengenUsed, setSchengenUsed] = useState(0);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-schengen-used');
+      if (raw !== null) setSchengenUsed(Math.min(90, Math.max(0, Number(raw) || 0)));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem('fujintrip-schengen-used', String(schengenUsed)); } catch {}
+  }, [schengenUsed]);
+  const schengen = schengenRemaining(schengenUsed, schengenTripDays);
   // Swapped-day tags: "city|day" -> the day it swapped with.
   const swappedDays = useMemo(() => {
     const m = new Map<string, number>();
@@ -2357,6 +2409,50 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                       </p>
                     </div>
                   ))}
+                  {/* Passport-validity check + Schengen 90/180 counter
+                      (round 3 #5): expiry month/year only — never the
+                      number, never stored anywhere else. The check runs
+                      against each route country's verified rule on the
+                      trip's return date. */}
+                  <div style={{ borderTop: '1px solid var(--line-soft)', padding: '10px 0' }}>
+                    <strong style={{ fontSize: 14 }}>Passport validity check</strong>
+                    <p className="plan-line">When does your passport expire? Month and year only — never the passport number.</p>
+                    <div className="row" style={{ flexWrap: 'wrap' }}>
+                      <select aria-label="Passport expiry month" value={lastParsed?.passportExpiry?.month ?? ''} onChange={(e) => { const m = Number(e.target.value); setLastParsed((p) => (p ? { ...p, ...(m ? { passportExpiry: { month: m, year: p.passportExpiry?.year ?? new Date().getFullYear() + 1 } } : { passportExpiry: undefined } ) } : p)); }}>
+                        <option value="">Month</option>
+                        {MONTH_NAMES.map((n, i) => (<option key={n} value={i + 1}>{n}</option>))}
+                      </select>
+                      <select aria-label="Passport expiry year" value={lastParsed?.passportExpiry?.year ?? ''} onChange={(e) => { const y = Number(e.target.value); setLastParsed((p) => (p ? { ...p, ...(y ? { passportExpiry: { month: p.passportExpiry?.month ?? 1, year: y } } : { passportExpiry: undefined } ) } : p)); }}>
+                        <option value="">Year</option>
+                        {Array.from({ length: 15 }, (_, i) => new Date().getFullYear() + i).map((y) => (<option key={y} value={y}>{y}</option>))}
+                      </select>
+                    </div>
+                    {lastParsed?.passportExpiry && passportChecks.length > 0 && (
+                      <>
+                        {passportWarn ? (
+                          <p className="plan-line" style={{ color: 'var(--accent-text)', fontWeight: 600 }}>{passportWarn}</p>
+                        ) : (
+                          <p className="plan-line">Your passport is valid for every country on this trip, with margin. {passportChecks.map((c) => c.note).filter(Boolean).join(' ')}</p>
+                        )}
+                        {passportChecks.filter((c) => c.status === 'unknown').map((c) => (
+                          <p key={c.country} className="plan-line">No verified validity rule for {c.country} — check before you go.</p>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                  {schengenStops.length > 0 && (
+                    <div style={{ borderTop: '1px solid var(--line-soft)', padding: '10px 0' }}>
+                      <strong style={{ fontSize: 14 }}>Schengen 90/180 counter</strong>
+                      <p className="plan-line">US citizens can spend 90 days in Schengen in any 180-day period, counted across all Schengen countries together. This trip spends about {schengenTripDays} day{schengenTripDays === 1 ? '' : 's'} in Schengen.</p>
+                      <label style={{ fontSize: 14 }}>
+                        Days you&apos;ve already used in Schengen in the last 180 days:{' '}
+                        <input type="number" min={0} max={90} value={schengenUsed} onChange={(e) => setSchengenUsed(Math.min(90, Math.max(0, Number(e.target.value) || 0)))} aria-label="Schengen days already used" style={{ width: 72 }} />
+                      </label>
+                      <p className="plan-line">
+                        You&apos;ve used {schengen.used} of 90 days{schengen.trip ? `, this trip takes ${schengen.trip} more` : ''} — <strong>{schengen.over ? `over by ${-schengen.remaining} day${schengen.remaining === -1 ? '' : 's'} — shorten the trip or shift it` : `${schengen.remaining} day${schengen.remaining === 1 ? '' : 's'} left after this trip`}</strong>.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               {/* Solo mode (round 3 #4): the supplement named, the
