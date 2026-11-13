@@ -255,52 +255,115 @@ test('chat-first layout: full-bleed shell, app bar, wrapped chips, short placeho
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The chat section is full-bleed (chat-shell), not the 1080px .wrap;
   // the app bar is the top strip now — the slim hero was folded into
-  // it (portrait + one-line tagline), so it no longer pushes the app
-  // down. The "Start planning" CTA is gone — the chat is right there.
+  // it, so it no longer pushes the app down. The "Start planning" CTA
+  // is gone — the chat is right there.
   assert.ok(html.includes('chat-shell'), 'the chat shell is full-bleed');
   assert.ok(html.includes('appbar'), 'the app bar renders');
   assert.ok(!html.includes('hero-slim'), 'the slim hero is gone — folded into the app bar');
   assert.ok(html.includes('My Trips'), 'the My Trips switcher renders in the app bar');
-  assert.ok(html.includes('panel chat-panel'), 'the chat tab drops the bordered card');
+  assert.ok(html.includes('panel chat-panel'), 'the chat panel drops the bordered card');
   assert.ok(!html.includes('Start planning'), 'the hero CTA is gone — the chat is right there');
-  // All four starter chips render (they wrap to two rows now — the old
-  // one-row scroll clipped "Surprise me").
-  for (const label of ['Central Europe in January', 'Warm beach in February', 'Family of 4, $2,000', 'Surprise me']) {
+  // Three starter chips (interface round M4) — the old fourth chip
+  // ("Family of 4, $2,000") is gone; the chips wrap to two rows.
+  for (const label of ['Central Europe in January', 'Warm beach in February', 'Surprise me']) {
     assert.ok(html.includes(label), `starter chip "${label}" renders`);
   }
+  assert.ok(!html.includes('Family of 4, $2,000'), 'the fourth starter chip is gone');
   // Short placeholders — the old ones were cut off by the Send button.
   assert.ok(html.includes('Try: Bali, 2 travelers, surf and food'), 'the chat placeholder is short');
   assert.ok(html.includes('Paste a link or article text'), 'the link placeholder is short');
   assert.ok(!html.includes('next spring, $2,000'), 'the old long placeholder is gone');
-  // The empty map placeholder renders with its heading.
-  assert.ok(html.includes('Your trip map'), 'the empty map placeholder renders');
+  // The empty map placeholder is gone (interface round M1) — at S0 the
+  // map simply does not render, so there is no "Your trip map" heading.
+  assert.ok(!html.includes('Your trip map'), 'the empty map placeholder is gone');
+  assert.ok(!html.includes('map-placeholder'), 'no map placeholder markup at S0');
 });
 
-test('app shell: three zones (chat | trip | map), zone switcher and Make it yours', async () => {
+test('interface round S0: only the chat renders — panel, map, zonebar, Book all gated (M1/M3)', async () => {
   // SSR-visible markers only — the panel's editable timeline, the
   // switcher menu and the map dialog mount client-side, so they are
   // covered by the pure-helper unit tests and the build, not by SSR.
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The three zones: the chat column, the live trip panel (empty state
-  // before any trip), and the map column with its placeholder.
+  // The chat zone renders, centered (chatmap-s0) — it is the only zone.
   assert.ok(html.includes('chatcol'), 'the chat zone renders');
-  assert.ok(html.includes('trippanel'), 'the trip panel zone renders');
-  assert.ok(html.includes('No trip yet'), 'the panel shows its empty state before a trip');
-  assert.ok(html.includes('mapcol'), 'the map zone renders');
-  // Zone switcher: Chat / Trip / Map, defaulting to chat.
-  assert.ok(html.includes('zonebar'), 'the zone switcher renders');
+  assert.ok(html.includes('chatmap-s0'), 'the S0 chat is centered at max 720px');
   assert.ok(html.includes('data-zone="chat"'), 'the chat zone is the default');
-  for (const label of ['Chat', 'Trip', 'Map']) {
-    assert.ok(html.includes(`>${label}<`), `zone button "${label}" renders`);
-  }
-  // Templates are one click from the app: every "Plan this trip" has
-  // a "Make it yours" entry that loads it into the app shell.
+  // Nothing else renders before its data exists: no trip panel (and no
+  // "No trip yet" empty state), no map column, no zone switcher — at S0
+  // there is only one zone, so there is nothing to switch between.
+  assert.ok(!html.includes('trippanel'), 'the trip panel does not render before a plan exists');
+  assert.ok(!html.includes('No trip yet'), 'the panel empty state is gone');
+  assert.ok(!html.includes('mapcol'), 'the map zone does not render before a route exists');
+  assert.ok(!html.includes('zonebar'), 'the zone switcher does not render with one zone');
+  assert.ok(!html.includes('zonebar-btn'), 'no zone button renders at S0 (the "Trip" in "FujinTrip" is the logo, not a zone button)');
+  // The app bar has no total and no Book at S0 (M3) — the first screen
+  // is the chat, not a price.
+  assert.ok(!html.includes('appbar-book'), 'the app bar Book action does not render before a plan exists');
+  assert.ok(!html.includes('appbar-total'), 'the app bar total does not render before a trip exists');
+  // The 8-tab bar is gone (M2) — one quiet "Prefer forms?" disclosure
+  // under the chat input instead.
+  assert.ok(!html.includes('class="tabs"'), 'the 8-tab bar is gone');
+  assert.ok(html.includes('Prefer forms?'), 'the Prefer forms disclosure renders');
+  // The greeting is a headline, not a bubble (S0).
+  assert.ok(html.includes('bubble greeting'), 'the S0 greeting renders as a headline');
+  // Templates are one click from the app: every library card on page 1
+  // (12) plus the discovery panel (1) and the hidden gems (3) offer
+  // "Make it yours".
   const makeItYours = (html.match(/Make it yours/g) || []).length;
-  assert.ok(makeItYours >= 3, `at least the three template grids offer Make it yours (found ${makeItYours})`);
-  // The app bar's Book action is present but disabled until a plan exists.
-  assert.ok(html.includes('appbar-book'), 'the app bar Book action renders');
+  assert.equal(makeItYours, 16, `12 library cards + discovery panel + 3 hidden gems offer Make it yours (found ${makeItYours})`);
+});
+
+test('interface round S0 busy budget: at most 10 interactive elements in the first viewport', async () => {
+  // The budget (§4) is counted in the SSR HTML, not by eye: the first
+  // viewport is the chat shell (app bar + chat column) — everything
+  // before <main>. Theme toggle, My Trips, input, Send, 3 chips, link
+  // input, "Start from this", "Prefer forms?" = 10. "Build my plan"
+  // is not counted — it appears after the first message.
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  const shellStart = html.indexOf('chat-shell');
+  const mainStart = html.indexOf('<main', shellStart);
+  assert.ok(shellStart !== -1 && mainStart !== -1, 'the chat shell precedes the main content');
+  const shell = html.slice(shellStart, mainStart);
+  const interactive = shell.match(/<(button|input|select|textarea|a)([\s>])/g) || [];
+  assert.ok(interactive.length <= 10, `S0 first viewport has ${interactive.length} interactive elements (budget 10): ${interactive.join(' ')}`);
+  // And the three that must be there are.
+  assert.ok(shell.includes('Prefer forms?'), 'the forms disclosure is in the first viewport');
+  assert.ok(shell.includes('Start from this'), 'the start-from-a-link action is in the first viewport');
+  // "Build my plan" is NOT in the first viewport — it appears after
+  // the first message, when there is a trip to build (progressive
+  // reveal); with no trip yet it would build a Kyoto default nobody
+  // asked for.
+  assert.ok(!shell.includes('Build my plan'), 'Build my plan waits for the first message');
+});
+
+test('template library (interface round S2): 26 cards, real filter counts, 12 per page', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // Filter pills carry real counts from the 26 library names — every
+  // pill has cards behind it, none is empty.
+  assert.ok(html.includes('All (26)'), 'All pill counts the 26 library entries');
+  assert.ok(html.includes('Cities &amp; culture (22)') || html.includes('Cities & culture (22)'), 'Cities & culture pill with real count');
+  assert.ok(html.includes('Beach &amp; islands (11)') || html.includes('Beach & islands (11)'), 'Beach & islands pill with real count');
+  assert.ok(html.includes('Mountains &amp; nature (4)') || html.includes('Mountains & nature (4)'), 'Mountains & nature pill with real count');
+  assert.ok(html.includes('Food (15)'), 'Food pill with real count');
+  // Page 1 shows 12 cards; page 3 holds the last two standalone
+  // destinations, so Maldives and Paris are not on page 1.
+  assert.ok(html.includes('Page 1 of 3'), 'pagination renders Page 1 of 3');
+  assert.ok(!html.includes('>Maldives<'), 'Maldives is on page 3, not page 1');
+  assert.ok(!html.includes('>Paris<'), 'Paris is on page 3, not page 1');
+  // A page-1 card carries the one-line counts shape: stays ·
+  // transports · from $X total · Best value · 2 travelers · planning
+  // estimate. Central Europe is the second discovery entry.
+  assert.ok(html.includes('3 stays · 4 transports · from $3,600 total · Best value · 2 travelers · planning estimate'), 'Central Europe card carries the counts line');
+  // The route line renders when there is more than one stop.
+  assert.ok(html.includes('Prague → Vienna → Budapest'), 'Central Europe card carries the route line');
+  // "Make it yours" is the primary CTA on every library card.
+  assert.ok(html.includes('Make it yours'), 'the library cards offer Make it yours');
 });
 
 test('discovery map: section renders with a priced default pin and a Plan this trip action', async () => {
@@ -497,21 +560,23 @@ test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and m
   // React SSR separates JSX text from expressions with comment markers
   // ("All (<!-- -->6<!-- -->)"), so strip them before matching text.
   const html = rawHtml.replace(/<!-- -->/g, '');
-  // Template filters (item 4): honest pills with real counts, no
-  // Mountains & nature pill on the Global grid (0 of 6 fit it).
+  // Template filters (interface round S2): honest pills with real
+  // counts from the 26-card library — every pill has cards behind it,
+  // including Mountains & nature (4: St. George, Tacoma, Hilo, Turkey).
   assert.ok(html.includes('Filter packages by kind'), 'filter pills group renders');
-  assert.ok(html.includes('All (6)'), 'All pill counts the six Global packages');
-  assert.ok(html.includes('Cities &amp; culture (4)') || html.includes('Cities & culture (4)'), 'Cities & culture pill with real count');
-  assert.ok(html.includes('Beach &amp; islands (4)') || html.includes('Beach & islands (4)'), 'Beach & islands pill with real count');
-  assert.ok(html.includes('Food (4)'), 'Food pill with real count');
+  assert.ok(html.includes('All (26)'), 'All pill counts the 26 library entries');
+  assert.ok(html.includes('Cities &amp; culture (22)') || html.includes('Cities & culture (22)'), 'Cities & culture pill with real count');
+  assert.ok(html.includes('Beach &amp; islands (11)') || html.includes('Beach & islands (11)'), 'Beach & islands pill with real count');
+  assert.ok(html.includes('Food (15)'), 'Food pill with real count');
+  assert.ok(html.includes('Mountains &amp; nature (4)') || html.includes('Mountains & nature (4)'), 'Mountains & nature pill with real count');
   assert.ok(!html.includes('Mountains &amp; nature (0)') && !html.includes('Mountains & nature (0)'), 'no empty category pill is rendered');
   // Chips fill, don't fire (item 5): the starter chips carry their full
   // prompt as data-fill, and the input is what receives it.
   assert.ok(html.includes('data-fill="Surprise me"'), 'Surprise me chip carries data-fill');
   assert.ok(html.includes('data-fill="I want a warm beach in February"'), 'a starter chip carries its full prompt as data-fill');
-  // Full-screen map (item 3): the hook is in the markup even before a
-  // trip exists (disabled, with the reason) — the dialog mounts on click.
-  assert.ok(html.includes('Open the map'), 'Open the map action renders');
+  // Full-screen map (item 3): the hook is gone at S0 (interface round
+  // M1) — "Open the map" appears with the map, not before it.
+  assert.ok(!html.includes('Open the map'), 'Open the map does not render before the map exists');
   // Motion (item 6): the served stylesheet carries the panel entrance
   // and the expandable-row transition — read it from the page's own
   // stylesheet link, falling back to the source file.

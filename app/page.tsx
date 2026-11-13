@@ -1665,10 +1665,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
       ];
     }
     if (!hasUserMsg) {
+      // M4: three starters — the fourth ("Family of 4, $2,000")
+      // duplicated the budget the guided flow asks anyway, and the
+      // S0 busy budget (≤10) leaves no room for it.
       return [
         { label: 'Central Europe in January', text: 'Central Europe in January' },
         { label: 'Warm beach in February', text: 'I want a warm beach in February' },
-        { label: 'Family of 4, $2,000', text: 'Family of 4, $2,000 budget' },
         { label: 'Surprise me', text: 'Surprise me' },
       ];
     }
@@ -2037,7 +2039,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           <p className="selling">Gathers everything into one plan · Customized for you · Verify before you book</p>
           {aiLive !== null && <p className="no-print" style={{ fontSize: 12, color: 'var(--muted)' }}>{aiLive ? 'Fujin AI is live.' : 'Fujin AI is offline — using the built-in planner.'}</p>}
           <p className="no-print" style={{ marginTop: 16 }}>
-            <button className="primary" onClick={build}>Build my plan</button>{' '}
+            {/* Progressive reveal (M4/S0 budget): "Build my plan" with
+                no trip yet builds a Kyoto default the traveler never
+                asked for — it appears once the traveler has said
+                something (or a trip is restored), when there is a trip
+                to build. A restored trip still shows it. */}
+            {(lastParsed || hasUserMsg) && (<><button className="primary" onClick={build}>Build my plan</button>{' '}</>)}
             {lastParsed && (
               <button className="ghost" onClick={() => setTripMode((m) => !m)}>
                 {tripMode ? `✓ On-trip mode on — ${lastParsed.destination}` : 'Take this plan on your trip'}
