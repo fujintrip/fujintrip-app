@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, MONTH_NAMES, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type RouteOverride } from '../../../lib/planner';
+import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, findOrigin, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, MONTH_NAMES, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, fetchLocalVoicesForCities, formatCityVoices, type CityVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from '../../../lib/food';
@@ -7,12 +7,12 @@ import { bestTimeLine } from '../../../lib/bestTime';
 import { disruptionTemplate, type DisruptionStatus } from '../../../lib/disruption';
 import { visaLine } from '../../../lib/visa';
 import { dietaryBlock, parseProfile, preferencesBlock, DIETARY_LABELS, type Dietary } from '../../../lib/preferences';
-import { paceFromProfile, paceRevisionPrompt } from '../../../lib/pace';
+import { paceFromProfile, paceRevisionPrompt, type PaceLevel } from '../../../lib/pace';
 import { parseDepartureTime, parseHHMM, parseLandingTime } from '../../../lib/arrival';
 import { allInLine } from '../../../lib/forgotten';
 import { auditTrip, departureDayFlags, feasibilitySummary } from '../../../lib/feasibility';
 import { checkPassportValidity, parsePassportExpiryValue, passportWarningLine } from '../../../lib/passport';
-import { buildTripCard, CITY_INFO, suggestedStart } from '../../../lib/tripCard';
+import { buildTripCard, CITY_INFO, suggestedStart, type TripCard } from '../../../lib/tripCard';
 import { checkTripWeather, swapLine, weatherBlock, type WeatherCheck } from '../../../lib/daySwap';
 
 /**
@@ -184,11 +184,42 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
   return lastPlaceMentioned(message);
 }
 
+// Round 4 guards, shared by the handler (system prompt) and the
+// fallback (Trip Summary): the lines for one trip card — pace, arrival,
+// departure, all-in, feasibility. One helper so the chat and the plan
+// view warn about the same days, the same landing, the same total.
+function guardLinesFor(card: TripCard | null, departureTime?: string | null): string[] {
+  if (!card) return [];
+  const lines: string[] = [];
+  if (card.paceWarnings.length) lines.push(`Pace — ${paceRevisionPrompt(card.paceWarnings)}`);
+  lines.push(`Arrival — ${card.arrival.line}`);
+  if (card.departure.leaveBy) lines.push(`Departure — ${card.departure.line}`);
+  lines.push(allInLine(card.total, card.forgotten));
+  lines.push(feasibilitySummary(departureDayFlags(card, departureTime), auditTrip(card)));
+  return lines;
+}
+
+// The slots the guards need — resolved from the established trip
+// (tripState) or the message itself (a fresh trip with all slots in
+// one message). The fallback builds the guard card from its own
+// resolved destination; the handler builds one from the established
+// trip for the system prompt.
+type GuardSlots = {
+  month: number;
+  days: number;
+  origin: string;
+  pace: PaceLevel;
+  maxSightsPerDay?: number;
+  landingTime?: string;
+  departureTime?: string;
+  tier?: number;
+};
+
 // The fallback reply as a plain payload (the built-in planner's answer
 // with voices, fares, trend and food appended) — the atomic path wraps it
 // in NextResponse.json, and the streaming path sends the same payload as
 // the final `done` event after chunking its reply text.
-function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[], dietary?: Dietary, passportWarning?: string, guards?: string) {
+function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[], dietary?: Dietary, passportWarning?: string, guardSlots?: GuardSlots) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -243,8 +274,29 @@ function fallbackPayload(message: string, label: string, voices?: LocalVoices, v
     reply += `\n\n${passportWarning}`;
   }
   // Round 4 guards (pace, arrival, all-in, feasibility), on the Trip
-  // Summary only — computed from the trip card, so the chat and the
-  // card warn about the same days, the same landing, the same total.
+  // Summary only — built from the trip the fallback itself resolved
+  // (destination, travelers, route override) plus the slots the
+  // handler resolved (month, days, origin, pace, landing, departure),
+  // so a fresh trip with all slots in one message warns on the same
+  // card the plan view builds. Never on a decline.
+  const guardCard =
+    destination && !declinedOffTopic && guardSlots && guardSlots.days >= 2 && guardSlots.month
+      ? buildTripCard({
+          destination,
+          travelers: parsed.travelers,
+          days: guardSlots.days,
+          month: guardSlots.month,
+          origin: guardSlots.origin,
+          ...(guardSlots.tier !== undefined ? { tier: guardSlots.tier } : {}),
+          kids: parsed.kids ?? contextKids ?? [],
+          ...(parsed.routeOverride ?? contextOverride ? { routeOverride: parsed.routeOverride ?? contextOverride } : {}),
+          pace: guardSlots.pace,
+          ...(guardSlots.maxSightsPerDay ? { maxSightsPerDay: guardSlots.maxSightsPerDay } : {}),
+          ...(guardSlots.landingTime ? { landingTime: guardSlots.landingTime } : {}),
+          ...(guardSlots.departureTime ? { departureTime: guardSlots.departureTime } : {}),
+        })
+      : null;
+  const guards = guardLinesFor(guardCard, guardSlots?.departureTime).join('\n\n');
   if (destination && reply.includes('Here is your trip —') && guards) {
     reply += `\n\n${guards}`;
   }
@@ -593,34 +645,25 @@ export async function POST(req: NextRequest) {
       : [];
   const passportWarning = passportWarningLine(passportChecks);
   // Round 4 guards (pace first; arrival, all-in and feasibility join
-  // the same block in the later features): computed from the trip card
-  // for the ESTABLISHED trip — the same card the plan view builds, so
-  // the chat and the card never disagree. The guards string rides to
-  // the fallback, so the Trip Summary carries the warnings even when
-  // the live model is down.
+  // the same block in the later features): the slots, resolved from the
+  // established trip (tripState) or the message itself (a fresh trip
+  // with all slots in one message). The fallback builds its guard card
+  // from its own resolved destination; the system prompt below builds
+  // one from the established trip, so the model and the fallback warn
+  // from the same card.
+  const guardSlots: GuardSlots = {
+    month: tripMonth,
+    days: tripDaysKnown,
+    origin: stateOrigin || findOrigin(fullText) || '',
+    pace: paceFromProfile(statePreferences),
+    ...(statePreferences.maxSightsPerDay ? { maxSightsPerDay: statePreferences.maxSightsPerDay } : {}),
+    ...(stateLandingTime ? { landingTime: stateLandingTime } : {}),
+    ...(stateDepartureTime ? { departureTime: stateDepartureTime } : {}),
+    ...(stateTier !== undefined ? { tier: stateTier } : {}),
+  };
   const guardCard = stateDestination && tripDaysKnown >= 2 && tripMonth
-    ? buildTripCard({ destination: stateDestination, travelers: stateTravelers || 2, days: tripDaysKnown, month: tripMonth, origin: stateOrigin, ...(stateTier !== undefined ? { tier: stateTier } : {}), kids: stateKids, ...(stateRouteOverride ? { routeOverride: stateRouteOverride } : {}), pace: paceFromProfile(statePreferences), ...(statePreferences.maxSightsPerDay ? { maxSightsPerDay: statePreferences.maxSightsPerDay } : {}), ...(stateLandingTime ? { landingTime: stateLandingTime } : {}), ...(stateDepartureTime ? { departureTime: stateDepartureTime } : {}) })
+    ? buildTripCard({ destination: stateDestination, travelers: stateTravelers || 2, days: tripDaysKnown, month: tripMonth, origin: stateOrigin, ...(stateTier !== undefined ? { tier: stateTier } : {}), kids: stateKids, ...(stateRouteOverride ? { routeOverride: stateRouteOverride } : {}), pace: guardSlots.pace, ...(guardSlots.maxSightsPerDay ? { maxSightsPerDay: guardSlots.maxSightsPerDay } : {}), ...(guardSlots.landingTime ? { landingTime: guardSlots.landingTime } : {}), ...(guardSlots.departureTime ? { departureTime: guardSlots.departureTime } : {}) })
     : null;
-  const guardLines: string[] = [];
-  if (guardCard?.paceWarnings.length) {
-    guardLines.push(`Pace — ${paceRevisionPrompt(guardCard.paceWarnings)}`);
-  }
-  // Arrival-time anchoring (round 4 #3): Day 1 from the landing time,
-  // the last day at the airport. The unanchored line asks for the
-  // landing time — it rides on the Trip Summary, not the system prompt,
-  // so the model never nags for it every turn.
-  if (guardCard) {
-    guardLines.push(`Arrival — ${guardCard.arrival.line}`);
-    if (guardCard.departure.leaveBy) guardLines.push(`Departure — ${guardCard.departure.line}`);
-    // Forgotten costs (round 4 #4): the real trip total rides on the
-    // Trip Summary, so the chat quotes the same reality as the plan view.
-    guardLines.push(allInLine(guardCard.total, guardCard.forgotten));
-    // Feasibility guardrail (round 4 #5, S half): the departure-day
-    // flags and the chat-vs-card audit for this trip — the chat quotes
-    // the same check the plan view shows.
-    guardLines.push(feasibilitySummary(departureDayFlags(guardCard, stateDepartureTime), auditTrip(guardCard)));
-  }
-  const guards = guardLines.join('\n\n');
   const [voices, liveFares, food, weather, cityVoices] = await Promise.all([voicesPromise, faresPromise, foodPromise, weatherPromise, cityVoicesPromise]);
 
   // System prompt for this request: base prompt + fresh traveler material
@@ -846,7 +889,7 @@ export async function POST(req: NextRequest) {
               food,
               checkedStatus,
               weather,
-              cityVoices, statePreferences.dietary, passportWarning, guards
+              cityVoices, statePreferences.dietary, passportWarning, guardSlots
             );
             // Chunk the reply at word boundaries so the client renders
             // flowing text, not characters.
@@ -981,7 +1024,7 @@ export async function POST(req: NextRequest) {
       food,
       checkedStatus,
       weather,
-      cityVoices, statePreferences.dietary, passportWarning, guards
+      cityVoices, statePreferences.dietary, passportWarning, guardSlots
     );
   }
   const apiKey = provider.apiKey;
@@ -1035,14 +1078,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning, guards);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning, guardSlots);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning, guards);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning, guardSlots);
     }
 
     return NextResponse.json({
@@ -1057,7 +1100,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning, guards);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices, statePreferences.dietary, passportWarning, guardSlots);
   }
 }
 

@@ -412,6 +412,81 @@ test('fujin: a tight passport expiry warns on the Europe Trip Summary (round 3 #
   assert.ok(!j.reply.toLowerCase().includes('passport number'), 'never asks for the number');
 });
 
+test('round 4 #1 pace: a relaxed-pace Tokyo trip warns about the packed day on the Trip Summary', async () => {
+  // Tokyo day 1 has 6 experiences — over the relaxed max of 4, so the
+  // fallback's Trip Summary must carry the pace warning (the guards
+  // are built from the trip the fallback itself resolved, so a fresh
+  // trip with all slots in one message warns too). The budget is in
+  // the message so the guided flow reaches the summary instead of
+  // asking for the budget; the pace slot rides in tripState.
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Tokyo in January for 3 days, flying from New York, relaxed pace, budget $3000',
+      tripState: { preferences: { pace: 'slow' } },
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(j.reply.includes('Here is your trip —'), 'the reply is the Trip Summary');
+  assert.ok(j.reply.includes('over pace'), 'the packed day is named');
+  assert.ok(j.reply.includes('drop one, or add a day?'), 'the drop-one-or-add-a-day choice is offered');
+});
+
+test('round 4 #3 arrival: a 7am landing anchors Day 1 instead of a 3pm check-in', async () => {
+  // The landing time rides in the message (the route parses it into
+  // the guard slots), so Day 1 starts from 08:30 exploring — not
+  // from the typical 3pm check-in.
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Tokyo in January for 3 days, flying from New York, landing at 7am, budget $3000',
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(j.reply.includes('Here is your trip —'), 'the reply is the Trip Summary');
+  assert.ok(j.reply.includes('08:30'), 'Day 1 starts exploring at 08:30');
+  assert.ok(j.reply.includes('3pm'), 'the 3pm check-in is named as the thing Day 1 does NOT start with');
+});
+
+test('round 4 #4 all-in: a Japan trip shows the real trip total on the Trip Summary', async () => {
+  // The plan total is not the whole trip cost — the guards append the
+  // all-in reality check, labeled as planning estimates, on the
+  // summary itself.
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Japan in January for 10 days, flying from New York, budget $3000',
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(j.reply.includes('Here is your trip —'), 'the reply is the Trip Summary');
+  assert.ok(j.reply.includes('All-in reality check'), 'the all-in line is on the summary');
+  assert.ok(j.reply.includes('real trip total'), 'the real trip total is named');
+  assert.ok(j.reply.includes('planning estimates'), 'the forgotten lines stay labeled estimates');
+});
+
+test('round 4 #5 feasibility: a clean trip says the check passed on the Trip Summary', async () => {
+  // No day trip on a flight day and the audit passes — the summary
+  // says so in one line, so the traveler sees the check happened.
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Tokyo in January for 3 days, flying from New York, budget $3000',
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(j.reply.includes('Here is your trip —'), 'the reply is the Trip Summary');
+  assert.ok(j.reply.includes('Feasibility: no flags'), 'the feasibility pass line is on the summary');
+});
+
 test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and motion CSS are served', async () => {
   // SSR-visible markers only — the plan view's expandable rows and the
   // map dialog render client-side (after "Build my plan"), so they are
