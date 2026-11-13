@@ -517,3 +517,24 @@ html{scroll-padding-bottom:96px}
    44px targets, centered under the grid. */
 .pagination{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:20px;flex-wrap:wrap}
 .pagination .page-label{font-size:13px;color:var(--muted)}
+/* Emergency (SOS) button + sheet: the filled button is a fixed
+   emergency red (#b3261e, white text ≈5.9:1) in BOTH themes — the
+   --danger token is a light red in dark mode and would fail contrast
+   as a fill. The call links use --danger as text, which passes in
+   both themes. The sheet is a centered dialog over a dim backdrop,
+   same Esc / scroll-lock pattern as the full-screen map dialog. */
+.sos-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;padding:10px 16px;border-radius:12px;border:2px solid #b3261e;background:#b3261e;color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
+.sos-btn-compact{width:auto;padding:8px 14px;font-size:14px}
+.sos-btn:hover{filter:brightness(1.1)}
+.sosdialog-backdrop{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+.sosdialog{background:var(--card);border:1px solid var(--line);border-radius:20px;max-width:560px;width:100%;padding:20px;box-shadow:0 8px 40px rgba(0,0,0,.3);margin:auto 0}
+.sosdialog-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.sosdialog-bar strong{font-size:18px}
+.sos-section-title{font-size:15px;margin:18px 0 8px}
+.sos-country{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px}
+.sos-country > strong{display:block;font-size:14px;margin-bottom:6px}
+.sos-call{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:6px 2px;font-size:15px;color:var(--danger);text-decoration:none;border-top:1px solid var(--line-soft)}
+.sos-call:first-of-type{border-top:0}
+.sos-call strong{font-size:17px;font-variant-numeric:tabular-nums}
+.sos-missed{background:var(--danger-soft);border:1px solid var(--danger);border-radius:12px;padding:12px 14px;margin:12px 0}
+.sos-message{white-space:pre-line;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
