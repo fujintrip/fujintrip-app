@@ -363,6 +363,31 @@ test('fujin: every reply carries liveFares (null here — no key, no trip slots)
   assert.equal(j.liveFares, null);
 });
 
+test('fujin: a multi-stop trip carries per-city voices (round 3 #1)', async () => {
+  // Shape only, not content: the Wikivoyage fetch is live network and
+  // may return empty under load — what must never break is the shape
+  // the plan view renders (one entry per stop city, in route order).
+  const r = await fetch(`${BASE}/api/fujin`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Central Europe in January, 14 days',
+      tripState: { destination: 'Central Europe', travelers: 2, origin: 'New York', month: 1, durationDays: 14 },
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(Array.isArray(j.cityVoices), 'cityVoices key present in the reply');
+  assert.deepEqual(
+    j.cityVoices.map((c) => c.city),
+    ['Prague', 'Vienna', 'Budapest'],
+    'one entry per stop city, in route order'
+  );
+  for (const c of j.cityVoices) {
+    assert.equal(typeof c.voices.text, 'string', 'each city carries a voices text (possibly empty)');
+  }
+});
+
 test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and motion CSS are served', async () => {
   // SSR-visible markers only — the plan view's expandable rows and the
   // map dialog render client-side (after "Build my plan"), so they are

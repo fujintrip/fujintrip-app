@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, stopsForRoute, type RouteOverride } from '../../../lib/planner';
-import { fetchLocalVoices, type LocalVoices } from '../../../lib/localVoices';
+import { fetchLocalVoices, fetchLocalVoicesForCities, formatCityVoices, type CityVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
 import { CITY_TZ, fetchTonight, foodBlock, foodReply, type TonightResult } from '../../../lib/food';
 import { bestTimeLine } from '../../../lib/bestTime';
@@ -176,7 +176,7 @@ function guessDestination(raw: Record<string, unknown>, message: string): string
 // with voices, fares, trend and food appended) — the atomic path wraps it
 // in NextResponse.json, and the streaming path sends the same payload as
 // the final `done` event after chunking its reply text.
-function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null) {
+function fallbackPayload(message: string, label: string, voices?: LocalVoices, voicesDest = '', defaultTravelers = 2, contextDestination = '', currentMessage = '', contextOrigin = '', liveFares?: LiveFares | null, contextOverride?: RouteOverride, contextKids?: number[], contextTier?: number, contextPriceHistory?: TrendObservation[], contextFood?: TonightResult | null, flightStatus?: DisruptionStatus | null, weather?: WeatherCheck | null, cityVoices?: CityVoices[]) {
   const parsed = askFujin(message, defaultTravelers, contextDestination, currentMessage, contextOrigin, contextOverride, contextKids, contextTier);
   // A decline must stay a decline: the context-destination override below
   // would otherwise resurrect an off-topic message as a plan ("who will
@@ -229,6 +229,15 @@ function fallbackPayload(message: string, label: string, voices?: LocalVoices, v
   // but never on a decline, where it would read as an answer, and never on
   // a guided question, where a long excerpt would bury the one question.
   if (voices?.text && destination && !parsed.needsMore) reply += `\n\nFresh traveler notes: ${voices.text.slice(0, 400)}`;
+  // Per-city notes (round 3 #1): one short line per stop city, so a
+  // multi-stop trip names real places per city instead of one generic
+  // region blob. A city with no material says so — never invented.
+  if (cityVoices?.length && destination && !parsed.needsMore) {
+    const lines = cityVoices.map(({ city, voices: cv }) =>
+      cv.text ? `${city}: ${cv.text.split('\n').filter((l) => l.trim()).slice(0, 2).join(' ').slice(0, 220)}` : `No traveler tips for ${city} yet.`
+    );
+    reply += `\n\nTraveler tips per city:\n${lines.join('\n')}`;
+  }
   // Same for the live fares: the offline fallback quotes them too, so the
   // traveler still sees the real Duffel price when the model is down.
   if (liveFares?.live && destination && !parsed.needsMore && !declinedOffTopic) {
@@ -290,6 +299,10 @@ function fallbackPayload(message: string, label: string, voices?: LocalVoices, v
     voices: voices?.text ?? '',
     voicesSource: voices?.source ?? '',
     voicesDestination: voicesDest,
+    // Per-city voices (round 3 #1): the plan view renders these under
+    // "What travelers say" per stop city; [] when the trip is a single
+    // city (the region fetch already is that city's material).
+    cityVoices: cityVoices ?? [],
     liveFares: liveFares ?? null,
   };
 }
@@ -510,7 +523,22 @@ export async function POST(req: NextRequest) {
   const weatherPromise: Promise<WeatherCheck | null> = weatherCard
     ? checkTripWeather(weatherCard).catch(() => null)
     : Promise.resolve(null);
-  const [voices, liveFares, food, weather] = await Promise.all([voicesPromise, faresPromise, foodPromise, weatherPromise]);
+  // Per-city voices (round 3 #1): the route's stop cities, not the
+  // region name — a multi-stop trip gets one voices block per city.
+  // The route comes from the ESTABLISHED trip (tripState), not the
+  // guessed destination: lastPlaceMentioned("Central Europe…") returns
+  // "Europe", which would fetch Lisbon/Madrid/Barcelona for a Central
+  // Europe trip. Skipped for single-city trips (the region fetch
+  // already IS that city's material) and on-trip mode (one city,
+  // already covered). Best-effort like the region fetch: never let it
+  // break the chat.
+  const cityRouteKey = routeKeyForDestination(stateDestination) || fareRouteKey;
+  const cityList = cityRouteKey && !onTrip ? stopsForRoute(cityRouteKey, stateRouteOverride).map((s) => s.city) : [];
+  const cityVoicesPromise: Promise<CityVoices[]> =
+    cityList.length >= 2
+      ? fetchLocalVoicesForCities(cityList).catch(() => [] as CityVoices[])
+      : Promise.resolve([] as CityVoices[]);
+  const [voices, liveFares, food, weather, cityVoices] = await Promise.all([voicesPromise, faresPromise, foodPromise, weatherPromise, cityVoicesPromise]);
 
   // System prompt for this request: base prompt + fresh traveler material
   // + on-trip framing when applicable.
@@ -519,6 +547,11 @@ export async function POST(req: NextRequest) {
     systemPrompt +=
       ' LOCAL VOICES — fresh traveler material for this destination, fetched just now from traveler guides. Prefer naming the real places, dishes and tips from it in your reply and in tips. Never invent a reviewer name, quote, or review score; if a place in this material contradicts your own knowledge, trust the material. ' +
       voices.text;
+  }
+  // Per-city voices (round 3 #1): the same material, per stop city —
+  // name real places per city, and say plainly when a city has none.
+  if (cityVoices.length) {
+    systemPrompt += ' CITY VOICES — ' + formatCityVoices(cityVoices);
   }
   if (liveFares?.live) {
     systemPrompt += ' ' + faresPromptBlock(liveFares);
@@ -682,7 +715,8 @@ export async function POST(req: NextRequest) {
               statePriceHistory,
               food,
               checkedStatus,
-              weather
+              weather,
+              cityVoices
             );
             // Chunk the reply at word boundaries so the client renders
             // flowing text, not characters.
@@ -783,6 +817,7 @@ export async function POST(req: NextRequest) {
               voices: voices.text,
               voicesSource: voices.source,
               voicesDestination: voicesDest,
+              cityVoices: cityVoices ?? [],
               liveFares: liveFares ?? null,
             },
           });
@@ -815,7 +850,8 @@ export async function POST(req: NextRequest) {
       statePriceHistory,
       food,
       checkedStatus,
-      weather
+      weather,
+      cityVoices
     );
   }
   const apiKey = provider.apiKey;
@@ -869,14 +905,14 @@ export async function POST(req: NextRequest) {
       // Surface the API's own error message — a bare status code hides the cause.
       const detail = [json.error?.code, json.error?.message].filter(Boolean).join(': ') || `no details from ${provider.name} API`;
       console.error(`[fujin] ${provider.name} API error`, res.status, detail);
-      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather);
+      return fallback(fullText, `${provider.name} API error (${res.status}): ${detail.slice(0, 200)} — using the built-in planner.`, voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices);
     }
 
     const content = json.choices?.[0]?.message?.content ?? '';
     const parsed = parseModelJson(content);
     if (!parsed) {
       console.error('[fujin] Model API returned unparseable content');
-      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather);
+      return fallback(fullText, 'Fujin AI gave an unclear answer — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices);
     }
 
     return NextResponse.json({
@@ -886,11 +922,12 @@ export async function POST(req: NextRequest) {
       voices: voices.text,
       voicesSource: voices.source,
       voicesDestination: voicesDest,
+      cityVoices: cityVoices ?? [],
       liveFares: liveFares ?? null,
     });
   } catch (err) {
     console.error('[fujin] Model API request failed', err instanceof Error ? err.message : err);
-    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather);
+    return fallback(fullText, 'Could not reach Fujin AI right now — using the built-in planner.', voices, voicesDest, stateTravelers || 2, stateDestination, message, stateOrigin, liveFares, stateRouteOverride, stateKids, stateTier, statePriceHistory, food, checkedStatus, weather, cityVoices);
   }
 }
 

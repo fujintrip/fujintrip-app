@@ -258,6 +258,11 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
   // Fresh traveler material fetched live for the last chat destination
   // (route returns it as `voices`) — feeds the "What travelers say" block.
   const [voices, setVoices] = useState<Voices>(null);
+  // Per-city voices (round 3 #1): one voices block per stop city, in
+  // route order — the plan view renders these under "What travelers
+  // say" instead of one generic region blob.
+  type CityVoicesState = { city: string; text: string; source: string }[];
+  const [cityVoices, setCityVoices] = useState<CityVoicesState>([]);
   // Live Duffel fares for the current trip (route returns them as
   // `liveFares`) — the trip card and the map show these same fares, so
   // the chat, the card and the map never quote different flight prices.
@@ -691,6 +696,20 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     const keepVoices = (j: Record<string, unknown>) => {
       if (typeof j.voices === 'string' && j.voices && typeof j.voicesDestination === 'string' && j.voicesDestination) {
         setVoices({ destination: j.voicesDestination, text: j.voices, source: typeof j.voicesSource === 'string' ? j.voicesSource : '' });
+      }
+      // Per-city voices (round 3 #1): validated shape only — a corrupt
+      // or foreign value is ignored, never rendered. An empty list means
+      // this turn fetched no city voices (single-city trip), so the last
+      // per-city material stays.
+      if (Array.isArray(j.cityVoices) && j.cityVoices.length) {
+        const list = (j.cityVoices as unknown[])
+          .filter((c): c is { city: string; voices: { text: string; source: string } } => {
+            if (!c || typeof c !== 'object') return false;
+            const o = c as Record<string, unknown>;
+            return typeof o.city === 'string' && !!o.city && !!o.voices && typeof o.voices === 'object' && typeof (o.voices as Record<string, unknown>).text === 'string';
+          })
+          .map((c) => ({ city: c.city, text: c.voices.text, source: typeof c.voices.source === 'string' ? c.voices.source : '' }));
+        if (list.length) setCityVoices(list);
       }
     };
     // Keep the live fares the server fetched for this trip (or clear
@@ -2445,7 +2464,28 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           <p className="print-only">To book: save a booking request in My Trips on fujintrip.com — the FujinTrip team follows up. Live booking activates with Duffel live mode. https://fujintrip.com</p>
           <p className="notice">A booking request — the team follows up; live booking activates with Duffel live mode. Nothing is booked on another site.</p>
           <h3 style={{ marginTop: 24 }}>What travelers say</h3>
-          {voices && voices.destination === plan.destination ? (
+          {cityVoices.length > 0 && ((displayCard ?? tripCard)?.stops ?? []).some((s) => cityVoices.some((cv) => cv.city === s.city)) ? (
+            <div>
+              <p className="plan-muted">From real traveler guides, per city — never invented reviews. Source: Wikivoyage traveler guide, fetched live.</p>
+              {((displayCard ?? tripCard)?.stops ?? [])
+                .filter((s) => cityVoices.some((cv) => cv.city === s.city))
+                .map((s) => {
+                  const cv = cityVoices.find((x) => x.city === s.city)!;
+                  return (
+                    <div key={s.city} style={{ marginBottom: 10 }}>
+                      <p style={{ fontSize: 14, margin: '4px 0' }}><strong>{s.city}</strong></p>
+                      {cv.text ? (
+                        cv.text.split('\n').filter((l) => l.trim()).map((line, i) => (
+                          <p key={i} style={{ fontSize: 14, margin: '2px 0' }}>{line}</p>
+                        ))
+                      ) : (
+                        <p style={{ fontSize: 14, color: 'var(--muted)', margin: '2px 0' }}>No traveler tips for {s.city} yet.</p>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          ) : voices && voices.destination === plan.destination ? (
             <div>
               <p className="plan-muted">From real traveler guides — never invented reviews. Source: {voices.source || 'Wikivoyage traveler guide, fetched live'}.</p>
               {voices.text.split('\n').filter((l) => l.trim()).map((line, i) => (

@@ -127,6 +127,8 @@ async function reddit(destination: string): Promise<string[]> {
     .map((t) => `Reddit r/${sub}: "${t}"`);
 }
 
+export type CityVoices = { city: string; voices: LocalVoices };
+
 export async function fetchLocalVoices(destination: string): Promise<LocalVoices> {
   const key = destination.trim().toLowerCase();
   if (!key) return { text: '', source: '' };
@@ -154,4 +156,49 @@ export async function fetchLocalVoices(destination: string): Promise<LocalVoices
   // Cache only real results — see the note above the cache declaration.
   if (voices.text) cache.set(key, { at: Date.now(), voices });
   return voices;
+}
+
+// --- Per-city voices (round 3 #1, competitor learning §3) --------------
+// The region fetch above ("Central Europe", "Europe") names no real
+// places — the Wikivoyage page for a region is thin or absent, so the
+// tips stay generic. The route's own cities each have a real guide, so
+// a multi-stop trip fetches one voices block per stop city instead.
+// Bounded to 3 cities (the first three stops — the ones the traveler
+// spends the most time in) and fetched in parallel: each city keeps
+// the same 4s budget and 24h cache as the region fetch, so the whole
+// batch costs no more wall time than one fetch. A city with no material
+// is returned empty, never invented — the plan view says "No traveler
+// tips for {city} yet."
+export function citiesForVoices(cities: string[], max = 3): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of cities) {
+    const name = (c ?? '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+export async function fetchLocalVoicesForCities(cities: string[]): Promise<CityVoices[]> {
+  const picked = citiesForVoices(cities);
+  return Promise.all(
+    picked.map(async (city) => ({ city, voices: await fetchLocalVoices(city).catch(() => ({ text: '', source: '' } as LocalVoices)) }))
+  );
+}
+
+// The prompt block for the per-city material: one short section per
+// city, in route order. Cities with no material are listed as such so
+// the model never fills the gap with invented tips.
+export function formatCityVoices(results: CityVoices[]): string {
+  if (!results.length) return '';
+  const parts = results.map(({ city, voices }) => {
+    if (!voices.text) return `${city}: no traveler tips fetched yet — say so if asked, never invent tips for this city.`;
+    return `${city}:\n${voices.text.slice(0, 1500)}`;
+  });
+  return `Traveler tips per city, fetched just now from traveler guides:\n${parts.join('\n\n')}`;
 }
