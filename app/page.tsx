@@ -23,6 +23,7 @@ import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
 import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival';
 import { auditTrip, checkConnection, departureDayFlags, feasibilitySummary } from '../lib/feasibility';
+import { checkInKeyFor, checkInMissed, parseCheckIn, type CheckIn } from '../lib/emergency';
 import Checklist from '../components/Checklist';
 import { guideFor } from '../lib/localGuides';
 import AdSlot from '../components/AdSlot';
@@ -32,6 +33,7 @@ import KnowHowBlock from '../components/KnowHow';
 import TripPanel, { type PanelStopEdit } from '../components/TripPanel';
 import OfflineBanner from '../components/OfflineBanner';
 import TodayView from '../components/TodayView';
+import EmergencySheet, { SosButton } from '../components/EmergencySheet';
 import ReelsFeed from '../components/ReelsFeed';
 import ReelsStrip from '../components/ReelsStrip';
 import ReelComposer from '../components/ReelComposer';
@@ -235,7 +237,7 @@ function formatReply(text: string): ReactNode {
   return <>{out}</>;
 }
 
-function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact, onSos }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string }; onSos?: () => void }) {
+function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches, seed, onSeedUsed, onShareReel, trips, profile, onProfileChange, emergencyContact, embassyNumber, onEmbassyChange }: { onParsed?: (t: { destination: string; travelers: number; kids?: number[] }) => void; onSaveTrip: (label: string, status: string, destination?: string) => void; onWatchPrices: (w: Omit<PriceWatch, 'id' | 'baselineAt' | 'lastCheckedAt'>) => void; bookedDestinations: string[]; watches: PriceWatch[]; seed?: { destination: string; cities: string[] } | null; onSeedUsed?: () => void; onShareReel?: (destination: string) => void; trips: Trip[]; profile: TravelerProfile; onProfileChange: (p: TravelerProfile) => void; emergencyContact: { name: string; phone: string }; embassyNumber: string; onEmbassyChange: (v: string) => void }) {
   // The opening line — also the line a "New trip" resets to, so the
   // trip switcher and the plan view's "Start a new trip" restart the
   // conversation in exactly the same words.
@@ -1386,6 +1388,43 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
     document.body.style.overflow = 'hidden';
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
   }, [mapOpen]);
+  // Emergency (SOS) sheet + check-in timer (emergency-button build):
+  // the sheet opens from the panel, the Today view and the map bar —
+  // all S1/S2, never the empty S0 screen. The check-in is per trip
+  // (same key style as the Today done-toggles); if missed while the
+  // app is open, the sheet surfaces once, with the alert ready. It
+  // does nothing while the app is closed, and the sheet says so.
+  const [sosOpen, setSosOpen] = useState(false);
+  const tripCheckInKey = lastParsed ? checkInKeyFor(lastParsed.destination, lastParsed.travelers, lastParsed.durationDays ?? 14) : '';
+  const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!tripCheckInKey) { setCheckIn(null); return; }
+    try {
+      const raw = localStorage.getItem(tripCheckInKey);
+      setCheckIn(raw ? parseCheckIn(JSON.parse(raw)) : null);
+    } catch { setCheckIn(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, tripCheckInKey]);
+  useEffect(() => {
+    if (!hydrated || !tripCheckInKey) return;
+    try {
+      if (checkIn) localStorage.setItem(tripCheckInKey, JSON.stringify(checkIn));
+      else localStorage.removeItem(tripCheckInKey);
+    } catch {}
+  }, [hydrated, tripCheckInKey, checkIn]);
+  useEffect(() => {
+    if (!checkIn || checkIn.surfaced) return;
+    const tick = () => {
+      if (checkInMissed(checkIn)) {
+        setCheckIn((c) => (c && !c.surfaced ? { ...c, surfaced: true } : c));
+        setSosOpen(true);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 30000);
+    return () => window.clearInterval(id);
+  }, [checkIn]);
   // Add-to-bundle-later (round 2 #7, Expedia One Key): the bundle is the
   // legs the traveler picked, snapshotted from the current card — the
   // total is the exact sum of those legs, and the bundle stays open
@@ -2103,7 +2142,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   month={lastParsed.month ?? 0}
                   origin={lastParsed.origin ?? ''}
                   choice={choice}
-                  onSos={onSos}
+                  onSos={() => setSosOpen(true)}
                   onFindDinner={() => {
                     void fetchTonightPlaces();
                     setTimeout(() => document.getElementById('tonight-near-you')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
@@ -2214,6 +2253,7 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             onBuild={build}
             onBook={bookPlan}
             busy={thinking !== null || streamingText !== null}
+            onSos={() => setSosOpen(true)}
           />
         )}
         {/* Map zone (interface round §5, M1): renders only when the
@@ -2224,9 +2264,12 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
             <>
               <div className="mapdialog-bar" style={{ marginBottom: 8 }}>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>{mapCard.stops.length} stop{mapCard.stops.length !== 1 ? 's' : ''} · {mapCard.legs.length} price tags</span>
-                <button type="button" className="ghost" onClick={() => setMapOpen(true)} aria-label="Open the full-screen map" style={{ minHeight: 44 }}>
-                  ⤢ Open the map
-                </button>
+                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <SosButton compact onOpen={() => setSosOpen(true)} />
+                  <button type="button" className="ghost" onClick={() => setMapOpen(true)} aria-label="Open the full-screen map" style={{ minHeight: 44 }}>
+                    ⤢ Open the map
+                  </button>
+                </span>
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <TripMap
@@ -3008,6 +3051,27 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
           <button className="primary" onClick={bookPlan}>Book</button>
         </div>
       )}
+      {/* Emergency sheet (emergency-button build): mounts only while
+          open — at S0 it is never in the tree. */}
+      {sosOpen && mapCard && lastParsed && (
+        <EmergencySheet
+          open={sosOpen}
+          onClose={() => setSosOpen(false)}
+          countries={mapCard.stops.map((s) => s.country)}
+          destination={lastParsed.destination}
+          routeLine={mapCard.stops.map((s) => s.city).join(' → ')}
+          travelers={lastParsed.travelers}
+          days={lastParsed.durationDays ?? mapCard.days}
+          datesLine={`${fmtDate(mapCard.startDate)}–${fmtDate(mapCard.endDate)}`}
+          origin={lastParsed.origin ?? ''}
+          contact={emergencyContact}
+          embassy={embassyNumber}
+          onEmbassyChange={onEmbassyChange}
+          checkIn={checkIn}
+          onSetCheckIn={(due) => setCheckIn({ due, surfaced: false })}
+          onClearCheckIn={() => setCheckIn(null)}
+        />
+      )}
     </div>
   );
 }
@@ -3084,6 +3148,17 @@ export default function Home() {
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-emergency-contact', JSON.stringify(emergencyContact)); } catch {} }, [emergencyContact]);
+  // Embassy / consulate number (emergency-button build): the
+  // traveler's own number, typed in My Trips — never looked up,
+  // never invented. Stored on this device only, like the contact.
+  const [embassyNumber, setEmbassyNumber] = useState('');
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-embassy-number');
+      if (raw) setEmbassyNumber(raw.slice(0, 40));
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem('fujintrip-embassy-number', embassyNumber); } catch {} }, [embassyNumber]);
   // Price watches (competitor learning #4): a drop is measured against
   // the live fare when the watch started — never against the planner
   // estimate. Stored in localStorage, like the trips.
@@ -3329,7 +3404,7 @@ export default function Home() {
           below stay in the capped .wrap. */}
       <div className="chat-shell">
         <div className="panel chat-panel" id="fujin-chat">
-          <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} />
+          <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} embassyNumber={embassyNumber} onEmbassyChange={setEmbassyNumber} />
         </div>
         {composerOpen && (
           <div className="panel" id="reel-composer">
@@ -3560,6 +3635,11 @@ export default function Home() {
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <input value={emergencyContact.name} onChange={(e) => setEmergencyContact({ ...emergencyContact, name: e.target.value })} placeholder="Name" aria-label="Emergency contact name" />
             <input value={emergencyContact.phone} onChange={(e) => setEmergencyContact({ ...emergencyContact, phone: e.target.value })} placeholder="Phone" aria-label="Emergency contact phone" />
+          </div>
+          <h3 style={{ marginTop: 20 }}>Embassy / consulate</h3>
+          <p className="plan-muted">Your embassy or consulate&apos;s number for the country you&apos;re visiting — yours to type in, saved on this device only. The SOS sheet can call it.</p>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <input value={embassyNumber} onChange={(e) => setEmbassyNumber(e.target.value)} placeholder="Embassy number" aria-label="Embassy or consulate phone number" />
           </div>
           <h3 style={{ marginTop: 20 }}>Price watches</h3>
           <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
