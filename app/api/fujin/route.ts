@@ -9,6 +9,7 @@ import { visaLine } from '../../../lib/visa';
 import { dietaryBlock, parseProfile, preferencesBlock, DIETARY_LABELS, type Dietary } from '../../../lib/preferences';
 import { paceFromProfile, paceRevisionPrompt } from '../../../lib/pace';
 import { parseDepartureTime, parseHHMM, parseLandingTime } from '../../../lib/arrival';
+import { allInLine } from '../../../lib/forgotten';
 import { checkPassportValidity, parsePassportExpiryValue, passportWarningLine } from '../../../lib/passport';
 import { buildTripCard, CITY_INFO, suggestedStart } from '../../../lib/tripCard';
 import { checkTripWeather, swapLine, weatherBlock, type WeatherCheck } from '../../../lib/daySwap';
@@ -129,6 +130,7 @@ const SYSTEM_PROMPT = [
   'PREFERENCES — when a PREFERENCES block is present, honor the stated preferences (direct flights, food style, pace, dietary) and never invent a preference the traveler never stated. When a DIETARY block is present, only suggest restaurants and dishes that fit it, and never call a place "safe" for allergies — mark unknowns as unknown; "likely halal" is never "certified halal" unless the listing says so.',
   'PACE — the traveler\'s pace is a constraint, not a suggestion: relaxed means at most 4 main sights a day, moderate 6, packed 8 (a traveler-set max overrides it). When a PACE block names a day over pace, warn about it in the reply — name the day, the count and the max — and offer: drop one experience, or add a day. When a revision pushes a day over pace, say so and offer the same choice, and state what did NOT change. Never plan a day the traveler cannot walk.',
   'ARRIVAL — Day 1 starts from the flight\'s landing time, not a generic morning: landing + about an hour to the hotel + a 30-minute buffer, and check-in is typically 3pm — confirm with the stay. When an ARRIVAL block is present, quote its line. When the traveler states a landing time, use it for Day 1 and never start Day 1 with a 3pm check-in. The last day ends at the airport: leave 3 hours before an international flight, 2 hours before a domestic one. Never invent a flight time — if no time was stated, say so and ask for it once, then stop asking.',
+  'ALL-IN — the plan total is flights + stays + transport + activities, but the real trip total adds the costs travelers forget: food, local transport, bags, resort/tourist tax, tips, SIM and insurance. When an ALL-IN block is present, quote the real trip total alongside the plan total, and label the forgotten lines as planning estimates. Never present the plan total as the whole trip cost when the traveler asks what the trip costs.',
   'GROUP — whenever a price is quoted for more than one traveler, give the per-person price AND the whole-trip total together, never one without the other. For a family, split it per person by age (adults at the adult total, each kid at their own child-fare total from the FAMILY PRICES block) — never divide a total by the traveler count when kids are in the party. For adults only, the per-person price is the total divided by the traveler count, and it must multiply back to the total exactly.',
   'PROACTIVE FOLLOW-UP — end an answer that opens a next step with ONE concrete offer tied to an open slot ("Want me to watch this fare and tell you if it drops?", "Would you like me to check if your hotel offers parking?") — not a generic "anything else?".',
   'MONEY — always name what is in a total; never hide the service fee; prices are in USD. When a price is shown, add the currency line once: "Prices in USD. If you pay in the local currency, your bank converts at its rate — paying in the local currency is usually cheaper than letting the hotel or airline convert for you."',
@@ -608,6 +610,9 @@ export async function POST(req: NextRequest) {
   if (guardCard) {
     guardLines.push(`Arrival — ${guardCard.arrival.line}`);
     if (guardCard.departure.leaveBy) guardLines.push(`Departure — ${guardCard.departure.line}`);
+    // Forgotten costs (round 4 #4): the real trip total rides on the
+    // Trip Summary, so the chat quotes the same reality as the plan view.
+    guardLines.push(allInLine(guardCard.total, guardCard.forgotten));
   }
   const guards = guardLines.join('\n\n');
   const [voices, liveFares, food, weather, cityVoices] = await Promise.all([voicesPromise, faresPromise, foodPromise, weatherPromise, cityVoicesPromise]);
@@ -671,6 +676,12 @@ export async function POST(req: NextRequest) {
   // asks for the landing time once (via the guards string).
   if (guardCard?.arrival.anchored) {
     systemPrompt += ` ARRIVAL — ${guardCard.arrival.line}${guardCard.departure.leaveBy ? ` ${guardCard.departure.line}` : ''}`;
+  }
+  // Forgotten costs (round 4 #4): the real trip total, from the same
+  // card the plan view shows — the model quotes it when the traveler
+  // asks what the trip costs.
+  if (guardCard) {
+    systemPrompt += ` ALL-IN — ${allInLine(guardCard.total, guardCard.forgotten)}`;
   }
   // Solo mode (round 3 #4): 1 traveler gets the supplement named and
   // the social options — never a double-occupancy price standing

@@ -18,6 +18,7 @@ import type { DuffelFareOffer, LiveFares } from './duffel';
 import { knowHowForLeg, passKnowHowForRoute, type TransportKnowHow } from './groundTransport';
 import { paceWarningsForCard, type PaceLevel, type PaceWarning } from './pace';
 import { arrivalAnchor, departureAnchor, type ArrivalInfo, type DepartureInfo } from './arrival';
+import { forgottenCostLines, type ForgottenCosts } from './forgotten';
 
 type CityDay = { t: string; n: number };
 type CityInfo = {
@@ -196,6 +197,10 @@ export type TripLeg = {
   // until the traveler confirms it.
   fareClass?: string;
   terms?: string;
+  // Forgotten costs (round 4 #4): the resort-fee / tourist-tax warning
+  // on every stay leg — the fee is never in the plan total, so the leg
+  // says so instead of letting the total look complete.
+  feeWarning?: string;
   // Ground-transport know-how (ground-transport plan, Nov 12, 2026):
   // the "How to book" strings from the plan file, keyed to this leg's
   // mode and the route. Metadata only — prices are untouched, so the
@@ -229,6 +234,12 @@ export type TripCard = {
   // airport — never a generic morning, never an invented flight time.
   arrival: ArrivalInfo;
   departure: DepartureInfo;
+  // Forgotten costs (round 4 #4): the labeled estimate lines for the
+  // categories travelers forget — food, local transport, bags, resort
+  // / tourist tax, tips, SIM, insurance, transfers. The card total
+  // stays the plan total (the legs sum to it); the real trip total is
+  // total + forgotten.total, shown side by side in the plan view.
+  forgotten: ForgottenCosts;
   stops: TripCardStop[];
   legs: TripLeg[];
   returnTransport: { mode: string; from: string; price: number; knowHow?: TransportKnowHow };
@@ -386,6 +397,10 @@ export function buildTripCard(opts: {
   // planner flight leg swapped for the flight total above. Hotels,
   // cars and activities are untouched planner numbers.
   const cardTotal = best.total - best.flight + flightTotal;
+  // Forgotten costs (round 4 #4): the estimate lines for the chosen
+  // tier's plan total — the card total stays the plan total, and the
+  // real trip total is cardTotal + forgotten.total.
+  const forgotten = forgottenCostLines({ planTotal: best.total, days, travelers: opts.travelers, routeKey, nights: totalNights });
 
   let dayCursor = 1;
   let dateCursor = startDate;
@@ -567,6 +582,7 @@ export function buildTripCard(opts: {
       detail: `${st.nights} night${st.nights > 1 ? 's' : ''} · hostel / guesthouse estimate`,
       more: `${st.intro} ${info ? `Days here: ${info.days.map((d) => d.t).join(' · ')}.` : ''} The stay is a planning estimate — real named stays with ratings arrive with a hotel supplier (Expedia / Duffel Stays). Nothing is booked until you confirm it.`,
       terms: legTerms,
+      feeWarning: forgotten.feeWarning,
       price: st.stayEstimate,
       city: st.city,
       lat: c.lat + 0.04,
@@ -674,6 +690,7 @@ export function buildTripCard(opts: {
     paceWarnings,
     arrival,
     departure,
+    forgotten,
     stops: cardStops,
     legs,
     returnTransport: {

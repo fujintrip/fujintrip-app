@@ -2264,6 +2264,10 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   >
                     <p className="plan-line">{stop.nights} night{stop.nights > 1 ? 's' : ''} in {stop.city} · hostel / guesthouse estimate from ${stop.stayEstimate.toLocaleString()}</p>
                     <p className="plan-note">Planning estimate — real named stays with ratings arrive with a hotel supplier (Expedia / Duffel Stays). Nothing is booked until you confirm it.</p>
+                    {/* Forgotten costs (round 4 #4): the fee warning on
+                        the stay — the resort fee / tourist tax is never
+                        in the plan total, so the leg says so. */}
+                    <p className="plan-note">{(displayCard ?? tripCard).forgotten.feeWarning}</p>
                   </Expandable>
                   <p style={{ fontSize: 14, margin: '8px 0 4px' }}><b>Itinerary</b></p>
                   {stop.days.map((d) => (
@@ -2464,6 +2468,24 @@ function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, watches
                   <p style={{ fontSize: 14, margin: '8px 0' }}>
                     You save <strong>${comparison.save.toLocaleString()} (~{comparison.savePercent}%)</strong> with FujinTrip vs booking each leg separately. Prices are planning estimates, not live quotes.
                   </p>
+                </div>
+              )}
+              {/* Forgotten costs (round 4 #4): the real trip total —
+                  the plan total plus the labeled estimate lines for
+                  the categories travelers forget (food, local
+                  transport, bags, resort/tourist tax, tips, SIM,
+                  insurance, transfers). */}
+              {tripCard && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: '4px 0' }}>The real trip total — what it actually costs</h3>
+                  <p className="plan-line">Plan total ({['Cheapest', 'Best value', 'Premium'][choice]}): <strong>${(displayCard ?? tripCard).total.toLocaleString()}</strong> — flights, stays, transport between cities and activities.</p>
+                  {(displayCard ?? tripCard).forgotten.lines.map((l) => (
+                    <p key={l.id} className="plan-line">{l.label}: ${l.amount.toLocaleString()} <span style={{ color: 'var(--muted)' }}>({l.note})</span></p>
+                  ))}
+                  <p className="plan-line" style={{ fontWeight: 700, borderTop: '2px solid var(--line)', paddingTop: 6 }}>
+                    Real trip total: about ${((displayCard ?? tripCard).total + (displayCard ?? tripCard).forgotten.total).toLocaleString()} <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(planning estimates — the lines above are estimates, not live quotes)</span>
+                  </p>
+                  <p className="plan-note">{(displayCard ?? tripCard).forgotten.feeWarning}</p>
                 </div>
               )}
               {visaInfos.length > 0 && (
