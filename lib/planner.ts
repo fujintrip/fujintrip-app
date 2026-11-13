@@ -496,6 +496,26 @@ export const ROUTE_STOPS: Record<string, Array<{ city: string; country: string; 
   ],
 };
 
+// The trip's day count — ONE source of truth (plan-mismatch fix,
+// Nov 13, 2026). The traveler states a length ("14 days", "a week")
+// or the trip has no length yet: every consumer (preview card, built
+// card, Trip Summary, panel edits, weather check, plan share, and the
+// fallback's own summary/revision math) reads this helper, so the
+// summary and the built plan can never disagree on nights, dates or
+// totals again. Before this, the preview and the summary assumed 14
+// days while build() used 3 when the length was unknown — a Central
+// Europe trip showed Prague 4n → Vienna 3n → Budapest 6n, Jan 4–17,
+// then built a 3-day plan, Jan 4–6, 1 night per city, and the site's
+// own feasibility audit flagged it. The 14-day default is kept: it is
+// the preview's long-established default and the Layla-style flow's
+// length. Clamped to buildTripCard's own 2–30 window, so the summary
+// and the card agree even on an extreme stated length (1 day, 60 days).
+export const DEFAULT_TRIP_DAYS = 14;
+export function tripDays(durationDays?: number): number {
+  const d = durationDays && durationDays > 0 ? durationDays : DEFAULT_TRIP_DAYS;
+  return Math.min(30, Math.max(2, d));
+}
+
 // Share the trip's nights across the route stops by weight, so the nights
 // always add up exactly to days - 1 (a 14-day trip is 13 nights). The
 // longest stay absorbs the rounding difference.
@@ -1486,9 +1506,9 @@ export function askFujin(
     // shows — its nights, not the original route's.
     const legs =
       contextOverride?.cities.length
-        ? distributeNightsForStops(stopsForRoute(route, contextOverride), duration || 14)
+        ? distributeNightsForStops(stopsForRoute(route, contextOverride), tripDays(duration))
         : route
-          ? distributeNights(route, duration || 14)
+          ? distributeNights(route, tripDays(duration))
           : [];
     const sep = (ROUTE_SEPARATOR[route] ?? '🚆');
     const routeLine =
@@ -1498,7 +1518,7 @@ export function askFujin(
           ? `${origin ? `${origin} ✈️ ` : ''}${legs[0].city}`
           : dest;
     const monthName = month ? MONTH_NAMES[month - 1] : '';
-    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${duration || 14} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport.${familyNote ? ` ${familyNote}` : ''}${travelers === 1 ? ` ${soloLine()}` : ''} Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
+    return `Here is your trip — ${routeLine}\n${monthName ? `${monthName} · ` : ''}${tripDays(duration)} days · ${travelers} traveler${travelers > 1 ? 's' : ''}${origin ? ` · flying from ${origin}` : ''} · budget style, hostels and guesthouses, public transport.${familyNote ? ` ${familyNote}` : ''}${travelers === 1 ? ` ${soloLine()}` : ''} Does this sound right? Tap Build my plan to generate the full trip card — then pick your flights and stays on the map next to the chat.`;
   };
   const isConfirmation = /^(yes|yeah|yep|sure|ok|okay|looks great|looks good|perfect|sounds good|sounds great|build it|let'?s build|go ahead|do it|great|love it)\b/.test(
     currentLower.trim()
@@ -1526,7 +1546,7 @@ export function askFujin(
         // stops) — say so. A tier/budget change re-prices with child
         // fares when the party has kids.
         const partyForTotals: Party = { kids: kidAges };
-        const planTotals = buildPlan(dest, travelers, duration || 14, partyForTotals).options.map((o) => o.total);
+        const planTotals = buildPlan(dest, travelers, tripDays(duration), partyForTotals).options.map((o) => o.total);
         const oldTier = Math.min(2, Math.max(0, contextTier ?? 1));
         const deltaLine = (newTier: number): string => {
           const d = planTotals[newTier] - planTotals[oldTier];
@@ -1563,9 +1583,9 @@ export function askFujin(
             tier,
           };
         }
-        const applied = applyRevision(stops, revision, duration || 14);
+        const applied = applyRevision(stops, revision, tripDays(duration));
         if (applied) {
-          const nights = distributeNightsForStops(stopsForRoute(rk, applied.override), duration || 14);
+          const nights = distributeNightsForStops(stopsForRoute(rk, applied.override), tripDays(duration));
           const routeLine = nights.map((n) => `${n.city} (${n.nights} nights)`).join(' → ');
           return {
             destination: dest,
@@ -1645,7 +1665,7 @@ export function askFujin(
       // is looking at THEIR route, not the template, while the last
       // slots are still being collected.
       if (contextOverride?.cities.length) {
-        const nights = distributeNightsForStops(stopsForRoute(routeKey, contextOverride), duration || 14);
+        const nights = distributeNightsForStops(stopsForRoute(routeKey, contextOverride), tripDays(duration));
         routeText = nights.map((n) => `${n.city} (${n.nights} nights)`).join(' → ');
       }
       // Season notes, only when the traveler named the month — a January
