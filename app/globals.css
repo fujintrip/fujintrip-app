@@ -581,8 +581,6 @@ html{scroll-padding-bottom:96px}
 
 /* TripAdvisor homepage (Nov 13): one slim bar, one question, one box. */
 .topbar-nav{display:flex;gap:10px;align-items:center}
-.topbar-nav .ask-ai{background:var(--ink);color:var(--on-ink);border-radius:999px;padding:10px 18px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-.topbar-nav .ask-ai:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .topbar-nav .ghost-link{color:var(--ink);text-decoration:none;font-weight:600;padding:10px 8px}
 .hero-ta{display:flex;gap:40px;align-items:center;max-width:1200px;margin:0 auto;padding:56px 24px 40px}
 .hero-ta-copy{flex:1;min-width:0}
@@ -592,15 +590,31 @@ html{scroll-padding-bottom:96px}
 .hero-ta-search input{flex:1;border:none;background:transparent;padding:12px 14px;font-size:17px;min-width:0}
 .hero-ta-search input:focus{outline:none}
 .hero-ta-search .primary{min-height:52px;padding:0 26px;font-size:16px;border-radius:12px;white-space:nowrap}
-.category-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
-.category-btn{display:inline-flex;align-items:center;gap:6px}
 .hero-ta-photo{flex:0 0 380px;margin:0;border-radius:20px;overflow:hidden}
 .hero-ta-photo img{width:100%;height:100%;object-fit:cover;display:block;aspect-ratio:4/3}
+/* The one AI entry point on the homepage (direction v2): a big button
+   under the hero search box, straight to /chat. */
+.ai-hero-btn{display:inline-block;margin-top:20px;background:var(--ink);color:var(--on-ink);border-radius:14px;padding:16px 28px;font-size:17px;font-weight:700;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.ai-hero-btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .book-section{max-width:1200px;margin:0 auto;padding:8px 24px 48px}
 .book-section h2{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:clamp(28px,4vw,36px);margin:0 0 8px}
 .book-sub{color:var(--muted);margin:0 0 20px;max-width:640px}
-.book-tab-label{display:flex;gap:10px;align-items:center;font-weight:600;margin-bottom:16px}
-.book-tab-label select{flex:0 1 260px}
+/* Homepage tabs (direction v2): the seven categories as a tab bar,
+   visible on page load under the hero. Selected tab reads as the
+   active one; the panel below carries its search + results. */
+.home-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
+.tab-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit}
+.tab-btn.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.tab-results{margin-top:24px}
+.tab-results h3{font-size:19px;margin:0 0 12px}
+.tab-results h4{font-size:15px;margin:20px 0 8px}
+.tab-rows{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft)}
+.tab-row{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:15px}
+.fare-block{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:16px 0;background:var(--card)}
+.fare-block h4:first-child{margin-top:0}
+.fare-list{list-style:none;margin:0 0 8px;padding:0}
+.fare-row{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;padding:6px 0;font-size:15px}
+.results-note{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);font-size:14px}
 .link-box{margin-top:32px;border:1px solid var(--line);border-radius:16px;padding:20px;background:var(--card)}
 .link-box h3{margin:0 0 6px;font-size:17px}
 .link-box p{color:var(--muted);margin:0 0 14px}
