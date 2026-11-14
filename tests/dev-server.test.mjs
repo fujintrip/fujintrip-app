@@ -791,3 +791,11 @@ test('images: no img on / or /chat is display:none — the lazy + display:none d
     }
   }
 });
+
+test('theme: the pre-paint script is in the served HTML, so the first paint already has the resolved theme', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('fujintrip-theme'), 'theme script sets the stored theme before paint');
+  assert.ok(html.includes('data-theme'), 'theme script writes data-theme on <html>');
+});
