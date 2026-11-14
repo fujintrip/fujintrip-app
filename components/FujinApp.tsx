@@ -493,7 +493,7 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
             <a href="/chat" className="ai-hero-btn">Build full plan with AI →</a>
           </div>
           <figure className="hero-ta-photo">
-            <SafeImg src={HERO_PHOTO} alt="Torii gates at Fushimi Inari, Kyoto" label="Kyoto" />
+            <SafeImg src={HERO_PHOTO} alt="Torii gates at Fushimi Inari, Kyoto" label="Kyoto" loading="eager" />
           </figure>
         </section>
       )}

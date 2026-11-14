@@ -24,11 +24,17 @@ export default function PhotoCarousel({ photos, alt }: { photos: string[]; alt: 
     <div className="photocarousel">
       <div className="photocarousel-media">
         {!loaded && (
-          <div className="img-loading skeleton" role="img" aria-label={alt}>
+          <div className="img-loading skeleton" style={{ position: 'absolute', inset: 0 }} role="img" aria-label={alt}>
             <span>{alt}</span>
           </div>
         )}
-        <img src={src} alt={alt} loading="lazy" style={loaded ? undefined : { display: 'none' }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+        {/* Never display:none while loading: a lazy image with no
+            layout box never intersects the viewport, so it never
+            fetches and the shimmer shows forever (defect, Nov 14
+            2026 — the template cards' photos never decoded). The
+            image stays in flow at opacity 0; the shimmer overlays
+            its box. .photocarousel-media is already position:relative. */}
+        <img src={src} alt={alt} loading="lazy" style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
         {photos.length > 1 && (
           <span className="photocarousel-count" aria-label={`Photo ${idx + 1} of ${photos.length}`}>
             {idx + 1} / {photos.length}

@@ -769,3 +769,25 @@ test('ground transport: checkout status lists the trains category with nothing l
   }
   assert.equal(j.suppliers.states.find((s) => s.id === 'holidaytaxis').state, 'unavailable');
 });
+
+test('images: no img on / or /chat is display:none — the lazy + display:none deadlock (Nov 14)', async () => {
+  // SafeImg/PhotoCarousel used to hide the not-yet-loaded image with
+  // display:none; a lazy image with no layout box never intersects
+  // the viewport, so the browser never fetches it and the shimmer
+  // shows forever (0 decoded images on the homepage). The server
+  // HTML carries the pre-load markup, so this pins the pattern there.
+  for (const path of ['/', '/chat']) {
+    const r = await fetch(`${BASE}${path}`);
+    assert.equal(r.status, 200);
+    const html = await r.text();
+    const imgs = html.match(/<img[^>]*>/g) || [];
+    assert.ok(imgs.length > 0, `${path} renders img tags`);
+    for (const tag of imgs) {
+      assert.ok(!/display\s*:\s*none/i.test(tag), `${path}: no img is display:none — ${tag.slice(0, 120)}`);
+    }
+    // The hero photo URL is present on the homepage.
+    if (path === '/') {
+      assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'hero photo URL renders on the homepage');
+    }
+  }
+});

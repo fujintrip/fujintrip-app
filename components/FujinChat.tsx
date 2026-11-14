@@ -146,6 +146,15 @@ export const HERO_PHOTO = 'https://images.unsplash.com/photo-1493976040374-85c8e
 // While it loads, a warm shimmer tile with the name shows instead of a
 // blank space (design #9 — the loaded-error state is the fallback; this
 // is the loading state).
+//
+// The not-yet-loaded image is hidden with opacity, NEVER with
+// display:none (defect, Nov 14 2026): a lazy image that is display:none
+// has no layout box, so it never intersects the viewport, so the
+// browser never fetches it — onLoad never fires and the shimmer shows
+// forever. The homepage hero and the package cards all hit this (0
+// decoded images on the homepage while the chat page's eager hero
+// decoded fine). The shimmer is absolutely positioned over the
+// image's own box, so nothing jumps when the image arrives.
 export function SafeImg({ src, alt, label, className, loading }: { src: string; alt: string; label: string; className?: string; loading?: 'lazy' | 'eager' }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -157,14 +166,14 @@ export function SafeImg({ src, alt, label, className, loading }: { src: string; 
     );
   }
   return (
-    <>
+    <div className="safeimg" style={{ position: 'relative' }}>
       {!loaded && (
-        <div className={`img-loading skeleton ${className ?? ''}`} role="img" aria-label={alt}>
+        <div className={`img-loading skeleton ${className ?? ''}`} style={{ position: 'absolute', inset: 0 }} role="img" aria-label={alt}>
           <span>{label}</span>
         </div>
       )}
-      <img src={src} alt={alt} loading={loading ?? 'lazy'} className={className} style={loaded ? undefined : { display: 'none' }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
-    </>
+      <img src={src} alt={alt} loading={loading ?? 'lazy'} className={className} style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+    </div>
   );
 }
 
