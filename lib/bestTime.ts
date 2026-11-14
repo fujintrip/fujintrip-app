@@ -24,8 +24,9 @@ export type Season = 'peak' | 'shoulder' | 'low';
 export type BestMonth = {
   month: number;
   season: Season;
-  // Typical daytime high range across the route's stops (°C), or null
-  // when the trip card has no temperature data for this route.
+  // Typical daytime high range across the route's stops (°F — the
+  // temperatures in CITY_INFO are Fahrenheit), or null when the trip
+  // card has no temperature data for this route.
   tempLow: number | null;
   tempHigh: number | null;
   price: 'higher than typical' | 'typical' | 'lower than typical';
@@ -108,21 +109,37 @@ export function bestTimeFor(destination: string): BestTime {
   return { routeKey: key, destination, cities, bestMonth: s.best, bestNote: s.note, months };
 }
 
+// The temperature label for a month's range. The numbers are
+// Fahrenheit (CITY_INFO jan/jul are °F), so the unit is °F — the
+// strip used to print °C next to Fahrenheit numbers (defect, Nov 14
+// 2026: "typically 37–37°C" for January, while the checklist on the
+// same page correctly said 37°F). When every stop shares one
+// temperature the range is a single value — "37–37°F" is a degenerate
+// range, never show it. Returns '' when there is no temperature data.
+export function tempRangeLabel(low: number | null, high: number | null): string {
+  if (low === null || high === null) return '';
+  if (low === high) return `, typically ${low}°F`;
+  return `, typically ${low}–${high}°F`;
+}
+
+// The best month's temperature line for the plan view: the range plus
+// the cities it spans, or '' when there is no temperature data.
+export function bestMonthTempLabel(bt: BestTime): string {
+  const m = bt.months[bt.bestMonth - 1];
+  const range = tempRangeLabel(m.tempLow, m.tempHigh);
+  return range ? `${range} across ${bt.cities.join(', ')}` : '';
+}
+
 // The one-line read for the chat reply and the plan view: the best
 // month and why, plus the season for the trip's own month when known.
 export function bestTimeLine(destination: string, tripMonth = 0): string {
   const bt = bestTimeFor(destination);
   const best = bt.months[bt.bestMonth - 1];
-  const bestTemp =
-    best.tempLow !== null && best.tempHigh !== null
-      ? `, typically ${best.tempLow}–${best.tempHigh}°C across ${bt.cities.join(', ')}`
-      : '';
-  let line = `Best month to go: ${MONTH_NAMES[bt.bestMonth - 1]} — ${bt.bestNote}; ${best.crowds} crowds, ${best.price} prices${bestTemp}. Typical season, not live prices.`;
+  const bestTemp = tempRangeLabel(best.tempLow, best.tempHigh);
+  let line = `Best month to go: ${MONTH_NAMES[bt.bestMonth - 1]} — ${bt.bestNote}; ${best.crowds} crowds, ${best.price} prices${bestTemp ? `${bestTemp} across ${bt.cities.join(', ')}` : ''}. Typical season, not live prices.`;
   if (tripMonth >= 1 && tripMonth <= 12 && tripMonth !== bt.bestMonth) {
     const cur = bt.months[tripMonth - 1];
-    const curTemp =
-      cur.tempLow !== null && cur.tempHigh !== null ? `, typically ${cur.tempLow}–${cur.tempHigh}°C` : '';
-    line += ` Your month (${MONTH_NAMES[tripMonth - 1]}) is ${cur.season} season — ${cur.crowds} crowds, ${cur.price} prices${curTemp}.`;
+    line += ` Your month (${MONTH_NAMES[tripMonth - 1]}) is ${cur.season} season — ${cur.crowds} crowds, ${cur.price} prices${tempRangeLabel(cur.tempLow, cur.tempHigh)}.`;
   }
   return line;
 }

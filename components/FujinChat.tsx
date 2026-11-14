@@ -7,7 +7,7 @@ import { askFujin, applyRevision, buildPlan, comparisonFor, distributeNights, di
 import { settleUp, settlementLine, type Expense } from '../lib/settle';
 import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
-import { bestTimeFor, type BestTime } from '../lib/bestTime';
+import { bestTimeFor, bestMonthTempLabel, tempRangeLabel, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard, type TripLeg } from '../lib/tripCard';
 import { buildMapRail } from '../lib/mapRail';
 import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
@@ -2888,7 +2888,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                       return (
                         <div
                           key={m.month}
-                          title={`${MONTH_NAMES[m.month - 1]} — ${m.season} season, ${m.crowds} crowds, ${m.price} prices${m.tempLow !== null && m.tempHigh !== null ? `, typically ${m.tempLow}–${m.tempHigh}°C` : ''}`}
+                          title={`${MONTH_NAMES[m.month - 1]} — ${m.season} season, ${m.crowds} crowds, ${m.price} prices${tempRangeLabel(m.tempLow, m.tempHigh)}`}
                           style={{
                             flex: 1,
                             background: bg,
@@ -2917,18 +2917,14 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                   <p className="plan-line">
                     <strong>Best month to go: {MONTH_NAMES[bestTime.bestMonth - 1]}</strong> — {bestTime.bestNote};{' '}
                     {bestTime.months[bestTime.bestMonth - 1].crowds} crowds, {bestTime.months[bestTime.bestMonth - 1].price} prices
-                    {bestTime.months[bestTime.bestMonth - 1].tempLow !== null && bestTime.months[bestTime.bestMonth - 1].tempHigh !== null
-                      ? `, typically ${bestTime.months[bestTime.bestMonth - 1].tempLow}–${bestTime.months[bestTime.bestMonth - 1].tempHigh}°C across ${bestTime.cities.join(', ')}`
-                      : ''}
+                    {bestMonthTempLabel(bestTime)}
                     .
                   </p>
                   {lastParsed?.month && lastParsed.month !== bestTime.bestMonth && (
                     <p className="plan-line">
                       Your month ({MONTH_NAMES[lastParsed.month - 1]}) is {bestTime.months[lastParsed.month - 1].season} season —{' '}
                       {bestTime.months[lastParsed.month - 1].crowds} crowds, {bestTime.months[lastParsed.month - 1].price} prices
-                      {bestTime.months[lastParsed.month - 1].tempLow !== null && bestTime.months[lastParsed.month - 1].tempHigh !== null
-                        ? `, typically ${bestTime.months[lastParsed.month - 1].tempLow}–${bestTime.months[lastParsed.month - 1].tempHigh}°C`
-                        : ''}
+                      {tempRangeLabel(bestTime.months[lastParsed.month - 1].tempLow, bestTime.months[lastParsed.month - 1].tempHigh)}
                       .
                     </p>
                   )}
