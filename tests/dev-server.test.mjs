@@ -64,81 +64,119 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
-test('homepage hero: one question, one search box, 7 tabs, one big AI button, no Ask Fujin AI link, no chat shell', async () => {
+test('homepage: photo hero + search widget with 7 tabs, destinations, trust strip, exactly one Plan with AI pill, no results before a search', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
-  const html = await r.text();
-  // One solid question + one search box (TripAdvisor model).
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  // Photo hero with the one question.
   assert.ok(html.includes('Where to?'), 'hero asks Where to?');
-  assert.equal((html.match(/aria-label="Where to\?"/g) || []).length, 1, 'exactly one hero search box');
-  assert.ok(html.includes('hero-ta-search'), 'hero search box renders');
-  // Seven bookable categories as tabs, visible on page load under the hero.
-  assert.equal((html.match(/role="tab"/g) || []).length, 7, '7 tabs');
-  for (const label of ['Tours &amp; sightseeing', 'Flights', 'Hotels', 'Car rental', 'Cruises', 'Buses', 'Taxis']) {
-    assert.ok(html.includes(label), `tab ${label} renders`);
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
+  // The search widget: 7 category tabs switch the SEARCH FORM.
+  assert.equal((html.match(/role="tab"/g) || []).length, 7, '7 widget tabs');
+  for (const label of ['Stays', 'Flights', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']) {
+    assert.ok(html.includes(label), `widget tab ${label} renders`);
   }
-  // Exactly ONE AI entry point on the homepage — the big button under
-  // the search box (direction v2). The header "Ask Fujin AI" link is
-  // gone; the chat itself is not on this page.
-  assert.equal((html.match(/Build full plan with AI/g) || []).length, 1, 'exactly one Build full plan with AI button');
-  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 0, 'no Ask Fujin AI link on the homepage');
-  assert.ok(html.includes('href="/chat"'), 'the AI button leads to /chat');
-  // The search box is a combobox: typing offers known destinations.
-  assert.ok(html.includes('role="combobox"'), 'hero search is a combobox');
-  assert.ok(html.includes('aria-controls="hero-suggestions"'), 'hero search controls the suggestions list');
+  // Stays is the default form; the honest line sits under the button.
+  assert.ok(html.includes('Search stays'), 'the Stays search form renders by default');
+  assert.ok(html.includes('All-in prices. No hidden fees. Planning estimates until live suppliers connect.'), 'the widget honesty line renders');
+  // Exactly ONE AI entry point on the site — the header pill.
+  assert.equal((html.match(/Plan with AI/g) || []).length, 1, 'exactly one Plan with AI pill');
+  assert.equal((html.match(/Build full plan with AI/g) || []).length, 0, 'no big AI button under the hero');
+  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 0, 'no Ask Fujin AI link');
+  assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now anywhere');
+  assert.ok(html.includes('href="/chat"'), 'the AI pill leads to /chat');
+  // Trust strip (spec 1c): three honest lines, no invented numbers.
+  assert.ok(html.includes('All-in prices — the price you see is the price you pay'), 'trust: all-in prices');
+  assert.ok(html.includes('No hidden fees — our flight service fee is shown separately at checkout'), 'trust: no hidden fees');
+  assert.ok(html.includes('Compare prices from different sources'), 'trust: compare prices');
+  // Browse sections below the hero.
+  assert.ok(html.includes('Popular destinations'), 'Popular destinations renders');
+  assert.ok(html.includes('What do you need for your trip?'), 'category tiles render');
+  assert.ok(html.includes('Weekend trips near you'), 'Near you renders');
+  assert.ok(html.includes('Featured hidden gems'), 'hidden gems render');
+  assert.ok(html.includes("Travelers' stories"), 'community stories render');
+  assert.ok(html.includes('Show more destinations'), 'the destinations expander renders');
+  assert.ok(html.includes('per traveler'), 'destination cards carry a per-traveler price line');
+  // NO results before a search — the results shell renders only after
+  // the widget submits (direction v3: results-on-load is gone).
+  assert.ok(!html.includes('Planning estimates from FujinTrip'), 'no results honesty header before a search');
+  assert.ok(!html.includes('Save this search'), 'no Save this search before a search');
+  assert.ok(!html.includes('Checking live fares'), 'no live-fares loading state before a search');
   // The chat shell, panel and map live on /chat only.
   assert.ok(!html.includes('fujin-chat'), 'no chat panel on the homepage');
   assert.ok(!html.includes('chat-shell'), 'no chat shell on the homepage');
   assert.ok(!html.includes('trippanel'), 'no trip panel on the homepage');
   assert.ok(!html.includes('mapcol'), 'no map column on the homepage');
-  // The Kyoto torii hero photo stays as the hero visual.
-  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
-  // The booking section below the fold: tabs + link box.
-  assert.ok(html.includes('id="book"'), 'booking section renders');
-  assert.ok(html.includes('Paste a link or article text'), 'Start from a link is reachable below the fold');
+  // The old homepage is gone: no hero-to-chat seeding, no link box.
+  assert.ok(!html.includes('Start from a link'), 'no Start from a link section');
+  assert.ok(!html.includes('Paste a link or article text'), 'no link box');
+  assert.ok(html.includes('My Trips'), 'My Trips stays on the homepage');
 });
 
-test('tabs: Flights is the default panel — search form, planner flight budget, live-fares loading state', async () => {
-  const r = await fetch(`${BASE}/`);
+test('tabs: ?tab=flights shows the Flights form, still no results before a search', async () => {
+  const r = await fetch(`${BASE}/?tab=flights`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The default tab is Flights (the one with live data).
-  assert.ok(html.includes('Search Flights'), 'the Flights search form renders');
+  assert.ok(html.includes('Search flights'), 'the Flights search form renders');
+  assert.ok(!html.includes('Search stays'), 'the Stays form waits for its tab');
+  assert.ok(!html.includes('Planning estimates from FujinTrip'), 'no results before a search');
+  assert.ok(!html.includes('Save this search'), 'no Save this search before a search');
+});
+
+test('search deep link: flights with dates renders the results shell — budget, loading states, per-route estimates, honesty labels', async () => {
+  const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Planning estimates from FujinTrip'), 'the results honesty header renders');
   assert.ok(html.includes('Plan flight budget'), 'the planner flight budget line renders');
   assert.ok(html.includes('$1,512'), 'the Central Europe flight budget is $1,512 for 2 travelers');
   assert.ok(html.includes('Checking live fares'), 'the live-fares fetch shows its loading state');
-  assert.ok(html.includes('Flights by destination'), 'the per-route flight estimates render');
+  // The competitor column starts client-side (its state is 'idle'
+  // until the effect fires), so its heading is not in the SSR HTML —
+  // the API-level test below covers its honest empty state.
+  assert.ok(!html.includes('Other sites (cached)'), 'the competitor column waits for the client fetch');
+  assert.ok(html.includes('Flights by destination — planning estimates'), 'the per-route flight estimates render');
   assert.ok(html.includes('from $756 per traveler'), 'Central Europe flights from $756 per traveler');
   assert.ok(html.includes('planning estimate'), 'the estimates are labeled');
-  // The other panels do not render until their tab is picked.
-  assert.ok(!html.includes('Search Hotels'), 'the Hotels form waits for its tab');
+  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  assert.ok(!html.includes('Book now'), 'no Book now in the results');
 });
 
-test('tabs: ?tab=hotels shows the Hotels panel with leg prices and planning-estimate labels', async () => {
-  const r = await fetch(`${BASE}/?tab=hotels`);
+test('search deep link: stays with dates renders per-destination rows with Best value labels and the map toggle', async () => {
+  const r = await fetch(`${BASE}/?tab=hotels&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&guests=2&rooms=1`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  assert.ok(html.includes('Search Hotels'), 'the Hotels search form renders');
+  assert.ok(html.includes('Planning estimates from FujinTrip'), 'the results honesty header renders');
   assert.ok(html.includes('from $594 per traveler'), 'Central Europe stays from $594 per traveler');
   assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
-  assert.ok(!html.includes('Search Flights'), 'the Flights form waits for its tab');
+  assert.ok(html.includes('Show on map'), 'the Stays map toggle renders');
+  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
 });
 
-test('tabs: ?tab=cruises shows the honest not-connected note and full-trip estimates', async () => {
-  const r = await fetch(`${BASE}/?tab=cruises`);
+test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {
+  const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=1&travelers=2`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  assert.ok(html.includes('Search Cruises'), 'the Cruises search form renders');
   assert.ok(html.includes("aren't broken out"), 'the gap is named');
   assert.ok(html.includes('Full trip · planning estimate'), 'the rows say they are full-trip totals');
   assert.ok(html.includes('from $1,800 per traveler'), 'Central Europe full trip $1,800 per traveler');
+  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
 });
 
-test('tabs: ?tab=bogus falls back to Flights', async () => {
+test('tabs: ?tab=bogus falls back to Stays', async () => {
   const r = await fetch(`${BASE}/?tab=bogus`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  assert.ok(html.includes('Search Flights'), 'a bad tab param falls back to Flights');
+  assert.ok(html.includes('Search stays'), 'a bad tab param falls back to Stays');
+  assert.ok(!html.includes('Search flights'), 'the Flights form waits for its tab');
+});
+
+test('chat page: renders the chat panel and exactly one Plan with AI pill', async () => {
+  const r = await fetch(`${BASE}/chat`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
+  assert.equal((html.match(/Plan with AI/g) || []).length, 1, 'exactly one Plan with AI pill on /chat');
 });
 
 test('tabs: price-check without a key is honestly empty (the API the Flights tab calls)', async () => {
@@ -497,53 +535,44 @@ test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exi
   assert.ok(css.includes('.sos-missed'), 'stylesheet has the missed check-in banner');
 });
 
-test('template library (interface round S2): 26 cards, real filter counts, 12 per page', async () => {
+test('popular destinations (direction v3): 8 cards + expander, per-traveler price lines, no filter pills, no pagination', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // Filter pills carry real counts from the 26 library names — every
-  // pill has cards behind it, none is empty.
-  assert.ok(html.includes('All (26)'), 'All pill counts the 26 library entries');
-  assert.ok(html.includes('Cities &amp; culture (22)') || html.includes('Cities & culture (22)'), 'Cities & culture pill with real count');
-  assert.ok(html.includes('Beach &amp; islands (11)') || html.includes('Beach & islands (11)'), 'Beach & islands pill with real count');
-  assert.ok(html.includes('Mountains &amp; nature (4)') || html.includes('Mountains & nature (4)'), 'Mountains & nature pill with real count');
-  assert.ok(html.includes('Food (15)'), 'Food pill with real count');
-  // Page 1 shows 12 cards; page 3 holds the last two standalone
-  // destinations, so Maldives and Paris are not on page 1.
-  assert.ok(html.includes('Page 1 of 3'), 'pagination renders Page 1 of 3');
-  assert.ok(!html.includes('>Maldives<'), 'Maldives is on page 3, not page 1');
-  assert.ok(!html.includes('>Paris<'), 'Paris is on page 3, not page 1');
-  // A page-1 card carries the one-line counts shape: stays ·
-  // transports · from $X total · Best value · 2 travelers · planning
-  // estimate. Central Europe is the second discovery entry.
-  assert.ok(html.includes('3 stays · 4 transports · from $3,600 total · Best value · 2 travelers · planning estimate'), 'Central Europe card carries the counts line');
-  // The route line renders when there is more than one stop.
-  assert.ok(html.includes('Prague → Vienna → Budapest'), 'Central Europe card carries the route line');
-  // "Make it yours" is the primary CTA on every library card.
-  assert.ok(html.includes('Make it yours'), 'the library cards offer Make it yours');
+  // Eight cards on load; the rest wait behind the expander (26 total).
+  assert.ok(html.includes('Show more destinations (18 more)'), 'the expander counts the remaining 18');
+  // The first 8 are the first discovery entries, so the standalone
+  // destinations (Maldives, Paris) are not on it.
+  assert.ok(!html.includes('>Maldives<'), 'Maldives waits behind the expander');
+  assert.ok(!html.includes('>Paris<'), 'Paris waits behind the expander');
+  // A card carries the per-traveler Best value price line, never a
+  // counts line or a guessed rate. Central Europe is $3,600 for 2.
+  assert.ok(html.includes('from $1,800 per traveler'), 'Central Europe card carries the per-traveler price line');
+  assert.ok(html.includes('Best value · 2 travelers · planning estimate'), 'the price line is labeled a planning estimate');
+  // The card action prefills the search widget — it never seeds the
+  // chat, and the old library actions are gone.
+  assert.ok(html.includes('Search this destination'), 'the card action prefills the search widget');
+  assert.ok(!html.includes('Make it yours'), 'no Make it yours on the new cards');
+  assert.ok(!html.includes('Plan this trip'), 'no Plan this trip on the homepage');
+  // No filter pills, no pagination: the library is browse-only now.
+  assert.ok(!html.includes('Filter packages by kind'), 'no filter pills group');
+  assert.ok(!html.includes('All (26)'), 'no All pill');
+  assert.ok(!html.includes('Page 1 of 3'), 'no pagination');
 });
 
-test('discovery map: section renders with a priced default pin and a Plan this trip action', async () => {
+test('discovery map (direction v3): off the homepage, kept for the Stays results map toggle', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // React SSR puts comment separators between literal text and
-  // expressions, so the checks run on the HTML with them stripped.
-  assert.ok(html.includes('Where to go — explore the map'), 'the discovery section renders');
-  // The default-selected pin is the first one (Europe): its essentials
-  // are server-rendered — the route line, the best month, and the
-  // planner's exact Best value total for 2 travelers.
-  assert.ok(html.includes('Lisbon (3 nights)'), 'the default pin shows its route line');
-  assert.ok(html.includes('Best month to go: May'), 'the default pin shows its best month');
-  assert.ok(html.includes('from $4,400 total'), 'the default pin shows the planner price');
-  assert.ok(html.includes('planning estimate'), 'the price is labeled a planning estimate');
-  assert.ok(html.includes('not live quotes'), 'the section says the prices are not live quotes');
-  // The chip list is the keyboard / small-screen way to pick a pin.
-  assert.ok(html.includes('Central Europe · $3,600'), 'the chip list names a route with its price');
-  assert.ok(html.includes('Plan this trip'), 'the essentials panel has the Plan this trip action');
-  // The price bubbles themselves are client-only (Leaflet, ssr:false),
-  // so they are not in the SSR HTML — their rendering needs the live
-  // visual check after Deploy, not this test.
+  // The homepage is a search-and-browse site now — no map section.
+  assert.ok(!html.includes('Where to go — explore the map'), 'no discovery map section on the homepage');
+  assert.ok(!html.includes('Best month to go:'), 'no pin panel on the homepage');
+  assert.ok(!html.includes('Central Europe · $3,600'), 'no pin chip list on the homepage');
+  // The map survives where it belongs: the Stays results toggle.
+  const stays = await fetch(`${BASE}/?tab=hotels&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&guests=2&rooms=1`);
+  assert.equal(stays.status, 200);
+  const staysHtml = await stays.text();
+  assert.ok(staysHtml.includes('Show on map'), 'the Stays results keep the map toggle');
 });
 
 test('competitor fares: without a token the route stays honestly empty', async () => {
@@ -707,35 +736,18 @@ test('round 4 #5 feasibility: a clean trip says the check passed on the Trip Sum
   assert.ok(j.reply.includes('Feasibility: no flags'), 'the feasibility pass line is on the summary');
 });
 
-test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and motion CSS are served', async () => {
-  // SSR-visible markers only — the plan view's expandable rows and the
-  // map dialog render client-side (after "Build my plan"), so they are
-  // covered by the pure-helper unit tests and the build, not by SSR.
+test('Layla-dynamic: motion CSS and map styles are served', async () => {
+  // The library filter pills and Make-it-yours actions are gone with
+  // direction v3 (the library is Popular destinations now). What
+  // survives from the Layla-dynamic round is the motion system and
+  // the map styles — both plain CSS in globals.css.
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const rawHtml = await r.text();
-  // React SSR separates JSX text from expressions with comment markers
-  // ("All (<!-- -->6<!-- -->)"), so strip them before matching text.
-  const html = rawHtml.replace(/<!-- -->/g, '');
-  // Template filters (interface round S2): honest pills with real
-  // counts from the 26-card library — every pill has cards behind it,
-  // including Mountains & nature (4: St. George, Tacoma, Hilo, Turkey).
-  assert.ok(html.includes('Filter packages by kind'), 'filter pills group renders');
-  assert.ok(html.includes('All (26)'), 'All pill counts the 26 library entries');
-  assert.ok(html.includes('Cities &amp; culture (22)') || html.includes('Cities & culture (22)'), 'Cities & culture pill with real count');
-  assert.ok(html.includes('Beach &amp; islands (11)') || html.includes('Beach & islands (11)'), 'Beach & islands pill with real count');
-  assert.ok(html.includes('Food (15)'), 'Food pill with real count');
-  assert.ok(html.includes('Mountains &amp; nature (4)') || html.includes('Mountains & nature (4)'), 'Mountains & nature pill with real count');
-  assert.ok(!html.includes('Mountains &amp; nature (0)') && !html.includes('Mountains & nature (0)'), 'no empty category pill is rendered');
-  // Templates are one click from the chat: every library card on page 1
-  // (12) plus the discovery panel (1) and the hidden gems (3) offer
-  // "Make it yours" — which seeds /chat with the trip.
-  const makeItYours = (html.match(/Make it yours/g) || []).length;
-  assert.equal(makeItYours, 16, `12 library cards + discovery panel + 3 hidden gems offer Make it yours (found ${makeItYours})`);
-  // Motion (item 6): the served stylesheet carries the panel entrance
-  // and the expandable-row transition — read it from the page's own
-  // stylesheet link, falling back to the source file.
-  const cssHref = html.match(/href="([^"]+\.css[^"]*)"/)?.[1];
+  // Motion: the served stylesheet carries the panel entrance and the
+  // expandable-row transition — read it from the page's own stylesheet
+  // link, falling back to the source file.
+  const cssHref = rawHtml.match(/href="([^"]+\.css[^"]*)"/)?.[1];
   let css = '';
   if (cssHref) {
     css = await (await fetch(cssHref.startsWith('http') ? cssHref : `${BASE}${cssHref}`)).text();

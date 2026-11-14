@@ -1,15 +1,13 @@
 'use client';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS } from '../lib/data';
-import { discoveryDestinations, discoveryPriceLabel, routeLineFor, type DiscoveryEntry } from '../lib/discovery';
-import { buildPlan, comparisonFor, MONTH_NAMES } from '../lib/planner';
+import { discoveryDestinations } from '../lib/discovery';
+import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
-import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
-import { heroSuggestions, seedForDestination, type HeroSuggestion } from '../lib/heroSearch';
 import { appendObservation, trendLine } from '../lib/duffel';
-import type { HomeTabId } from '../lib/homeTabs';
+import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
+import { type SearchQuery } from '../lib/searchPlaces';
 import { DIETARY_OPTIONS, parseProfile, profileSummary, type TravelerProfile } from '../lib/preferences';
 import { useTheme } from '../lib/theme';
 import { mergeOfferNeeded, readMergeRecord, recordMerge, type MergeRecord } from '../lib/auth';
@@ -19,32 +17,38 @@ import AdSlot from '../components/AdSlot';
 import PhotoCarousel from '../components/PhotoCarousel';
 import ReelsFeed from '../components/ReelsFeed';
 import ReelComposer from '../components/ReelComposer';
-import HomeTabs from './HomeTabs';
+import SiteHeader from './SiteHeader';
+import SearchWidget from './SearchWidget';
+import SearchResults from './SearchResults';
 import { Chat, HERO_PHOTO, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
-// Discovery map (design #15) — same client-only pattern as the trip map.
-const DiscoveryMap = dynamic(() => import('../components/DiscoveryMap'), {
-  ssr: false,
-  loading: () => (
-    <div className="map-skeleton" aria-label="Loading the map">
-      <div className="skeleton" style={{ flex: 1, borderRadius: 16 }} />
-      <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Loading the map…</p>
-    </div>
-  ),
-});
-
-// Seed handoff (TripAdvisor homepage build): the homepage writes a
-// seed here and navigates to /chat; the /chat page consumes it once
-// on mount so the chat greets with the route ready, then drops it.
+// Seed handoff: the /chat page consumes this once on mount so the
+// chat greets with the route ready, then drops it. Direction v3:
+// the homepage no longer writes a seed — a destination card prefills
+// the search widget instead; only the chat variant (and its ?plan=
+// link) still seeds through here.
 const CHAT_SEED_KEY = 'fujintrip-chat-seed';
 const PENDING_MESSAGE_KEY = 'fujintrip-pending-message';
 
-// The seven things you can book (direction v2, Nov 13): the tabs
-// below the hero are the category entry now — the hero's chip row is
-// gone, and the booking section is the HomeTabs component (tabs +
-// SearchForm + results + Start from a link).
+// The seven things you can book (direction v3, Nov 14): the header
+// nav and the category tiles below select a category in the hero
+// search widget — the booking section is the SearchWidget +
+// SearchResults pair (search first, results after a search).
 
-export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'chat'; initialTab?: HomeTabId }) {
+// Browse-by-category tiles (direction v3 spec section 1e): the seven
+// things you can book, one line each. Clicking one selects that
+// category in the hero search widget.
+const CATEGORY_TILES: { id: HomeTabId; label: string; icon: string; blurb: string }[] = [
+  { id: 'hotels', label: 'Stays', icon: '🏨', blurb: 'Hotels, apartments and more' },
+  { id: 'flights', label: 'Flights', icon: '✈️', blurb: 'Compare fares across airlines' },
+  { id: 'cars', label: 'Car rental', icon: '🚗', blurb: 'Cars at the airport and in town' },
+  { id: 'tours', label: 'Attractions', icon: '🎡', blurb: 'Tours, tickets and things to do' },
+  { id: 'cruises', label: 'Cruises', icon: '🚢', blurb: 'Ocean and river cruises' },
+  { id: 'buses', label: 'Buses', icon: '🚌', blurb: 'Intercity buses' },
+  { id: 'taxis', label: 'Taxis', icon: '🚕', blurb: 'Airport transfers and rides' },
+];
+
+export default function FujinApp({ variant, initialTab, initialSearch }: { variant: 'home' | 'chat'; initialTab?: HomeTabId; initialSearch?: SearchQuery | null }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const router = useRouter();
   // Theme (interface round §6): the discovery map follows the same
@@ -130,32 +134,11 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
       );
     } catch {}
   };
-  // The trip Fujin AI most recently understood — the price-comparison
-  // section below follows it, and the homepage tabs use it too (the
-  // Flights tab fetches live fares for this trip). Null until the user
-  // chats: Kyoto example.
-  const [aiTrip, setAiTrip] = useState<{ destination: string; travelers: number; kids?: number[]; origin?: string; month?: number; durationDays?: number } | null>(null);
-  // The comparison section below follows the trip Fujin AI most
-  // recently understood. The chat lives on /chat now, so read the
-  // persisted trip (the chat writes it on every change) instead of
-  // waiting for a chat on this page.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('fujintrip-current-trip');
-      if (!raw) return;
-      const p = JSON.parse(raw) as { destination?: unknown; travelers?: unknown; kids?: unknown; origin?: unknown; month?: unknown; durationDays?: unknown };
-      if (typeof p.destination !== 'string' || typeof p.travelers !== 'number') return;
-      setAiTrip({
-        destination: p.destination,
-        travelers: p.travelers,
-        ...(Array.isArray(p.kids) ? { kids: p.kids.filter((k): k is number => typeof k === 'number').slice(0, 6) } : {}),
-        ...(typeof p.origin === 'string' && p.origin.trim() ? { origin: p.origin.trim() } : {}),
-        ...(typeof p.month === 'number' && p.month >= 1 && p.month <= 12 ? { month: Math.floor(p.month) } : {}),
-        ...(typeof p.durationDays === 'number' && p.durationDays >= 2 ? { durationDays: Math.floor(p.durationDays) } : {}),
-      });
-    } catch {}
-  }, []);
-  const cmp = useMemo(() => comparisonFor(aiTrip?.destination ?? 'Kyoto', aiTrip?.travelers ?? 2, { kids: aiTrip?.kids ?? [] }), [aiTrip]);
+  // Direction v3: the homepage no longer follows the chat trip — it
+  // is a search-and-browse site now, and the comparison section that
+  // read the persisted trip is gone. The setter stays: the chat
+  // variant still reports its parsed trip through onParsed.
+  const [, setAiTrip] = useState<{ destination: string; travelers: number; kids?: number[]; origin?: string; month?: number; durationDays?: number } | null>(null);
   const [loc, setLoc] = useState('default');
   const [locName, setLocName] = useState('');
   const [geoStatus, setGeoStatus] = useState('Use your location, or pick a city below — we only use it to show nearby trips.');
@@ -221,57 +204,36 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
   // — the traveler lands in the app with the cursor ready to
   // personalize the template ("make it cheaper", "3 nights in Prague").
   const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[]; sourceTips?: Record<string, string> } | null>(null);
-  // Homepage hero (TripAdvisor build): the one question + one box.
-  // A typed destination rides to /chat as a pending message; a
-  // suggestion pick (commit 4) seeds the trip directly instead.
-  const [heroInput, setHeroInput] = useState('');
-  // Hero suggestions (commit 4): the dropdown over the places
-  // FujinTrip already knows. Picking one seeds /chat with the
-  // route; Enter with no pick sends the typed text as a message.
-  const [heroOpen, setHeroOpen] = useState(false);
-  const [heroActive, setHeroActive] = useState(-1);
-  const heroBoxRef = useRef<HTMLDivElement>(null);
-  const suggestions = useMemo(() => heroSuggestions(heroInput), [heroInput]);
-  const pickSuggestion = (s: HeroSuggestion) => {
-    const seed = seedForDestination(s.name) ?? { destination: s.name, cities: s.cities };
-    setHeroOpen(false);
-    seedChat(seed.destination, undefined, seed.cities);
+  // Direction v3 search (Nov 14, 2026): the hero search widget owns
+  // the tab; a submitted search renders results below the hero; a
+  // destination card prefills the widget. The homepage no longer
+  // seeds the chat — the chat lives at /chat behind the header
+  // button, and the homepage never writes the seed keys.
+  const [widgetTab, setWidgetTab] = useState<HomeTabId>(initialTab ?? 'hotels');
+  const [search, setSearch] = useState<SearchQuery | null>(initialSearch ?? null);
+  const [prefill, setPrefill] = useState<{ destination: string; nonce: number } | null>(null);
+  const [showAllDestinations, setShowAllDestinations] = useState(false);
+  const selectCategory = (id: HomeTabId) => {
+    setWidgetTab(id);
+    try { router.replace(`/?tab=${id}`, { scroll: false }); } catch {}
+    document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  const heroKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown' && suggestions.length) {
-      e.preventDefault();
-      setHeroOpen(true);
-      setHeroActive((a) => (a + 1) % suggestions.length);
-    } else if (e.key === 'ArrowUp' && suggestions.length) {
-      e.preventDefault();
-      setHeroOpen(true);
-      setHeroActive((a) => (a <= 0 ? suggestions.length - 1 : a - 1));
-    } else if (e.key === 'Escape') {
-      setHeroOpen(false);
-      setHeroActive(-1);
-    } else if (e.key === 'Enter' && heroActive >= 0 && suggestions[heroActive]) {
-      e.preventDefault();
-      pickSuggestion(suggestions[heroActive]);
-    }
+  const changeTab = (id: HomeTabId) => {
+    setWidgetTab(id);
+    try { router.replace(`/?tab=${id}`, { scroll: false }); } catch {}
   };
-  // Close the suggestions when the traveler clicks elsewhere.
-  useEffect(() => {
-    if (!heroOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (heroBoxRef.current && !heroBoxRef.current.contains(e.target as Node)) setHeroOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [heroOpen]);
-  const submitHeroSearch = () => {
-    const text = heroInput.trim();
-    if (!text) return;
-    try { localStorage.setItem(PENDING_MESSAGE_KEY, text); } catch {}
-    router.push('/chat');
+  const handleSearchSubmit = (q: SearchQuery) => {
+    setSearch(q);
+    setTimeout(() => document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
-  // The chat lives on /chat now — a template, pin or shared link hands
-  // its seed over through localStorage and navigates there. Same seed
-  // shape the chat already understands: destination + ordered cities.
+  const prefillDestination = (name: string) => {
+    setPrefill({ destination: name, nonce: Date.now() });
+    document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const editSearch = () => {
+    document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const seedChat = (name: string, sourceTips?: Record<string, string>, cities?: string[]) => {
     const info = cardInfo[name];
     try {
@@ -298,9 +260,6 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
   // trip whose essentials the panel shows. The first pin is selected on
   // load so the panel is never an empty "tap a pin" box.
   const discovery = useMemo(() => discoveryDestinations(), []);
-  const [discoveryKey, setDiscoveryKey] = useState<string | null>(null);
-  const selectedDiscovery: DiscoveryEntry | null =
-    discovery.find((d) => d.key === discoveryKey) ?? discovery[0] ?? null;
   // A shared plan or reel link (/?plan=<destination>) seeds the chat
   // with that trip — the stranger who taps a shared link lands in the
   // chat with the route ready, not on a blank page. Once per load.
@@ -310,7 +269,14 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
     const q = new URLSearchParams(window.location.search).get('plan');
     if (!q) return;
     planParamUsedRef.current = true;
-    planThisTrip(q);
+    if (variant === 'home') {
+      // Direction v3: a shared link (?plan=<destination>) prefills
+      // the search widget on the homepage now — it no longer seeds
+      // the chat.
+      setPrefill({ destination: q, nonce: Date.now() });
+    } else {
+      planThisTrip(q);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Seed handoff, /chat side: consume the seed the homepage wrote
@@ -364,11 +330,12 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
   // Maldives, Paris). One card shape: photo (or the fallback
   // gradient), tag pill, one title line, the route line when there is
   // more than one stop, one counts line (stays · transports · from $X
-  // total · Best value · 2 travelers · planning estimate), "Make it
-  // yours" primary + a quiet "Plan this trip" text link. A count that
-  // does not exist in the data is omitted from the line, never
-  // guessed. Paginated 12/page; the filter pills carry real counts
-  // from these 26 names.
+  // total · Best value · 2 travelers · planning estimate). Direction
+  // v3 (spec section 1d): the library is "Popular destinations" now
+  // — 8 cards with a "Show more destinations" expander, no filter
+  // pills, no pagination. A card shows the tag, the name, and the
+  // Best value total per traveler; a count that does not exist in the
+  // data is omitted from the line, never guessed.
   type LibraryEntry = {
     key: string;
     name: string;
@@ -417,33 +384,13 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
     }
     return entries;
   }, [discovery, cardInfo]);
-  // Template filters (Layla-dynamic round): layla.ai's template library
-  // has category pills — ours filter the library the same way, with
-  // honest categories from lib/tripCategories (each card's own
-  // itinerary) and real counts. Categories with no cards get no pill,
-  // so a filter can never lead to an empty grid.
-  const [packageFilter, setPackageFilter] = useState<PackageFilter>('All');
-  const [packagePage, setPackagePage] = useState(1);
-  const packageNames = useMemo(() => libraryEntries.map((e) => e.name), [libraryEntries]);
-  const packageFilterCounts = useMemo(() => categoryCounts(packageNames), [packageNames]);
-  const shownPackages = useMemo(() => filterByCategory(packageNames, packageFilter), [packageNames, packageFilter]);
-  const shownEntries = useMemo(() => libraryEntries.filter((e) => shownPackages.includes(e.name)), [libraryEntries, shownPackages]);
-  const LIBRARY_PAGE_SIZE = 12;
-  const libraryPageCount = Math.max(1, Math.ceil(shownEntries.length / LIBRARY_PAGE_SIZE));
-  const libraryPage = Math.min(packagePage, libraryPageCount);
-  const pageEntries = shownEntries.slice((libraryPage - 1) * LIBRARY_PAGE_SIZE, libraryPage * LIBRARY_PAGE_SIZE);
-  const setLibraryFilter = (f: PackageFilter) => {
-    setPackageFilter(f);
-    setPackagePage(1);
-  };
-  const countsLineFor = (e: LibraryEntry): string => {
-    const parts: string[] = [];
-    if (e.stays !== null) parts.push(`${e.stays} stay${e.stays !== 1 ? 's' : ''}`);
-    if (e.transports !== null) parts.push(`${e.transports} transports`);
-    if (e.total !== null) parts.push(`from $${e.total.toLocaleString()} total`);
-    parts.push('Best value · 2 travelers · planning estimate');
-    return parts.join(' · ');
-  };
+  // Direction v3 (spec section 1d): the template library is
+  // "Popular destinations" now — 8 cards with a "Show more
+  // destinations" expander. No filter pills, no pagination. The
+  // price line is the Best value plan total per traveler (the total
+  // in the entry is the 2-traveler total); a card with no planner
+  // total shows no price line, never a guessed one.
+  const visibleEntries = showAllDestinations ? libraryEntries : libraryEntries.slice(0, 8);
   // The reels composer panel — opened from the trip-card strip, the
   // feed, or a booked trip in My Trips. It lives in both variants:
   // on /chat under the app, on the homepage at the top of the page.
@@ -457,7 +404,7 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
       {variant === 'chat' ? (
         <a href="#fujin-chat" className="skip-link">Skip to chat</a>
       ) : (
-        <a href="#packages" className="skip-link">Skip to destinations</a>
+        <a href="#destinations" className="skip-link">Skip to destinations</a>
       )}
       {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12;
           interface round M2 — the 8-tab bar is gone): the chat section
@@ -475,160 +422,97 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
       )}
       {composerPanel}
       {variant === 'home' && (
-        <header className="topbar">
-          <a href="/" className="logo">Fujin<span>Trip</span></a>
-          <nav className="topbar-nav">
-            <a href="#mytrips" className="ghost-link">My Trips</a>
-            {/* Free-account gate (Clerk, Nov 14 2026): nothing renders
-                here until the Clerk keys are set. */}
-            <AccountButton />
-            <button type="button" className="ghost" aria-pressed={theme === 'dark'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? '☀ Light' : '☾ Dark'}
-            </button>
-          </nav>
-        </header>
-      )}
-      {variant === 'home' && (
-        <section className="hero-ta">
-          <div className="hero-ta-copy">
-            <h1>Where to?</h1>
-            <p className="hero-ta-sub">One trip, one plan — flights, stays, cars and sightseeing gathered for you.</p>
-            <div className="hero-ta-searchbox" ref={heroBoxRef}>
-              <form className="hero-ta-search" role="search" onSubmit={(e) => { e.preventDefault(); submitHeroSearch(); }}>
-                <input value={heroInput} onChange={(e) => { setHeroInput(e.target.value); setHeroOpen(true); setHeroActive(-1); }} onFocus={() => setHeroOpen(true)} onKeyDown={heroKeyDown} placeholder="Places to go, things to do, hotels…" aria-label="Where to?" autoComplete="off" role="combobox" aria-expanded={heroOpen && suggestions.length > 0} aria-controls="hero-suggestions" aria-activedescendant={heroActive >= 0 && suggestions[heroActive] ? `hero-sugg-${heroActive}` : undefined} />
-                <button type="submit" className="primary">Search</button>
-              </form>
-              {heroOpen && suggestions.length > 0 && (
-                <ul className="hero-suggestions" id="hero-suggestions" role="listbox" aria-label="Destinations">
-                  {suggestions.map((s, i) => (
-                    <li key={s.name} id={`hero-sugg-${i}`} role="option" aria-selected={i === heroActive} className={i === heroActive ? 'active' : undefined}>
-                      <button type="button" onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }} onMouseEnter={() => setHeroActive(i)}>
-                        <strong>{s.name}</strong>
-                        <span>{s.detail}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            {/* The one AI entry point on the homepage (direction v2):
-                a big button under the search box, straight to /chat.
-                The header "Ask Fujin AI" link is gone — two ways to
-                reach the same chat was TripAdvisor's mistake. */}
-            <a href="/chat" className="ai-hero-btn">Build full plan with AI →</a>
-          </div>
-          <figure className="hero-ta-photo">
-            <SafeImg src={HERO_PHOTO} alt="Torii gates at Fushimi Inari, Kyoto" label="Kyoto" loading="eager" />
-          </figure>
-        </section>
-      )}
-      {variant === 'home' && (
-        <HomeTabs
-          initialTab={initialTab ?? 'flights'}
-          trip={aiTrip}
-          onSaveTrip={(label) => saveTrip(label, 'Request saved')}
-          onPlanTrip={planThisTrip}
-          onSeedChat={seedChat}
+        <SiteHeader
+          theme={theme}
+          onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onSelectCategory={selectCategory}
+          myTripsHref="#mytrips"
         />
       )}
       {variant === 'home' && (
-      <main className="wrap">
-
-        <section id="packages">
-          <h2>Global packages, in one plan</h2>
-          <p className="sub">Flights, hotels, car rental, sightseeing and more — gathered into a single customized trip, not seven separate bookings. {libraryEntries.length} trips to make yours.</p>
-          <div className="filter-pills" role="group" aria-label="Filter packages by kind">
-            <button type="button" className={`chip${packageFilter === 'All' ? ' selected' : ''}`} aria-pressed={packageFilter === 'All'} onClick={() => setLibraryFilter('All')}>
-              All ({packageNames.length})
-            </button>
-            {packageFilterCounts.map(({ category, count }) => (
-              <button key={category} type="button" className={`chip${packageFilter === category ? ' selected' : ''}`} aria-pressed={packageFilter === category} onClick={() => setLibraryFilter(category as TripCategory)}>
-                {category} ({count})
-              </button>
-            ))}
+        <section className="hero-booking">
+          <div className="hero-booking-photo">
+            <SafeImg src={HERO_PHOTO} alt="Torii gates at Fushimi Inari, Kyoto" label="Kyoto" loading="eager" />
           </div>
+          <div className="wrap hero-booking-inner">
+            <h1>Where to?</h1>
+            <p className="hero-booking-sub">Flights, stays, cars, tours and more — compare prices from different sources, all in one place.</p>
+            <SearchWidget
+              tab={widgetTab}
+              onTabChange={changeTab}
+              initialSearch={initialSearch ?? null}
+              prefill={prefill}
+              onSubmit={handleSearchSubmit}
+            />
+          </div>
+        </section>
+      )}
+      {variant === 'home' && search && (
+        <div className="wrap">
+          <SearchResults
+            query={search}
+            dark={theme === 'dark'}
+            onSaveSearch={(label) => saveTrip(label, 'Request saved')}
+            onEditSearch={editSearch}
+          />
+        </div>
+      )}
+      {variant === 'home' && (
+      <main className="wrap">
+        {/* Trust strip (spec section 1c): one row directly under the
+            hero, three honest lines, no invented numbers. */}
+        <div className="trust-strip" aria-label="Why book with FujinTrip">
+          <span className="trust-item"><span className="trust-icon" aria-hidden="true">✓</span>All-in prices — the price you see is the price you pay</span>
+          <span className="trust-item"><span className="trust-icon" aria-hidden="true">✓</span>No hidden fees — our flight service fee is shown separately at checkout</span>
+          <span className="trust-item"><span className="trust-icon" aria-hidden="true">✓</span>Compare prices from different sources</span>
+        </div>
+
+        <section id="destinations">
+          <h2>Popular destinations</h2>
+          <p className="sub">Tap a destination to fill in the search above — prices are planning estimates from FujinTrip&apos;s planner, Best value per traveler.</p>
           <div className="grid">
-            {pageEntries.map((e) => (
+            {visibleEntries.map((e) => (
               <article className="card" key={e.key}>
                 <PhotoCarousel photos={e.photos} alt={e.name} />
                 <div className="body"><span className="pill">{e.tag}</span><h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
-                  {e.routeLine && (
-                    <p className="plan-muted">{e.routeLine}</p>
-                  )}
-                  <p className="plan-muted">{countsLineFor(e)}</p>
-                  <div style={{ marginTop: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button className="primary" onClick={() => planThisTrip(e.name, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
-                    <button type="button" className="textlink" onClick={() => planThisTrip(e.name)}>Plan this trip</button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-          {libraryPageCount > 1 && (
-            <div className="pagination" role="group" aria-label="Template pages">
-              <button type="button" className="ghost" disabled={libraryPage === 1} onClick={() => setPackagePage(libraryPage - 1)} style={{ minHeight: 44 }}>
-                ← Previous
-              </button>
-              {Array.from({ length: libraryPageCount }, (_, i) => (
-                <button key={i + 1} type="button" className={`chip${libraryPage === i + 1 ? ' selected' : ''}`} aria-pressed={libraryPage === i + 1} onClick={() => setPackagePage(i + 1)}>
-                  {i + 1}
-                </button>
-              ))}
-              <button type="button" className="ghost" disabled={libraryPage === libraryPageCount} onClick={() => setPackagePage(libraryPage + 1)} style={{ minHeight: 44 }}>
-                Next →
-              </button>
-              <span className="page-label">Page {libraryPage} of {libraryPageCount}</span>
-            </div>
-          )}
-        </section>
-
-        {/* "Where to go" discovery map (design #15): the destinations
-            FujinTrip can plan, as price bubbles on a world map. Tap a
-            bubble — or a chip below the map — to see what the trip
-            includes; "Plan this trip" is the same flow as the
-            destination cards (design #13), so the chat seeds with the
-            route's cities. Prices are the planner's Best value totals
-            for 2 travelers — planning estimates, never live quotes. */}
-        <section>
-          <h2>Where to go — explore the map</h2>
-          <p className="sub">Not sure where? Tap a price bubble to see what the trip includes, then plan it in the chat. Prices are planning estimates from FujinTrip’s price table, Best value for 2 travelers — not live quotes.</p>
-          <div className="discover">
-            <div className="discover-map">
-              <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setDiscoveryKey(e.key)} dark={theme === 'dark'} />
-            </div>
-            {selectedDiscovery && (
-              <article className="card discover-panel">
-                <div className="body">
-                  <span className="pill">{selectedDiscovery.tag}</span>
-                  <h3>{selectedDiscovery.destination}</h3>
-                  <p>{routeLineFor(selectedDiscovery.stops)}</p>
-                  <p className="plan-muted">{selectedDiscovery.days} days · {selectedDiscovery.nights} nights · {selectedDiscovery.experiences} experiences · {selectedDiscovery.stays} stay{selectedDiscovery.stays !== 1 ? 's' : ''} · {selectedDiscovery.transports} transports</p>
-                  <p className="plan-muted">Best month to go: {MONTH_NAMES[selectedDiscovery.bestMonth - 1]} — {selectedDiscovery.bestNote}. Typical season, not live prices.</p>
-                  {selectedDiscovery.price !== null ? (
+                  {e.total !== null ? (
                     <>
-                      <p className="price">{discoveryPriceLabel(selectedDiscovery)}</p>
+                      <p className="price">from ${Math.round(e.total / 2).toLocaleString()} per traveler</p>
                       <p className="plan-muted">Best value · 2 travelers · planning estimate</p>
                     </>
                   ) : (
-                    <p className="plan-muted">No planning estimate for this one yet — ask Fujin AI and it will price it.</p>
+                    <p className="plan-muted">No planning estimate for this one yet</p>
                   )}
-                  <button className="primary" onClick={() => planThisTrip(selectedDiscovery.destination)}>Plan this trip</button>{' '}
-                  <button className="ghost" onClick={() => planThisTrip(selectedDiscovery.destination, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
+                  <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>
                 </div>
               </article>
-            )}
+            ))}
           </div>
-          <div className="discover-chips" role="group" aria-label="Browse destinations">
-            {discovery.map((d) => (
-              <button key={d.key} className={`ghost discover-chip${selectedDiscovery?.key === d.key ? ' selected' : ''}`} aria-pressed={selectedDiscovery?.key === d.key} onClick={() => setDiscoveryKey(d.key)}>
-                {d.destination}{d.price !== null ? ` · $${d.price.toLocaleString()}` : ''}
+          {libraryEntries.length > 8 && !showAllDestinations && (
+            <p style={{ marginTop: 16 }}>
+              <button type="button" className="ghost" onClick={() => setShowAllDestinations(true)}>
+                Show more destinations ({libraryEntries.length - 8} more)
+              </button>
+            </p>
+          )}
+        </section>
+
+        <section>
+          <h2>What do you need for your trip?</h2>
+          <p className="sub">Pick a category — the search above switches to it.</p>
+          <div className="cat-tiles">
+            {CATEGORY_TILES.map((t) => (
+              <button key={t.id} type="button" className="cat-tile" onClick={() => selectCategory(t.id)}>
+                <span className="cat-icon" aria-hidden="true">{t.icon}</span>
+                <strong>{t.label}</strong>
+                <span>{t.blurb}</span>
               </button>
             ))}
           </div>
         </section>
 
         <section>
-          <h2>Near you</h2>
+          <h2>Weekend trips near you</h2>
           <p className="sub">Local trips that cost little — enjoy local activities for less, based on where you are.</p>
           <p><button className="ghost" onClick={useGeo}>Use my location</button>{' '}
             <select value={loc} onChange={(e) => { setLoc(e.target.value); setLocName(e.target.value); }} aria-label="Pick a city">
@@ -636,10 +520,7 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
             </select></p>
           <p className="plan-muted">{geoStatus}{locName && locName !== 'default' ? ` Showing trips near ${locName}.` : ''}</p>
           <div className="grid">{local.map((l) => (<article className="card" key={l.name}><div className="body"><span className="pill">{l.distance}</span><h3>{l.name}</h3><p>{l.activity}</p><p className="price">{l.price}</p></div></article>))}</div>
-        </section>
-
-        <section>
-          <h2>Hidden gems — trending, not yet crowded</h2>
+          <h3 style={{ marginTop: 28 }}>Featured hidden gems</h3>
           <p className="sub">The highest-trending US destinations, explored properly — with a full plan, not just a photo.</p>
           <div className="grid">
             {HIDDEN_GEMS.map((d) => (
@@ -649,28 +530,27 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
                   {cardInfo[d.name] && (
                     <>
                       <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
-                      <p className="price">from ${cardInfo[d.name]?.total.toLocaleString()} total</p>
+                      <p className="price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()} per traveler</p>
                       <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>
                     </>
                   )}
-                  {!cardInfo[d.name] && <p className="price">{d.priceFrom}</p>}
                   <details>
                     <summary>See the days</summary>
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
-                  <button className="primary" onClick={() => planThisTrip(d.name)}>Plan this trip</button>{' '}
-                  <button className="ghost" onClick={() => planThisTrip(d.name, true)} title="Load this trip into the app and start personalizing it">Make it yours</button>
+                  <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>
                 </div>
               </article>
             ))}
           </div>
         </section>
 
+
         {/* Ad slot: below the fold, content area only. Dormant until AdSense is configured. */}
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
 
         <section>
-          <h2>Travelers&apos; reels</h2>
+          <h2>Travelers&apos; stories</h2>
           <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
           <ReelsFeed onPost={() => openComposer()} />
           <p style={{ marginTop: 12 }}>
@@ -679,26 +559,6 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
         </section>
 
         <section>
-          <h2>How much do you actually save?</h2>
-          <p className="sub">{aiTrip ? `Your ${cmp.destination} trip for ${cmp.travelers} traveler${cmp.travelers > 1 ? 's' : ''} — the same trip, booked two ways.` : 'An example Kyoto trip — the same trip, booked two ways.'}</p>
-          {aiTrip && (
-            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 16px' }}>
-              Updated from your Fujin AI chat.{' '}
-              <button className="ghost" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => setAiTrip(null)}>Back to the Kyoto example</button>
-            </p>
-          )}
-          <div className="compare">
-            <div className="box best"><strong>FujinTrip — Best value</strong><p style={{ fontSize: 30, margin: '8px 0' }}>${cmp.best.total.toLocaleString()}</p><table><tbody><tr><td>Flights</td><td>${cmp.best.flight.toLocaleString()}</td></tr><tr><td>Hotel</td><td>${cmp.best.hotel.toLocaleString()}</td></tr><tr><td>Car</td><td>${cmp.best.car.toLocaleString()}</td></tr><tr><td>Sightseeing</td><td>${cmp.best.activities.toLocaleString()}</td></tr></tbody></table></div>
-            <div className="box"><strong>Booking each leg separately</strong><p style={{ fontSize: 30, margin: '8px 0' }}>${cmp.separate.total.toLocaleString()}</p><table><tbody><tr><td>Flights</td><td>${cmp.separate.flight.toLocaleString()}</td></tr><tr><td>Hotel</td><td>${cmp.separate.hotel.toLocaleString()}</td></tr><tr><td>Car</td><td>${cmp.separate.car.toLocaleString()}</td></tr><tr><td>Sightseeing</td><td>${cmp.separate.activities.toLocaleString()}</td></tr></tbody></table></div>
-          </div>
-          <p><strong>You save ${cmp.save.toLocaleString()} — about {cmp.savePercent}%.</strong></p>
-          <p style={{ fontSize: 14, color: '#111' }}>No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
-          <p className="notice">Illustrative planning estimates — not a live quote. Live prices come from suppliers once connected.</p>
-        </section>
-
-        <section>
-          <h2>How FujinTrip works</h2>
-          <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — and you book it all with FujinTrip.</p>
           <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
           {/* Free account (Clerk, Nov 14 2026) — sign-in lives in My
               Trips, not in the chat: accounts come AFTER the traveler
@@ -837,11 +697,50 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
       {variant === 'home' && (
       <footer>
         <div className="wrap">
+          <div className="footer-cols">
+            <div className="footer-col">
+              <h3>Book</h3>
+              <ul>
+                {HOME_TABS.map((t) => (
+                  <li key={t.id}>
+                    <a href={`/?tab=${t.id}`}>{t.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="footer-col">
+              <h3>Company</h3>
+              <ul>
+                <li>About</li>
+                <li>Contact</li>
+              </ul>
+            </div>
+            <div className="footer-col">
+              <h3>Help</h3>
+              <ul>
+                <li>FAQ</li>
+                <li>Cancellation</li>
+                <li>
+                  <a href="/privacy">Privacy Policy</a>
+                </li>
+              </ul>
+            </div>
+            <div className="footer-col">
+              <h3>Account</h3>
+              <ul>
+                <li>
+                  <a href="#mytrips">My Trips</a>
+                </li>
+                <li>
+                  <a href="/sign-in">Sign in</a>
+                </li>
+              </ul>
+            </div>
+          </div>
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Travel globally, act locally. Named for Fujin, Japan’s wind god.</p>
           <p>No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>
-          <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
-          <p><a href="/privacy">Privacy Policy</a></p>
+          <p>Prices shown are planning estimates until live suppliers connect. fujintrip.com</p>
         </div>
       </footer>
       )}

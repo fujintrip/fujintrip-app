@@ -520,9 +520,6 @@ html{scroll-padding-bottom:96px}
 .discover{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:stretch}
 .discover-map{height:480px}
 .discover-panel{height:100%}
-.discover-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.discover-chip{min-height:44px}
-.discover-chip.selected{border-color:var(--ink);background:var(--surface);font-weight:700}
 @media(max-width:900px){.discover{grid-template-columns:1fr}.discover-map{height:380px}}
 
 /* --- Layla-dynamic round (Nov 12): flexible, not static --- */
@@ -600,55 +597,14 @@ html{scroll-padding-bottom:96px}
 .sos-missed{background:var(--danger-soft);border:1px solid var(--danger);border-radius:12px;padding:12px 14px;margin:12px 0}
 .sos-message{white-space:pre-line;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 
-/* TripAdvisor homepage (Nov 13): one slim bar, one question, one box. */
-.topbar-nav{display:flex;gap:10px;align-items:center}
-.topbar-nav .ghost-link{color:var(--ink);text-decoration:none;font-weight:600;padding:10px 8px}
-.hero-ta{display:flex;gap:40px;align-items:center;max-width:1200px;margin:0 auto;padding:56px 24px 40px}
-.hero-ta-copy{flex:1;min-width:0}
-.hero-ta h1{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:clamp(44px,6vw,72px);line-height:1.02;margin:0 0 12px;letter-spacing:-.02em}
-.hero-ta-sub{font-size:18px;color:var(--muted);margin:0 0 24px;max-width:560px}
-.hero-ta-search{display:flex;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;box-shadow:0 8px 30px rgba(0,0,0,.08)}
-.hero-ta-search input{flex:1;border:none;background:transparent;padding:12px 14px;font-size:17px;min-width:0}
-.hero-ta-search input:focus{outline:none}
-.hero-ta-search .primary{min-height:52px;padding:0 26px;font-size:16px;border-radius:12px;white-space:nowrap}
-.hero-ta-photo{flex:0 0 380px;margin:0;border-radius:20px;overflow:hidden}
-.hero-ta-photo img{width:100%;height:100%;object-fit:cover;display:block;aspect-ratio:4/3}
-/* The one AI entry point on the homepage (direction v2): a big button
-   under the hero search box, straight to /chat. */
-.ai-hero-btn{display:inline-block;margin-top:20px;background:var(--ink);color:var(--on-ink);border-radius:14px;padding:16px 28px;font-size:17px;font-weight:700;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-.ai-hero-btn:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.18)}
-.book-section{max-width:1200px;margin:0 auto;padding:8px 24px 48px}
-.book-section h2{font-family:var(--font-display,'Bricolage Grotesque'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:clamp(28px,4vw,36px);margin:0 0 8px}
-.book-sub{color:var(--muted);margin:0 0 20px;max-width:640px}
-/* Homepage tabs (direction v2): the seven categories as a tab bar,
-   visible on page load under the hero. Selected tab reads as the
-   active one; the panel below carries its search + results. */
-.home-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px}
-.tab-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 16px;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit}
-.tab-btn.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
-.tab-results{margin-top:24px}
-.tab-results h3{font-size:19px;margin:0 0 12px}
-.tab-results h4{font-size:15px;margin:20px 0 8px}
-.tab-rows{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft)}
-.tab-row{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:15px}
+/* Flight fare blocks + results notes (SearchResults): the live-fare
+   list and the cached-fares column share these. */
 .fare-block{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:16px 0;background:var(--card)}
 .fare-block h4:first-child{margin-top:0}
 .fare-list{list-style:none;margin:0 0 8px;padding:0}
 .fare-row{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;padding:6px 0;font-size:15px}
 .results-note{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);font-size:14px}
-.link-box{margin-top:32px;border:1px solid var(--line);border-radius:16px;padding:20px;background:var(--card)}
-.link-box h3{margin:0 0 6px;font-size:17px}
-.link-box p{color:var(--muted);margin:0 0 14px}
-.link-note{margin:12px 0 0;font-size:14px}
-@media(max-width:900px){.hero-ta{flex-direction:column;align-items:stretch;padding:40px 20px 28px}.hero-ta-photo{flex:none}}
 
-/* Hero search suggestions (TripAdvisor homepage, commit 4). */
-.hero-ta-searchbox{position:relative}
-.hero-suggestions{position:absolute;left:0;right:0;top:calc(100% + 6px);margin:0;padding:6px;list-style:none;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:20}
-.hero-suggestions li button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:none;border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--ink);font-family:inherit}
-.hero-suggestions li button strong{font-size:15px;font-weight:600}
-.hero-suggestions li button span{font-size:13px;color:var(--muted)}
-.hero-suggestions li.active button,.hero-suggestions li button:hover{background:var(--accent-soft)}
 
 /* Direction v3 site header (Nov 14, 2026): sticky, one row — logo,
    category nav, one "Plan with AI" pill, sign in, My Trips, theme
