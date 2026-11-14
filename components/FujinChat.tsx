@@ -9,6 +9,7 @@ import { applySwaps, type DaySwap } from '../lib/daySwap';
 import { goNowLine } from '../lib/disruption';
 import { bestTimeFor, type BestTime } from '../lib/bestTime';
 import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard, type TripLeg } from '../lib/tripCard';
+import { buildMapRail } from '../lib/mapRail';
 import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
 import { appendObservation, parseLiveFares, trendLine, type LiveFares, type TrendObservation } from '../lib/duffel';
@@ -34,10 +35,12 @@ import TodayView from '../components/TodayView';
 import EmergencySheet, { SosButton } from '../components/EmergencySheet';
 import ReelsStrip from '../components/ReelsStrip';
 
-// Trip map (Leaflet) is client-only — it needs window, so it loads
-// without server rendering. While the chunk loads, a map-shaped skeleton
-// with a shimmer shows instead of a blank area (design #9 — calmer
-// loading; never a full-page spinner).
+// Trip map (MapLibre GL JS + OpenFreeMap, modern-map build Nov 13 —
+// Leaflet fallback inside TripMap when WebGL or the style fails) is
+// client-only — it needs window, so it loads without server
+// rendering. While the chunk loads, a map-shaped skeleton with a
+// shimmer shows instead of a blank area (design #9 — calmer loading;
+// never a full-page spinner).
 const TripMap = dynamic(() => import('../components/TripMap'), {
   ssr: false,
   loading: () => (
@@ -1299,6 +1302,14 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     [mapCard]
   );
   const mapLegs = useMemo(() => mapCard?.legs ?? [], [mapCard]);
+  // Floating itinerary rail over the map (modern-map build, Nov 13):
+  // nights + date range per stop, from the card's own stops — the
+  // same data the trip panel shows, so the rail and the panel never
+  // disagree.
+  const mapRail = useMemo(
+    () => (mapCard ? buildMapRail(mapCard.stops) : null),
+    [mapCard],
+  );
   const comparison = useMemo(
     () => (plan ? cardComparison(plan.destination, plan.travelers, { kids: lastParsed?.kids ?? [] }) : null),
     [plan, lastParsed]
@@ -2272,6 +2283,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                   }}
                   addedLegIds={[...chosenLegs]}
                   dark={theme === 'dark'}
+                  rail={mapRail ?? undefined}
                 />
               </div>
               {selectedLeg && (
@@ -2344,6 +2356,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                       }}
                       addedLegIds={[...chosenLegs]}
                       dark={theme === 'dark'}
+                      rail={mapRail ?? undefined}
                     />
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--muted)', margin: '8px 0 0' }}>Click a price tag to read more or add it to your plan — the same tags as on the map beside the chat. Esc closes this view.</p>
