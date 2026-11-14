@@ -12,6 +12,9 @@ import { appendObservation, trendLine } from '../lib/duffel';
 import type { HomeTabId } from '../lib/homeTabs';
 import { DIETARY_OPTIONS, parseProfile, profileSummary, type TravelerProfile } from '../lib/preferences';
 import { useTheme } from '../lib/theme';
+import { mergeOfferNeeded, readMergeRecord, recordMerge, type MergeRecord } from '../lib/auth';
+import { AccountButton, useAccount } from '../components/AccountGate';
+import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import AdSlot from '../components/AdSlot';
 import PhotoCarousel from '../components/PhotoCarousel';
 import ReelsFeed from '../components/ReelsFeed';
@@ -164,6 +167,25 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-trips', JSON.stringify(trips)); } catch {} }, [trips]);
   const saveTrip = (label: string, status = 'Request saved', destination?: string) => setTrips((t) => [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString(), ...(destination ? { destination } : {}) }, ...t]);
+  // Free-account gate (Clerk, Nov 14 2026) — the one-tap merge
+  // (plan-sync-design.md §3): on first sign-in, My Trips offers to
+  // move the localStorage trips to the account. The server sync that
+  // makes them appear on other devices is the NEXT build — the merge
+  // only records the link on this device (each trip stamped with the
+  // account id + a merge record per account), and the UI says so.
+  const account = useAccount();
+  const [mergeRecord, setMergeRecord] = useState<MergeRecord | null>(null);
+  useEffect(() => {
+    if (!account.userId) { setMergeRecord(null); return; }
+    try { setMergeRecord(readMergeRecord(account.userId, localStorage)); } catch { setMergeRecord(null); }
+  }, [account.userId]);
+  const doMerge = () => {
+    if (!account.userId) return;
+    const record = recordMerge(account.userId, trips.map((t) => t.id), localStorage);
+    const userId = account.userId;
+    setTrips((x) => x.map((t) => ({ ...t, accountId: userId })));
+    setMergeRecord(record);
+  };
   // Destination cards as trip cards (design #13): what is inside the
   // trip (counts), the route's cities, and the all-in Best value total
   // for 2 travelers, 3 days — computed from the same trip card and
@@ -457,6 +479,9 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
           <a href="/" className="logo">Fujin<span>Trip</span></a>
           <nav className="topbar-nav">
             <a href="#mytrips" className="ghost-link">My Trips</a>
+            {/* Free-account gate (Clerk, Nov 14 2026): nothing renders
+                here until the Clerk keys are set. */}
+            <AccountButton />
             <button type="button" className="ghost" aria-pressed={theme === 'dark'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               {theme === 'dark' ? '☀ Light' : '☾ Dark'}
             </button>
@@ -675,6 +700,45 @@ export default function FujinApp({ variant, initialTab }: { variant: 'home' | 'c
           <h2>How FujinTrip works</h2>
           <p className="sub">Tell Fujin AI where you want to go. It gathers flights, hotels, cars and sightseeing into one plan — Cheapest, Best value, Premium — and you book it all with FujinTrip.</p>
           <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
+          {/* Free account (Clerk, Nov 14 2026) — sign-in lives in My
+              Trips, not in the chat: accounts come AFTER the traveler
+              has a plan worth saving, and browsing, the tabs and the
+              chat are never gated. */}
+          <div className="box" style={{ marginBottom: 16 }}>
+            {!account.configured ? (
+              <>
+                <strong>Free account — sign-in isn&apos;t set up yet</strong>
+                <p className="plan-muted">A free account saves your trips so they follow you to other devices. Sign-in isn&apos;t connected yet — the site owner adds the Clerk keys first. Until then your trips stay saved on this device only, and everything else works as normal.</p>
+              </>
+            ) : !account.signedIn ? (
+              <>
+                <strong>Save your trips to a free account</strong>
+                <p className="plan-muted">Sign in with a magic link (no password) and your trips move to your account. Browsing, the tabs and the chat stay free either way.</p>
+                <p style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <SignInButton mode="modal">
+                    <button type="button" className="primary">Sign in with a magic link</button>
+                  </SignInButton>
+                  <SignUpButton mode="modal">
+                    <button type="button" className="ghost">Create a free account</button>
+                  </SignUpButton>
+                </p>
+              </>
+            ) : (
+              <>
+                <strong>Signed in{account.email ? ` as ${account.email}` : ''}</strong>
+                {mergeRecord ? (
+                  <p className="plan-muted">Your {mergeRecord.tripIds.length} trip{mergeRecord.tripIds.length === 1 ? '' : 's'} on this device {mergeRecord.tripIds.length === 1 ? 'is' : 'are'} linked to your account. They&apos;ll appear on your other devices once cross-device sync lands — for now they&apos;re still saved on this device.</p>
+                ) : mergeOfferNeeded({ signedIn: account.signedIn, userId: account.userId, tripCount: trips.length, merged: false }) ? (
+                  <>
+                    <p className="plan-muted">You have {trips.length} trip{trips.length === 1 ? '' : 's'} saved on this device. Move {trips.length === 1 ? 'it' : 'them'} to your account in one tap.</p>
+                    <p><button type="button" className="primary" onClick={doMerge}>Move my trips to my account</button></p>
+                  </>
+                ) : (
+                  <p className="plan-muted">No trips saved on this device yet — tell Fujin AI where to go and they&apos;ll appear here.</p>
+                )}
+              </>
+            )}
+          </div>
           <p className="plan-muted">“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
           {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet — tell Fujin AI where to go and it will appear here.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>

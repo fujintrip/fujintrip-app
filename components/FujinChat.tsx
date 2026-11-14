@@ -27,6 +27,8 @@ import { auditTrip, checkConnection, departureDayFlags, feasibilitySummary } fro
 import { checkInKeyFor, checkInMissed, parseCheckIn, type CheckIn } from '../lib/emergency';
 import Checklist from '../components/Checklist';
 import { guideFor } from '../lib/localGuides';
+import { gateDecision } from '../lib/auth';
+import { AccountButton, SavePdfGateNotice, useAccount } from '../components/AccountGate';
 import Expandable from '../components/Expandable';
 import KnowHowBlock from '../components/KnowHow';
 import TripPanel, { type PanelStopEdit } from '../components/TripPanel';
@@ -52,7 +54,11 @@ const TripMap = dynamic(() => import('../components/TripMap'), {
 });
 
 
-export type Trip = { id: string; label: string; status: string; date: string; destination?: string };
+export type Trip = { id: string; label: string; status: string; date: string; destination?: string; accountId?: string };
+// A trip stamped with accountId was moved to that free account by the
+// one-tap merge in My Trips (Clerk, Nov 14 2026). The stamp is the link
+// the Postgres sync build will use to pull these trips into the
+// account; until that build lands the trips still live in localStorage.
 // The shape of a parsed server reply (streamed `done` result or atomic
 // JSON) — shared by the streaming path and the atomic fallback path.
 type ServerParsed = { destination: string; travelers: number; reply: string; missing: string[]; tips?: string[]; kids?: number[]; routeOverride?: RouteOverride; tier?: number };
@@ -506,6 +512,14 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   // PDF download state: the $1 rule is decided by the server route.
   const [pdfNotice, setPdfNotice] = useState('');
   const [pdfPay, setPdfPay] = useState(false);
+  // Free-account gate (Clerk, Nov 14 2026): saving / downloading a
+  // plan needs a free account. The chat itself is never gated — this
+  // state only decides whether tapping "Save as PDF" shows the sign-in
+  // prompt instead of the download. The prompt clears itself once the
+  // traveler signs in (the modal closes on the same page).
+  const account = useAccount();
+  const [pdfGate, setPdfGate] = useState(false);
+  useEffect(() => { if (account.signedIn) setPdfGate(false); }, [account.signedIn]);
   // Options stay in memory: the in-progress trip and built plan survive a
   // reload (localStorage) until the traveler requests the plan or starts
   // a new trip. Restored once on mount; writes wait until restore is done
@@ -994,6 +1008,16 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   const planBooked = plan ? bookedDestinations.includes(plan.destination) : false;
   const requestPdf = async () => {
     if (!plan) return;
+    // The gate (Nov 14, 2026 — free account to save/download a plan):
+    // an unsigned traveler gets the sign-in prompt, never the download.
+    // The $1 rule itself is unchanged and still decided by the server
+    // route below; signing in only unlocks the download step.
+    if (gateDecision(account) !== 'allowed') {
+      setPdfGate(true);
+      setPdfNotice('');
+      setPdfPay(false);
+      return;
+    }
     setPdfPay(false);
     setPdfNotice('Checking your download…');
     try {
@@ -1036,6 +1060,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     setPanelNotice('');
     setPdfNotice('');
     setPdfPay(false);
+    setPdfGate(false);
     setMobileZone('chat');
     setMsgs([{ who: 'ai', text: GREETING }]);
   };
@@ -1855,6 +1880,10 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
           >
             {theme === 'dark' ? '☀ Light' : '☾ Dark'}
           </button>
+          {/* Free-account gate (Clerk, Nov 14 2026): sign in / create
+              account in the app bar — nothing renders here until the
+              Clerk keys are set. The chat itself is never gated. */}
+          <AccountButton />
           <div className="mytrips-menu">
             <button type="button" className="ghost appbar-trips" aria-expanded={tripsOpen} aria-haspopup="true" onClick={() => setTripsOpen((o) => !o)}>
               My Trips ▾
@@ -3013,6 +3042,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
             <button className="ghost" onClick={startNewTrip}>Start a new trip</button>
           </div>
           {actionMsg && <p className="no-print" style={{ fontSize: 13, color: '#111', whiteSpace: 'pre-line' }}>{actionMsg}</p>}
+          {pdfGate && <div className="no-print"><SavePdfGateNotice onDismiss={() => setPdfGate(false)} /></div>}
           {pdfNotice && (
             <div className="no-print" style={{ fontSize: 13, color: '#111', marginTop: 8 }}>
               <p style={{ margin: '4px 0' }}>{pdfNotice}</p>
