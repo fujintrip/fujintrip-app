@@ -64,7 +64,7 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
-test('homepage hero: one question, one search box, 7 category actions, exactly one Ask Fujin AI, no chat shell', async () => {
+test('homepage hero: one question, one search box, 7 tabs, one big AI button, no Ask Fujin AI link, no chat shell', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = await r.text();
@@ -72,15 +72,17 @@ test('homepage hero: one question, one search box, 7 category actions, exactly o
   assert.ok(html.includes('Where to?'), 'hero asks Where to?');
   assert.equal((html.match(/aria-label="Where to\?"/g) || []).length, 1, 'exactly one hero search box');
   assert.ok(html.includes('hero-ta-search'), 'hero search box renders');
-  // Seven bookable categories, each opening its booking search.
-  assert.equal((html.match(/category-btn/g) || []).length, 7, '7 category actions');
+  // Seven bookable categories as tabs, visible on page load under the hero.
+  assert.equal((html.match(/role="tab"/g) || []).length, 7, '7 tabs');
   for (const label of ['Tours &amp; sightseeing', 'Flights', 'Hotels', 'Car rental', 'Cruises', 'Buses', 'Taxis']) {
-    assert.ok(html.includes(label), `category action ${label} renders`);
+    assert.ok(html.includes(label), `tab ${label} renders`);
   }
-  // Exactly ONE AI entry point on the homepage — TripAdvisor's mistake
-  // was three; the chat itself is not on this page.
-  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 1, 'exactly one Ask Fujin AI');
-  assert.ok(html.includes('href="/chat"'), 'the AI entry point leads to /chat');
+  // Exactly ONE AI entry point on the homepage — the big button under
+  // the search box (direction v2). The header "Ask Fujin AI" link is
+  // gone; the chat itself is not on this page.
+  assert.equal((html.match(/Build full plan with AI/g) || []).length, 1, 'exactly one Build full plan with AI button');
+  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 0, 'no Ask Fujin AI link on the homepage');
+  assert.ok(html.includes('href="/chat"'), 'the AI button leads to /chat');
   // The search box is a combobox: typing offers known destinations.
   assert.ok(html.includes('role="combobox"'), 'hero search is a combobox');
   assert.ok(html.includes('aria-controls="hero-suggestions"'), 'hero search controls the suggestions list');
@@ -91,9 +93,70 @@ test('homepage hero: one question, one search box, 7 category actions, exactly o
   assert.ok(!html.includes('mapcol'), 'no map column on the homepage');
   // The Kyoto torii hero photo stays as the hero visual.
   assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
-  // The booking section below the fold: category select + link box.
+  // The booking section below the fold: tabs + link box.
   assert.ok(html.includes('id="book"'), 'booking section renders');
   assert.ok(html.includes('Paste a link or article text'), 'Start from a link is reachable below the fold');
+});
+
+test('tabs: Flights is the default panel — search form, planner flight budget, live-fares loading state', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The default tab is Flights (the one with live data).
+  assert.ok(html.includes('Search Flights'), 'the Flights search form renders');
+  assert.ok(html.includes('Plan flight budget'), 'the planner flight budget line renders');
+  assert.ok(html.includes('$1,512'), 'the Central Europe flight budget is $1,512 for 2 travelers');
+  assert.ok(html.includes('Checking live fares'), 'the live-fares fetch shows its loading state');
+  assert.ok(html.includes('Flights by destination'), 'the per-route flight estimates render');
+  assert.ok(html.includes('from $756 per traveler'), 'Central Europe flights from $756 per traveler');
+  assert.ok(html.includes('planning estimate'), 'the estimates are labeled');
+  // The other panels do not render until their tab is picked.
+  assert.ok(!html.includes('Search Hotels'), 'the Hotels form waits for its tab');
+});
+
+test('tabs: ?tab=hotels shows the Hotels panel with leg prices and planning-estimate labels', async () => {
+  const r = await fetch(`${BASE}/?tab=hotels`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Search Hotels'), 'the Hotels search form renders');
+  assert.ok(html.includes('from $594 per traveler'), 'Central Europe stays from $594 per traveler');
+  assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
+  assert.ok(!html.includes('Search Flights'), 'the Flights form waits for its tab');
+});
+
+test('tabs: ?tab=cruises shows the honest not-connected note and full-trip estimates', async () => {
+  const r = await fetch(`${BASE}/?tab=cruises`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Search Cruises'), 'the Cruises search form renders');
+  assert.ok(html.includes("aren't broken out"), 'the gap is named');
+  assert.ok(html.includes('Full trip · planning estimate'), 'the rows say they are full-trip totals');
+  assert.ok(html.includes('from $1,800 per traveler'), 'Central Europe full trip $1,800 per traveler');
+});
+
+test('tabs: ?tab=bogus falls back to Flights', async () => {
+  const r = await fetch(`${BASE}/?tab=bogus`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Search Flights'), 'a bad tab param falls back to Flights');
+});
+
+test('tabs: price-check without a key is honestly empty (the API the Flights tab calls)', async () => {
+  const r = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14 }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.live, false);
+  assert.equal(j.reason, 'no_key');
+  assert.deepEqual(j.out, []);
+  assert.deepEqual(j.back, []);
+  assert.equal(j.plannerFlight, 1512, 'the plan flight budget still stands');
+  assert.equal(j.destCity, 'Prague');
+  assert.equal(j.departDate, '2027-01-04');
+  assert.equal(j.returnDate, '2027-01-17');
 });
 
 test('service worker serves with the cache version', async () => {
