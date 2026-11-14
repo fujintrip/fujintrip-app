@@ -20,17 +20,18 @@ import { comparisonFor } from '../lib/planner.ts';
 import { discoveryDestinations } from '../lib/discovery.ts';
 import { bestTimeFor } from '../lib/bestTime.ts';
 
-test('homeTabIdFromQuery: real tab ids pass, anything else is Flights', () => {
+test('homeTabIdFromQuery: real tab ids pass, anything else is Stays', () => {
   assert.equal(homeTabIdFromQuery('hotels'), 'hotels');
   assert.equal(homeTabIdFromQuery('tours'), 'tours');
-  assert.equal(homeTabIdFromQuery(null), 'flights');
-  assert.equal(homeTabIdFromQuery(undefined), 'flights');
-  assert.equal(homeTabIdFromQuery('bogus'), 'flights');
+  assert.equal(homeTabIdFromQuery(null), 'hotels');
+  assert.equal(homeTabIdFromQuery(undefined), 'hotels');
+  assert.equal(homeTabIdFromQuery('bogus'), 'hotels');
   assert.equal(homeTabIdFromQuery(['cars', 'hotels']), 'cars');
   assert.equal(HOME_TABS.length, 7, 'seven tabs');
+  // Direction v3 order + labels: Stays first (Booking's default).
   assert.deepEqual(
     HOME_TABS.map((t) => t.label),
-    ['Tours & sightseeing', 'Flights', 'Hotels', 'Car rental', 'Cruises', 'Buses', 'Taxis']
+    ['Stays', 'Flights', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']
   );
 });
 

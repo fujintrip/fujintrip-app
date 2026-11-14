@@ -1,6 +1,13 @@
-// Homepage tabs (direction v2, Nov 13, 2026): the seven things you can
-// book, each with results underneath — no AI, no sign-up. Every number
-// here comes from an existing source and is labeled as what it is:
+// Homepage tabs (direction v2, Nov 13, 2026; direction v3, Nov 14:
+// the tabs are now the SEARCH WIDGET's category switcher — Booking /
+// Expedia pattern. They switch the form; results appear only after a
+// search. The tab order and labels follow the spec: Stays first
+// (Booking's default), then Flights, Car rental, Attractions,
+// Cruises, Buses, Taxis. The ?tab= ids are unchanged, so old
+// deep links still land on the right tab.
+//
+// Every number here comes from an existing source and is labeled as
+// what it is:
 //
 // - Flights: live Duffel test fares (via POST /api/price-check) +
 //   the cached competitor fare (GET /api/competitor-fares), both
@@ -25,19 +32,19 @@ import type { Tab } from './data';
 export type HomeTabId = 'tours' | 'flights' | 'hotels' | 'cars' | 'cruises' | 'buses' | 'taxis';
 
 export const HOME_TABS: { id: HomeTabId; label: string; icon: string; tab: Tab }[] = [
-  { id: 'tours', label: 'Tours & sightseeing', icon: '🎡', tab: 'Sightseeing' },
+  { id: 'hotels', label: 'Stays', icon: '🏨', tab: 'Hotels' },
   { id: 'flights', label: 'Flights', icon: '✈️', tab: 'Flights' },
-  { id: 'hotels', label: 'Hotels', icon: '🏨', tab: 'Hotels' },
   { id: 'cars', label: 'Car rental', icon: '🚗', tab: 'Car rental' },
+  { id: 'tours', label: 'Attractions', icon: '🎡', tab: 'Sightseeing' },
   { id: 'cruises', label: 'Cruises', icon: '🚢', tab: 'Cruises' },
   { id: 'buses', label: 'Buses', icon: '🚌', tab: 'Buses' },
   { id: 'taxis', label: 'Taxis', icon: '🚕', tab: 'Taxis & transfers' },
 ];
 
-export const DEFAULT_HOME_TAB: HomeTabId = 'flights';
+export const DEFAULT_HOME_TAB: HomeTabId = 'hotels';
 
 // The ?tab= deep link: only a real tab id wins — anything else (or
-// nothing) is the Flights default, so a bad link never renders an
+// nothing) is the Stays default, so a bad link never renders an
 // empty panel.
 export function homeTabIdFromQuery(q: string | string[] | null | undefined): HomeTabId {
   const raw = Array.isArray(q) ? q[0] : q;
