@@ -1870,6 +1870,18 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
           <h1 className="appbar-title">FujinTrip</h1>
         </div>
         <div className="appbar-actions">
+          {/* Direction v3 (Nov 14, 2026): the header's one AI entry
+              point — the same "Plan with AI" pill as the site header.
+              On /chat it links to the page you are already on; it is
+              kept so the header is the same button everywhere, never
+              duplicated. */}
+          <a href="/chat" className="ai-pill">
+            <span className="ai-pill-icon" aria-hidden="true">
+              ✦
+            </span>
+            <span className="ai-pill-full">Plan with AI</span>
+            <span className="ai-pill-short">AI</span>
+          </a>
           <button
             type="button"
             className="ghost appbar-theme"
