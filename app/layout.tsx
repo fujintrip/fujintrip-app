@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import ServiceWorkerRegister from '../components/ServiceWorkerRegister';
+import { AuthProvider } from '../components/AccountGate';
 import { Bricolage_Grotesque, Inter, JetBrains_Mono } from 'next/font/google';
 
 // Type system (Layla-interface direction §6): two families + a mono
@@ -55,7 +56,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {/* Offline plan: registers public/sw.js so the app shell loads
             with no connection and the saved plan opens offline. */}
         <ServiceWorkerRegister />
-        {children}
+        {/* Free-account gate (Clerk, Nov 14 2026): renders no
+            ClerkProvider at all until the Clerk keys are set, so the
+            site works exactly as before with no keys. */}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
