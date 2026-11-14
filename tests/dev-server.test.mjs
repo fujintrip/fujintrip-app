@@ -799,3 +799,32 @@ test('theme: the pre-paint script is in the served HTML, so the first paint alre
   assert.ok(html.includes('fujintrip-theme'), 'theme script sets the stored theme before paint');
   assert.ok(html.includes('data-theme'), 'theme script writes data-theme on <html>');
 });
+
+test('account gate: /sign-in and /sign-up render the not-set-up state with no Clerk keys (Nov 14)', async () => {
+  // No Clerk keys are set in this environment, so the prebuilt forms
+  // cannot render — the pages must say so plainly instead of crashing
+  // or looping, and the guarded middleware must let the requests through.
+  for (const path of ['/sign-in', '/sign-up']) {
+    const r = await fetch(`${BASE}${path}`);
+    assert.equal(r.status, 200, `${path} 200 without Clerk keys`);
+    const html = await r.text();
+    assert.ok(html.includes('isn'), `${path} explains sign-in isn't set up yet`);
+    assert.ok(!html.includes('Missing publishable key'), `${path}: no Clerk key error`);
+    assert.ok(!html.includes('Clerk: '), `${path}: no Clerk error text`);
+  }
+});
+
+test('account gate: the homepage and /chat still work with no Clerk keys, and My Trips says sign-in is not set up (Nov 14)', async () => {
+  for (const path of ['/', '/chat']) {
+    const r = await fetch(`${BASE}${path}`);
+    assert.equal(r.status, 200, `${path} 200 without Clerk keys`);
+    const html = await r.text();
+    assert.ok(!html.includes('Missing publishable key'), `${path}: no Clerk key error`);
+    assert.ok(!html.includes('Clerk: '), `${path}: no Clerk error text`);
+  }
+  // The My Trips account box renders server-side with the honest
+  // not-configured state — the gate never blocks the page itself.
+  const home = await (await fetch(`${BASE}/`)).text();
+  assert.ok(home.includes('Free account'), 'My Trips shows the free-account box');
+  assert.ok(home.includes('sign-in isn'), 'My Trips says sign-in is not set up yet');
+});
