@@ -746,6 +746,11 @@ test('Layla-dynamic: filter pills, fill-don\'t-fire chips, map dialog hook and m
   assert.ok(css.includes('expandable-body'), 'stylesheet has the expandable-row styles');
   assert.ok(css.includes('panel-in'), 'stylesheet has the panel-entrance keyframes');
   assert.ok(css.includes('.mapdialog'), 'stylesheet has the full-screen map dialog styles');
+  // Modern map (Nov 13): the full-bleed map container and the floating
+  // itinerary rail over it — plain CSS in globals.css, so the served
+  // stylesheet (or the source fallback) carries them.
+  assert.ok(css.includes('.map-fullbleed'), 'stylesheet has the full-bleed map container');
+  assert.ok(css.includes('.map-rail'), 'stylesheet has the floating itinerary rail');
 });
 
 test('ground transport: checkout status lists the trains category with nothing live', async () => {
