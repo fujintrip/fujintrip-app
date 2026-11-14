@@ -685,3 +685,104 @@ html{scroll-padding-bottom:96px}
   .ai-pill-short{display:inline}
   .ai-pill{padding:9px 12px}
 }
+
+/* Direction v3 homepage (Nov 14, 2026): Booking-style photo hero
+   with the search widget on it, trust strip, category tiles,
+   results list (sort above, filters left), footer columns. */
+
+/* Hero: the photo fills the banner; the headline and the white
+   search card sit on top of it. On a phone the photo shortens to
+   ~40vh and the card drops below it so the fields stay legible. */
+.hero-booking{position:relative;overflow:hidden;background:var(--surface)}
+.hero-booking-photo{position:absolute;inset:0}
+.hero-booking-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.52))}
+.hero-booking-photo .safeimg{height:100%}
+.hero-booking-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.hero-booking-photo .img-fallback,.hero-booking-photo .img-loading{height:100%}
+.hero-booking-inner{position:relative;z-index:1;padding:64px 20px 56px}
+.hero-booking-inner h1{color:#fff;font-size:clamp(40px,6vw,64px)}
+.hero-booking-sub{color:rgba(255,255,255,.92);font-size:18px;margin:8px 0 24px;max-width:640px}
+
+/* Search widget: white card, category tabs across the top, fields
+   below, one accent Search button, one honest line. */
+.search-widget{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.sw-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin:-4px -4px 16px;padding:0 4px 12px}
+.sw-tab{flex:0 0 auto;border:1px solid transparent;background:transparent;border-radius:999px;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap}
+.sw-tab:hover{background:var(--surface)}
+.sw-tab.selected{background:var(--ink);color:var(--on-ink)}
+.sw-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.sw-field{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.sw-field input,.sw-field select{border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;background:var(--card);color:var(--ink);width:100%}
+.sw-field input:focus,.sw-field select:focus{outline:2px solid var(--accent-text);outline-offset:1px;border-color:var(--accent-text)}
+.sw-check{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding-top:26px}
+.sw-search{margin-top:16px;min-height:52px;padding:0 28px;font-size:16px}
+.sw-note{margin:12px 0 0;font-size:14px;color:var(--danger)}
+.sw-honest{margin:12px 0 0;font-size:13px;color:var(--muted)}
+
+/* Trust strip: one row under the hero, three honest lines. */
+.trust-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:28px 0 4px}
+.trust-item{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:600}
+.trust-item .trust-icon{font-size:20px;line-height:1.2}
+
+/* Browse-by-category tiles. */
+.cat-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.cat-tile{display:flex;flex-direction:column;gap:4px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;cursor:pointer;font-family:inherit;color:var(--ink)}
+.cat-tile:hover{border-color:var(--ink)}
+.cat-tile .cat-icon{font-size:28px}
+.cat-tile strong{font-size:16px}
+.cat-tile span{font-size:13px;color:var(--muted)}
+
+/* Results: sticky summary bar, sort above the list, filters left,
+   cards in the middle. On a phone the filters collapse behind one
+   "Filters" button that opens a bottom sheet. */
+.results-section{padding:32px 0 8px}
+.results-bar{position:sticky;top:61px;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sticky-bg);border:1px solid var(--line);border-radius:14px;padding:10px 16px;margin-bottom:16px;backdrop-filter:blur(8px)}
+.results-honesty{color:var(--muted);font-size:14px}
+.results-note{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);border-radius:12px;padding:12px 16px;font-size:14px}
+.results-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:28px;align-items:start}
+.results-filters{position:sticky;top:140px}
+.filter-group{margin-bottom:20px}
+.filter-group h3{font-size:13px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.filter-group select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink)}
+.filter-check{display:flex;align-items:center;gap:8px;font-size:14px;padding:4px 0;cursor:pointer}
+.filters-open-row{display:none}
+.result-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.result-card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.result-card.result-match{border-color:var(--accent-text);box-shadow:0 0 0 1px var(--accent-text)}
+.result-card .result-photo{height:160px;width:100%;object-fit:cover;display:block}
+.result-body{padding:16px;display:flex;flex-direction:column;gap:6px;flex:1}
+.result-body h3{font-size:18px;margin:0}
+.result-body p{margin:0;font-size:14px}
+.result-price{font-size:16px;font-weight:700}
+.result-price .plan-muted{font-weight:400}
+.result-match-line{font-size:13px;font-weight:600;color:var(--accent-text)}
+.result-body .primary{margin-top:auto;align-self:flex-start}
+.filters-sheet{display:none}
+
+/* Footer columns (direction v3 §1h). */
+.footer-cols{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding:32px 0 8px}
+.footer-col h3{font-size:14px;margin:0 0 10px}
+.footer-col ul{list-style:none;margin:0;padding:0}
+.footer-col li{margin:6px 0;font-size:14px;color:var(--muted)}
+.footer-col a{color:var(--muted);text-decoration:none}
+.footer-col a:hover{text-decoration:underline}
+
+@media(max-width:900px){
+  .results-layout{grid-template-columns:1fr}
+  .results-filters{display:none}
+  .filters-open-row{display:block;margin:0 0 12px}
+  .filters-sheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:80;background:var(--card);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:16px 20px 28px;max-height:70vh;overflow-y:auto;box-shadow:0 -8px 32px rgba(0,0,0,.18)}
+  .filters-sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .trust-strip{grid-template-columns:1fr;gap:8px}
+  .footer-cols{grid-template-columns:1fr 1fr}
+}
+@media(max-width:640px){
+  .hero-booking-photo{position:relative;height:40vh}
+  .hero-booking-inner{padding:28px 20px 32px}
+  .hero-booking-inner h1{color:var(--ink)}
+  .hero-booking-sub{color:var(--muted)}
+  .sw-fields{grid-template-columns:1fr}
+  .sw-search{width:100%}
+  .footer-cols{grid-template-columns:1fr}
+  .results-bar{top:57px}
+}
