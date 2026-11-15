@@ -304,3 +304,40 @@ test('searchRequestLabel: the saved request names the search, never a booking', 
     assert.ok(!/book now|Book now|confirmed|paid/i.test(label), 'a saved request never claims a booking');
   }
 });
+
+// --- Mobile layout (Nov 15, 2026): phones first ---
+// All assertions read app/globals.css directly — the rules are
+// small-screen only, so the check is that the rule exists with the
+// right value, not a rendered screenshot (no browser here resizes
+// to 390px; the rendered phone check runs on the user's phone).
+
+test('mobile: the hero is tight on a phone (defect, Nov 15 2026)', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const pads = [...css.matchAll(/\.hero-booking-inner\{padding:(\d+)px \d+px \d+px\}/g)].map((m) => Number(m[1]));
+  assert.ok(pads.length >= 2, 'hero padding is declared for desktop and phone');
+  assert.ok(pads[pads.length - 1] <= 36, `phone hero top padding is tight, got ${pads[pads.length - 1]}px`);
+});
+
+test('mobile: the sticky results bar clears the taller phone header', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.ok(/\.results-bar\{position:sticky;top:61px/.test(css), 'desktop results bar clears the 60px header');
+  assert.ok(css.includes('.results-bar{top:65px}'), 'results bar clears the 64px phone header (44px hamburger)');
+  assert.ok(css.includes('.results-bar{top:61px}'), 'results bar clears the 60px header at ≤640px');
+});
+
+test('mobile: phone rules — no zoom, no horizontal scroll, wrapping bar, fitting header', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const mobile = css.slice(css.indexOf('Mobile layout (Nov 15'));
+  assert.ok(mobile.length > 0, 'the mobile block exists');
+  assert.ok(mobile.includes('input,select,textarea{font-size:16px}'), '16px form fields at ≤640px — iOS never zooms on focus');
+  assert.ok(mobile.includes('body{overflow-x:clip}'), 'no horizontal scroll on a phone');
+  assert.ok(mobile.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
+  assert.ok(mobile.includes('#results{scroll-margin-top:170px}'), 'the scroll target clears the wrapped results bar');
+  assert.ok(mobile.includes('.site-theme{padding:10px 12px}'), 'the header fits a 360px phone');
+  assert.ok(mobile.includes('.chatmap-s0 .hero-input{flex-wrap:wrap}'), 'the S0 input stacks on a narrow phone');
+});
+
+test('mobile: the filter checkbox still sits next to its label (defect, Nov 15 2026)', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.ok(/\.filter-check input\{flex:none/.test(css), 'filter checkboxes keep their natural size, so the label sits next to them');
+});

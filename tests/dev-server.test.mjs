@@ -1043,3 +1043,28 @@ test('account gate: the homepage and /chat still work with no Clerk keys, and My
   assert.ok(home.includes('Free account'), 'My Trips shows the free-account box');
   assert.ok(home.includes('sign-in isn'), 'My Trips says sign-in is not set up yet');
 });
+
+test('mobile: viewport meta is device-width and the hamburger is served', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('name="viewport"'), 'viewport meta is present');
+  assert.ok(/content="width=device-width/.test(html), 'viewport is device-width');
+  assert.ok(html.includes('Open menu'), 'the hamburger button is served with its label');
+});
+
+test('mobile: the served stylesheet carries the phone rules', async () => {
+  const rawHtml = await (await fetch(`${BASE}/`)).text();
+  const cssHref = rawHtml.match(/href="([^"]+\.css[^"]*)"/)?.[1];
+  let css = '';
+  if (cssHref) {
+    css = await (await fetch(cssHref.startsWith('http') ? cssHref : `${BASE}${cssHref}`)).text();
+  }
+  if (!css.includes('overflow-x:clip')) {
+    css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  }
+  assert.ok(css.includes('Mobile layout (Nov 15'), 'the mobile block is in the served stylesheet');
+  assert.ok(css.includes('input,select,textarea{font-size:16px}'), '16px form fields at phone width');
+  assert.ok(css.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
+  assert.ok(css.includes('.results-bar{top:65px}'), 'the results bar clears the phone header');
+});

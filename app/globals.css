@@ -758,6 +758,10 @@ html{scroll-padding-bottom:96px}
 @media(max-width:900px){
   .results-layout{grid-template-columns:1fr}
   .results-filters{display:none}
+  /* The phone header is taller than the desktop one (the 44px
+     hamburger), so the sticky results bar must sit lower, or it
+     slides 3px under the header while scrolling. */
+  .results-bar{top:65px}
   .filters-open-row{display:block;margin:0 0 12px}
   .filters-sheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:80;background:var(--card);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:16px 20px 28px;max-height:70vh;overflow-y:auto;box-shadow:0 -8px 32px rgba(0,0,0,.18)}
   .filters-sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
@@ -765,9 +769,70 @@ html{scroll-padding-bottom:96px}
   .footer-cols{grid-template-columns:1fr 1fr}
 }
 @media(max-width:640px){
-  .hero-booking-inner{padding:48px 20px 40px}
+  /* Tight hero on a phone: the desktop's generous whitespace becomes
+     a tall empty band above the headline — the search card starts
+     near the top instead. */
+  .hero-booking-inner{padding:32px 16px 28px}
   .sw-fields{grid-template-columns:1fr}
   .sw-search{width:100%}
   .footer-cols{grid-template-columns:1fr}
-  .results-bar{top:57px}
+  .results-bar{top:61px}
+}
+
+/* --- Mobile layout (Nov 15, 2026): phones first --- */
+/* Small-screen only (≤900px / ≤640px / ≤480px). Layout, never copy,
+   prices, fares, or the desktop layout. Verified by code inspection
+   + dev-server tests — no browser here can resize to 390px, so the
+   rendered phone check runs on the user's own phone after Deploy. */
+@media(max-width:900px){
+  /* iPhone home-indicator safe area: the sticky bottom bar and the
+     filters sheet clear it instead of sitting under it. */
+  .stickybar{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+  .filters-sheet{padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
+}
+@media(max-width:640px){
+  /* No horizontal scroll on a phone: any stray wide element is
+     clipped, not scrolled to. overflow-x:clip (not hidden) keeps
+     position:sticky working. */
+  body{overflow-x:clip}
+  .wrap{padding:0 16px}
+  /* The results bar can wrap to two lines on a phone, so the scroll
+     target must clear header + the taller bar. */
+  #results{scroll-margin-top:170px}
+  .hero-booking-sub{font-size:16px;margin:10px 0 24px}
+  .search-widget{padding:16px}
+  /* One-column form: the "Return to the same location" checkbox no
+     longer needs the 26px top padding that aligned it with the
+     labeled fields. */
+  .sw-check{padding-top:4px}
+  .sw-tab{min-height:44px}
+  /* iOS zooms the page when a form field under 16px is focused —
+     16px fields keep the page still. Buttons stay 15px (they never
+     trigger the zoom). */
+  input,select,textarea{font-size:16px}
+  /* The results summary is long ("Flights · New York → London · …")
+     — let the bar wrap instead of squeezing the Edit search button. */
+  .results-bar{flex-wrap:wrap;row-gap:8px;padding:10px 12px}
+  /* Result cards: the Save action is full-width, like the
+     destination cards already are. */
+  .result-body .primary{width:100%;text-align:center}
+  .appbar-total strong{font-size:24px}
+  .mapdialog{padding:12px 16px}
+  /* Touch targets in the trip panel. */
+  .panel-stepper button{width:40px;height:40px}
+  .panel-stop-actions button{width:36px;height:36px}
+  .site-menu{padding:8px 16px 16px}
+}
+@media(max-width:480px){
+  /* The header row at 360px: logo + AI pill + theme + hamburger
+     overflowed by ~8px — tighten the paddings and the logo so all
+     four fit. */
+  .site-header{gap:8px}
+  .site-header .logo{font-size:22px}
+  .site-theme{padding:10px 12px}
+  .ai-pill{padding:9px 10px}
+  /* S0 chat input: the Start button goes full-width under the field
+     instead of squeezing the field to ~170px. */
+  .chatmap-s0 .hero-input{flex-wrap:wrap}
+  .chatmap-s0 .hero-input .primary{width:100%}
 }
