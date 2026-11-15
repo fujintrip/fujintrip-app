@@ -489,3 +489,95 @@ test('cheapestOutBackTotal: the total follows the visible fares, never a filtere
   assert.equal(cheapestOutBackTotal([], back), 0, 'no outbound, no round-trip total');
   assert.equal(cheapestOutBackTotal(out, []), 0, 'no return, no round-trip total');
 });
+
+// Homepage restructure (Nov 15, 2026): one Lucide icon set, the
+// Bricolage + Inter + JetBrains Mono stack kept, calm minimalism.
+test('restructure: the new section styles exist in the CSS', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  for (const cls of [
+    '.eyebrow',
+    '.pkg-grid',
+    '.pkg-card',
+    '.pkg-card--hero',
+    '.pkg-photo',
+    '.pkg-body',
+    '.pkg-price',
+    '.pkg-includes',
+    '.pkg-tiers',
+    '.pkg-actions',
+    '.fares-strip',
+    '.fare-chip',
+    '.deals-grid',
+    '.steps',
+    '.step',
+    '.voices-teaser',
+    '.voices-chips',
+  ]) {
+    assert.ok(css.includes(cls), `CSS defines ${cls}`);
+  }
+});
+
+test('restructure: the card price is the largest type on the card', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const price = css.match(/\.pkg-price\{[^}]*font-size:(\d+)px/);
+  assert.ok(price, '.pkg-price has a font-size');
+  assert.ok(Number(price[1]) >= 28, `card price ${price[1]}px is loud (≥28px)`);
+  const bodyH3 = css.match(/\.pkg-body h3\{[^}]*font-size:(\d+)px/);
+  assert.ok(bodyH3 && Number(price[1]) > Number(bodyH3[1]), 'price larger than the card title');
+});
+
+test('restructure: icons are Lucide, one pack, one stroke — no emoji, no hand-rolled svg', () => {
+  const icons = readFileSync(new URL('../components/icons.tsx', import.meta.url), 'utf8');
+  assert.ok(icons.includes("from 'lucide-react'"), 'icons come from lucide-react');
+  assert.ok(!icons.includes('<svg'), 'no hand-rolled svg in the icon set');
+  assert.ok(icons.includes('strokeWidth={1.75}'), 'one stroke width for the whole set');
+  const emoji = ['🏨', '✈️', '🚗', '🎡', '🚢', '🚌', '🚕', '✦', '☀', '☾', '☰', '✕'];
+  for (const file of ['../components/icons.tsx', '../lib/homeTabs.ts', '../components/SiteHeader.tsx', '../components/SearchWidget.tsx', '../components/FujinApp.tsx']) {
+    const src = readFileSync(new URL(file, import.meta.url), 'utf8');
+    for (const e of emoji) assert.ok(!src.includes(e), `${file} has no emoji icon ${e}`);
+  }
+});
+
+test('restructure: the header, the widget tabs and the category tiles share one icon key per category', () => {
+  const icons = readFileSync(new URL('../components/icons.tsx', import.meta.url), 'utf8');
+  for (const t of ['flights', 'hotels', 'cars', 'tours', 'cruises', 'buses', 'taxis']) {
+    assert.ok(icons.includes(`${t}:`), `TAB_ICONS covers ${t}`);
+  }
+  const fujinApp = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  assert.ok(fujinApp.includes('<Icon name={t.icon} size={26} />'), 'category tiles render the shared key');
+  const header = readFileSync(new URL('../components/SiteHeader.tsx', import.meta.url), 'utf8');
+  assert.ok(header.includes('<Icon name={t.icon} size={15} />'), 'header nav renders the shared key');
+  const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
+  assert.ok(widget.includes('<Icon name={t.icon} size={16} />'), 'widget tabs render the shared key');
+});
+
+test('restructure: fonts stay Bricolage Grotesque + Inter + JetBrains Mono', () => {
+  const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
+  assert.ok(layout.includes('Bricolage_Grotesque'), 'display font is still Bricolage Grotesque');
+  assert.ok(layout.includes('Inter'), 'body font is still Inter');
+  assert.ok(layout.includes('JetBrains_Mono'), 'price labels still use JetBrains Mono');
+  assert.ok(!layout.includes('Plus_Jakarta_Sans'), 'no display-font swap to Plus Jakarta Sans');
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.ok(!css.includes('Plus Jakarta Sans'), 'no Plus Jakarta Sans fallback in the CSS');
+});
+
+test('restructure: micro-interactions animate transform only, 150–300ms', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const block = css.slice(css.indexOf('/* Homepage restructure (Nov 15, 2026)'));
+  const transitions = [...block.matchAll(/transition:([^;}]+)/g)].map((m) => m[1].trim());
+  assert.ok(transitions.length >= 3, 'the new sections declare transitions');
+  for (const t of transitions) {
+    assert.ok(/^transform \d+ms ease$/.test(t), `transition is transform-only 150–300ms: ${t}`);
+    const ms = Number(t.match(/(\d+)ms/)[1]);
+    assert.ok(ms >= 150 && ms <= 300, `duration ${ms}ms is within 150–300ms`);
+  }
+});
+
+test('restructure: the new grids stack to one column at 390px', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const mobile = css.slice(css.indexOf('@media (max-width:640px){', css.indexOf('/* Homepage restructure')));
+  assert.ok(mobile.includes('.pkg-grid,.deals-grid{grid-template-columns:1fr}'), 'package + deals grids collapse to one column');
+  assert.ok(mobile.includes('.pkg-card--hero{grid-column:auto}'), 'the hero card stops spanning on a phone');
+  assert.ok(css.includes('.fares-strip{display:flex'), 'the fares strip scrolls horizontally on a phone');
+  assert.ok(css.includes('.pkg-actions button{min-height:44px'), 'package actions are 44px touch targets');
+});

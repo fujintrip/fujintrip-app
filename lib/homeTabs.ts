@@ -28,17 +28,21 @@ import { comparisonFor } from './planner';
 import { discoveryDestinations, routeLineFor } from './discovery';
 import { bestTimeFor } from './bestTime';
 import type { Tab } from './data';
+import type { IconName } from '../components/icons';
 
 export type HomeTabId = 'tours' | 'flights' | 'hotels' | 'cars' | 'cruises' | 'buses' | 'taxis';
 
-export const HOME_TABS: { id: HomeTabId; label: string; icon: string; tab: Tab }[] = [
-  { id: 'flights', label: 'Flights', icon: '✈️', tab: 'Flights' },
-  { id: 'hotels', label: 'Stays', icon: '🏨', tab: 'Hotels' },
-  { id: 'cars', label: 'Car rental', icon: '🚗', tab: 'Car rental' },
-  { id: 'tours', label: 'Attractions', icon: '🎡', tab: 'Sightseeing' },
-  { id: 'cruises', label: 'Cruises', icon: '🚢', tab: 'Cruises' },
-  { id: 'buses', label: 'Buses', icon: '🚌', tab: 'Buses' },
-  { id: 'taxis', label: 'Taxis', icon: '🚕', tab: 'Taxis & transfers' },
+// The icon is a Lucide key (components/icons.tsx), never an emoji —
+// the header nav, the widget tabs and the category tiles all render
+// the same key, so the three can never disagree about a category.
+export const HOME_TABS: { id: HomeTabId; label: string; icon: IconName; tab: Tab }[] = [
+  { id: 'flights', label: 'Flights', icon: 'plane', tab: 'Flights' },
+  { id: 'hotels', label: 'Stays', icon: 'bed', tab: 'Hotels' },
+  { id: 'cars', label: 'Car rental', icon: 'car', tab: 'Car rental' },
+  { id: 'tours', label: 'Attractions', icon: 'ticket', tab: 'Sightseeing' },
+  { id: 'cruises', label: 'Cruises', icon: 'ship', tab: 'Cruises' },
+  { id: 'buses', label: 'Buses', icon: 'bus', tab: 'Buses' },
+  { id: 'taxis', label: 'Taxis', icon: 'taxi', tab: 'Taxis & transfers' },
 ];
 
 export const DEFAULT_HOME_TAB: HomeTabId = 'flights';

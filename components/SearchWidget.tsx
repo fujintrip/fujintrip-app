@@ -20,6 +20,7 @@ import {
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
 import PlaceField from './PlaceField';
+import { Icon } from './icons';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -213,7 +214,10 @@ export default function SearchWidget({
             className={`sw-tab${tab === t.id ? ' selected' : ''}`}
             onClick={() => onTabChange(t.id)}
           >
-            <span aria-hidden="true">{t.icon}</span> {t.label}
+            <span className="sw-tab-icon" aria-hidden="true">
+              <Icon name={t.icon} size={16} />
+            </span>{' '}
+            {t.label}
           </button>
         ))}
       </div>

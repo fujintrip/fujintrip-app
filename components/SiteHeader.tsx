@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
 import { AccountButton } from './AccountGate';
+import { Icon } from './icons';
 
 export default function SiteHeader({
   theme,
@@ -39,14 +40,14 @@ export default function SiteHeader({
       <nav className="site-nav" aria-label="Book by category">
         {HOME_TABS.map((t) => (
           <a key={t.id} href={`/?tab=${t.id}`} onClick={navClick(t.id)}>
-            {t.label}
+            <Icon name={t.icon} size={15} /> {t.label}
           </a>
         ))}
       </nav>
       <div className="site-actions">
         <a href="/chat" className="ai-pill">
           <span className="ai-pill-icon" aria-hidden="true">
-            ✦
+            <Icon name="sparkle" size={15} />
           </span>
           <span className="ai-pill-full">Plan with AI</span>
           <span className="ai-pill-short">AI</span>
@@ -64,7 +65,7 @@ export default function SiteHeader({
           aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           onClick={onThemeToggle}
         >
-          {theme === 'dark' ? '☀ Light' : '☾ Dark'}
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} /> {theme === 'dark' ? 'Light' : 'Dark'}
         </button>
         <button
           type="button"
@@ -73,14 +74,14 @@ export default function SiteHeader({
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           onClick={() => setMenuOpen((o) => !o)}
         >
-          {menuOpen ? '✕' : '☰'}
+          <Icon name={menuOpen ? 'close' : 'menu'} size={20} />
         </button>
       </div>
       {menuOpen && (
         <div className="site-menu" role="menu" aria-label="Site menu">
           {HOME_TABS.map((t) => (
             <a key={t.id} href={`/?tab=${t.id}`} role="menuitem" onClick={navClick(t.id)}>
-              {t.icon} {t.label}
+              <Icon name={t.icon} size={18} /> {t.label}
             </a>
           ))}
           <a href={myTripsHref} role="menuitem" onClick={closeMenu}>

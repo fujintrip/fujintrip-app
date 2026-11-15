@@ -105,9 +105,11 @@ test('homepage: white hero + search widget with 7 tabs, destinations, trust stri
   assert.ok(html.includes('Show more destinations'), 'the destinations expander renders');
   assert.ok(html.includes('per traveler'), 'destination cards carry a per-traveler price line');
   // NO results before a search — the results shell renders only after
-  // the widget submits (direction v3: results-on-load is gone).
+  // the widget submits (direction v3: results-on-load is gone). The
+  // package cards DO have their own "Save this search" (see the
+  // restructure test below) — what must not render is the results UI.
   assert.ok(!html.includes('Planning estimates from FujinTrip'), 'no results honesty header before a search');
-  assert.ok(!html.includes('Save this search'), 'no Save this search before a search');
+  assert.ok(!html.includes('result-body'), 'no result cards before a search');
   assert.ok(!html.includes('Checking live fares'), 'no live-fares loading state before a search');
   // The chat shell, panel and map live on /chat only.
   assert.ok(!html.includes('fujin-chat'), 'no chat panel on the homepage');
@@ -170,7 +172,9 @@ test('tabs: ?tab=flights shows the Flights form, still no results before a searc
   assert.ok(html.includes('Search flights'), 'the Flights search form renders');
   assert.ok(!html.includes('Search stays'), 'the Stays form waits for its tab');
   assert.ok(!html.includes('Planning estimates from FujinTrip'), 'no results before a search');
-  assert.ok(!html.includes('Save this search'), 'no Save this search before a search');
+  // The package cards have their own "Save this search" — what must
+  // not render is the results UI (see the restructure test).
+  assert.ok(!html.includes('result-body'), 'no result cards before a search');
 });
 
 test('search deep link: flights with dates renders the results shell — budget, loading states, per-route estimates, honesty labels', async () => {
@@ -1099,4 +1103,62 @@ test('mobile: the served stylesheet carries the phone rules', async () => {
   assert.ok(css.includes('input,select,textarea{font-size:16px}'), '16px form fields at phone width');
   assert.ok(css.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
   assert.ok(css.includes('.results-bar{top:65px}'), 'the results bar clears the phone header');
+});
+
+test('homepage restructure: sections in order — packages, fares, deals, destinations, tiles, how it works, stories, voices, near you, trust (Nov 15 2026)', async () => {
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  // The order is the restructure: the hero + widget first, then the
+  // packages centerpiece, the fares strip, the deals, and only then
+  // the browse sections — Travelers' stories moved up, the trust
+  // strip now closes the page after My Trips.
+  const order = [
+    'Where to?',
+    'Ready-made packages',
+    'The lowest prices across our routes',
+    'Our lowest prices this week',
+    'Popular destinations',
+    'What do you need for your trip?',
+    'Plan, book, follow',
+    "Travelers' stories",
+    'What travelers say, from the places you go',
+    'Weekend trips near you',
+    'id="mytrips"',
+    'All-in prices — the price you see is the price you pay',
+  ];
+  let prev = -1;
+  for (const marker of order) {
+    const i = html.indexOf(marker);
+    assert.ok(i > prev, `${marker} renders after the previous section (at ${i}, prev ${prev})`);
+    prev = i;
+  }
+});
+
+test('homepage restructure: package cards are honest — planning estimates, Save first, never Book now (Nov 15 2026)', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Pick a trip, ready to go'), 'packages heading renders');
+  assert.ok(html.includes('Ready-made trips'), 'packages eyebrow renders');
+  // 6 featured packages + 3 deals = 9 cards, each with both actions.
+  assert.equal((html.match(/View package/g) || []).length, 9, '9 package cards render View package');
+  assert.equal((html.match(/Save this search/g) || []).length, 9, '9 package cards render Save this search');
+  // Every card price is a planning estimate — 9 cards + 8 fare chips.
+  assert.ok((html.match(/planning estimate/g) || []).length >= 17, 'every package and fare-chip price is labeled planning estimate');
+  assert.ok(html.includes('Planning estimates, not live quotes'), 'the fares strip says the estimates are not live quotes');
+  assert.ok(html.includes('The lowest prices across our routes'), 'cheapest-fares strip renders');
+  assert.ok(html.includes('Our lowest prices this week'), 'deals of the week renders');
+  assert.ok(html.includes('How it works') || html.includes('Plan, book, follow'), 'how it works renders');
+  assert.ok(html.includes('What travelers say, from the places you go'), 'local voices teaser renders');
+  assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on the packages either');
+});
+
+test('homepage restructure: no emoji icons anywhere in the served homepage (Nov 15 2026)', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  for (const e of ['🏨', '✈️', '🚗', '🎡', '🚢', '🚌', '🚕', '✦', '☀', '☾', '☰', '✕']) {
+    assert.ok(!html.includes(e), `homepage HTML has no ${e}`);
+  }
+  // The Lucide icons render as inline svg, not as text.
+  assert.ok(html.includes('<svg'), 'icons render as svg');
 });

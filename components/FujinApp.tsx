@@ -20,6 +20,12 @@ import ReelComposer from '../components/ReelComposer';
 import SiteHeader from './SiteHeader';
 import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
+import PackagesSection from './PackagesSection';
+import FaresStrip from './FaresStrip';
+import DealsSection from './DealsSection';
+import { HowItWorksSection, LocalVoicesTeaser } from './HomeSections';
+import { Icon, type IconName } from './icons';
+import type { Package } from '../lib/packages';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Seed handoff: the /chat page consumes this once on mount so the
@@ -38,14 +44,14 @@ const PENDING_MESSAGE_KEY = 'fujintrip-pending-message';
 // Browse-by-category tiles (direction v3 spec section 1e): the seven
 // things you can book, one line each. Clicking one selects that
 // category in the hero search widget.
-const CATEGORY_TILES: { id: HomeTabId; label: string; icon: string; blurb: string }[] = [
-  { id: 'hotels', label: 'Stays', icon: '🏨', blurb: 'Hotels, apartments and more' },
-  { id: 'flights', label: 'Flights', icon: '✈️', blurb: 'Compare fares across airlines' },
-  { id: 'cars', label: 'Car rental', icon: '🚗', blurb: 'Cars at the airport and in town' },
-  { id: 'tours', label: 'Attractions', icon: '🎡', blurb: 'Tours, tickets and things to do' },
-  { id: 'cruises', label: 'Cruises', icon: '🚢', blurb: 'Ocean and river cruises' },
-  { id: 'buses', label: 'Buses', icon: '🚌', blurb: 'Intercity buses' },
-  { id: 'taxis', label: 'Taxis', icon: '🚕', blurb: 'Airport transfers and rides' },
+const CATEGORY_TILES: { id: HomeTabId; label: string; icon: IconName; blurb: string }[] = [
+  { id: 'hotels', label: 'Stays', icon: 'bed', blurb: 'Hotels, apartments and more' },
+  { id: 'flights', label: 'Flights', icon: 'plane', blurb: 'Compare fares across airlines' },
+  { id: 'cars', label: 'Car rental', icon: 'car', blurb: 'Cars at the airport and in town' },
+  { id: 'tours', label: 'Attractions', icon: 'ticket', blurb: 'Tours, tickets and things to do' },
+  { id: 'cruises', label: 'Cruises', icon: 'ship', blurb: 'Ocean and river cruises' },
+  { id: 'buses', label: 'Buses', icon: 'bus', blurb: 'Intercity buses' },
+  { id: 'taxis', label: 'Taxis', icon: 'taxi', blurb: 'Airport transfers and rides' },
 ];
 
 export default function FujinApp({ variant, initialTab, initialSearch }: { variant: 'home' | 'chat'; initialTab?: HomeTabId; initialSearch?: SearchQuery | null }) {
@@ -243,6 +249,17 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
     setPrefill({ destination: name, nonce: Date.now() });
     document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+  // Ready-made packages (restructure, Nov 15 2026): "View package"
+  // prefills the search widget with the route — the same flow as a
+  // destination card. "Save this search" saves the package as a
+  // request in My Trips — never a booking, never "Book now".
+  const viewPackage = (destination: string) => prefillDestination(destination);
+  const savePackage = (pkg: Package) =>
+    saveTrip(
+      `${pkg.destination} · Ready-made package · Best value · from $${pkg.best.perTraveler.toLocaleString()} per traveler`,
+      'Request saved',
+      pkg.destination
+    );
   const editSearch = () => {
     document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -470,13 +487,12 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       )}
       {variant === 'home' && (
       <main className="wrap">
-        {/* Trust strip (spec section 1c): one row directly under the
-            hero, three honest lines, no invented numbers. */}
-        <div className="trust-strip" aria-label="Why book with FujinTrip">
-          <span className="trust-item"><span className="trust-icon" aria-hidden="true">✓</span>All-in prices — the price you see is the price you pay</span>
-          <span className="trust-item"><span className="trust-icon" aria-hidden="true">✓</span>No hidden fees — our flight service fee is shown separately at checkout</span>
-          <span className="trust-item"><span className="trust-icon" aria-hidden="true">✓</span>Compare prices from different sources</span>
-        </div>
+        {/* Homepage restructure (Nov 15, 2026): ready-made packages
+            first, then the cheapest fares and the deals — the search
+            results still render directly under the hero, above main. */}
+        <PackagesSection onViewPackage={viewPackage} onSavePackage={savePackage} />
+        <FaresStrip onPick={prefillDestination} />
+        <DealsSection onViewPackage={viewPackage} onSavePackage={savePackage} />
 
         <section id="destinations">
           <h2>Popular destinations</h2>
@@ -514,13 +530,28 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           <div className="cat-tiles">
             {CATEGORY_TILES.map((t) => (
               <button key={t.id} type="button" className="cat-tile" onClick={() => selectCategory(t.id)}>
-                <span className="cat-icon" aria-hidden="true">{t.icon}</span>
+                <span className="cat-icon" aria-hidden="true">
+                  <Icon name={t.icon} size={26} />
+                </span>
                 <strong>{t.label}</strong>
                 <span>{t.blurb}</span>
               </button>
             ))}
           </div>
         </section>
+
+        <HowItWorksSection />
+
+        <section>
+          <h2>Travelers&apos; stories</h2>
+          <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
+          <ReelsFeed onPost={() => openComposer()} />
+          <p style={{ marginTop: 12 }}>
+            <a href="/reels">See all travelers’ reels →</a>
+          </p>
+        </section>
+
+        <LocalVoicesTeaser onPick={prefillDestination} />
 
         <section>
           <h2>Weekend trips near you</h2>
@@ -559,15 +590,6 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
 
         {/* Ad slot: below the fold, content area only. Dormant until AdSense is configured. */}
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
-
-        <section>
-          <h2>Travelers&apos; stories</h2>
-          <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
-          <ReelsFeed onPost={() => openComposer()} />
-          <p style={{ marginTop: 12 }}>
-            <a href="/reels">See all travelers’ reels →</a>
-          </p>
-        </section>
 
         <section>
           <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
@@ -700,6 +722,16 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             </ul>
           )}
         </section>
+
+        {/* Trust strip (restructure, Nov 15, 2026): moved from the top
+            of the page to after My Trips — the packages and the search
+            lead now, the trust lines close the page. Three honest
+            lines, no invented numbers. */}
+        <div className="trust-strip" aria-label="Why book with FujinTrip">
+          <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>All-in prices — the price you see is the price you pay</span>
+          <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>No hidden fees — our flight service fee is shown separately at checkout</span>
+          <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>Compare prices from different sources</span>
+        </div>
 
         {/* Ad slot: above the footer, content area only. Dormant until AdSense is configured. */}
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_ABOVE_FOOTER ?? ''} />

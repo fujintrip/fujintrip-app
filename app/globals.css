@@ -861,3 +861,90 @@ html{scroll-padding-bottom:96px}
   .chatmap-s0 .hero-input{flex-wrap:wrap}
   .chatmap-s0 .hero-input .primary{width:100%}
 }
+
+/* Homepage restructure (Nov 15, 2026): icons, type scale, packages
+   shelf, fares strip, deals, how it works, local voices. Fonts stay
+   Bricolage Grotesque (display) + Inter (body) + JetBrains Mono
+   (price labels only) — the 2026 stack is already right; the refresh
+   is the hierarchy: eyebrow labels, loud card prices, one Lucide icon
+   set at 16/20/24px with one 1.75 stroke. Layout is calm minimalism:
+   one accent, whitespace as structure, bento package grid,
+   photo-forward cards, micro-interactions 150-300ms on transform +
+   opacity only (killed by the reduced-motion rule above). */
+.eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-text);margin:0 0 6px}
+.home-section h2{margin:0 0 6px}
+.home-section .sub{margin:0 0 20px}
+/* Icons: inline-flex alignment for every Lucide icon in the header,
+   tabs, tiles and cards — the svg is decorative, the text carries it. */
+.site-nav a{display:inline-flex;align-items:center;gap:6px}
+.site-nav a svg,.sw-tab-icon svg,.cat-icon svg,.trust-icon svg,.pkg-meta svg,.pkg-includes svg,.step-icon svg,.voices-icon svg,.fare-chip-route svg{display:block}
+.sw-tab{display:inline-flex;align-items:center;gap:6px}
+.sw-tab-icon{display:inline-flex;align-items:center}
+.trust-icon{display:inline-flex;align-items:center;color:var(--accent-text)}
+.cat-tile .cat-icon{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:14px;background:var(--accent-soft);color:var(--accent-text);margin-bottom:8px}
+.cat-tile{transition:transform 200ms ease}
+.cat-tile:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(15,15,15,.08)}
+/* Ready-made packages: bento grid — the first card is the hero
+   (2 cols x 2 rows), the rest fill around it. Photo-forward: the
+   photo is the top of the card, the price is the largest type. */
+.pkg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.pkg-card{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;display:flex;flex-direction:column;transition:transform 200ms ease}
+.pkg-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(15,15,15,.10)}
+.pkg-card--hero{grid-column:span 2;grid-row:span 2}
+.pkg-photo{width:100%;height:180px;object-fit:cover;display:block}
+.pkg-card--hero .pkg-photo{height:300px}
+.pkg-photo-fallback{display:flex;align-items:center;justify-content:center;height:180px;background:var(--accent-soft);color:var(--accent-text);font-family:var(--font-display);font-size:20px;font-weight:800;padding:16px;text-align:center}
+.pkg-card--hero .pkg-photo-fallback{height:300px}
+.pkg-body{padding:20px;display:flex;flex-direction:column;flex:1}
+.pkg-body h3{margin:10px 0 2px;font-size:20px}
+.pkg-route{margin:0 0 6px;font-size:13px;color:var(--muted)}
+.pkg-meta{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0 0 12px}
+.pkg-price{font-family:var(--font-display);font-size:30px;font-weight:800;letter-spacing:-.02em;margin:0}
+.pkg-price span{font-family:var(--font-sans);font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
+.pkg-includes{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px}
+.pkg-includes li{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.pkg-tiers{display:flex;flex-wrap:wrap;gap:4px 14px;font-family:var(--font-mono);font-size:12px;color:var(--muted);margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)}
+.pkg-tiers strong{color:var(--ink)}
+.pkg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.pkg-actions button{min-height:44px;transition:transform 150ms ease}
+.pkg-actions button:active{transform:scale(.98)}
+/* Cheapest-fares strip: horizontal scroll with snap — the cheapest
+   routes, one chip each, planning estimate labeled on every chip. */
+.fares-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 12px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.fare-chip{flex:0 0 auto;scroll-snap-align:start;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;cursor:pointer;text-align:left;color:var(--ink);min-height:44px;transition:transform 200ms ease}
+.fare-chip:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(15,15,15,.08);border-color:var(--ink)}
+.fare-chip-route{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:15px}
+.fare-chip-price{font-family:var(--font-mono);font-size:14px;font-weight:600}
+.fare-chip-label{font-size:12px;color:var(--muted)}
+/* Deals of the week: three cards, same card as the packages shelf. */
+.deals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+/* How it works: three steps, one per job — Plan, Book, Follow. */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px}
+.step-icon{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:14px;background:var(--accent-soft);color:var(--accent-text);margin-bottom:12px}
+.step-num{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 4px}
+.step h3{margin:0 0 6px;font-size:19px}
+.step p:last-child{margin:0;font-size:14px;color:var(--muted)}
+/* Local voices teaser: one calm panel, chips that prefill the search. */
+.voices-teaser{display:flex;gap:20px;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px}
+.voices-icon{display:flex;align-items:center;justify-content:center;flex:none;width:56px;height:56px;border-radius:16px;background:var(--accent-soft);color:var(--accent-text)}
+.voices-teaser h2{margin:0 0 6px}
+.voices-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0 0}
+.voices-chips .chip{min-height:44px}
+.voices-link{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+@media (max-width:900px){
+  .pkg-grid{grid-template-columns:repeat(2,1fr)}
+  .pkg-card--hero{grid-column:span 2;grid-row:auto}
+  .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:220px}
+  .deals-grid{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .home-section{padding:28px 0 4px}
+  .pkg-grid,.deals-grid{grid-template-columns:1fr}
+  .pkg-card--hero{grid-column:auto}
+  .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:200px}
+  .pkg-price{font-size:28px}
+  .voices-teaser{flex-direction:column;padding:20px}
+  .trust-strip{grid-template-columns:1fr;gap:12px}
+}
