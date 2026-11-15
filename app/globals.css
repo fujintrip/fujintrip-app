@@ -617,6 +617,31 @@ html{scroll-padding-bottom:96px}
 .fare-row{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;padding:6px 0;font-size:15px}
 .results-note{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);font-size:14px}
 
+/* Per-source fare columns (Flights section build, Nov 15, 2026):
+   one labeled column per connected source — Duffel's live fares and
+   the cached "Other sites" column today; Mystifly / Etraveli / Ignav
+   columns slot in here when they connect, and no column renders for
+   a source that isn't connected yet. Two columns on desktop, one
+   column stacked on a phone. */
+.fare-sources{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+.fare-source{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:var(--card);min-width:0}
+.fare-source-head h4{margin:0 0 2px}
+.fare-source-head p{margin:0 0 8px;font-size:13px}
+.fare-source h5{margin:14px 0 4px;font-size:14px}
+.fare-source h5:first-of-type{margin-top:4px}
+/* The cheapest out + back total is the number the traveler compares
+   on — a highlighted block, not a plain line. */
+.fare-total{background:var(--accent-soft);border:1px solid var(--accent-text);border-radius:12px;padding:12px 16px;font-size:16px;margin:12px 0}
+.fare-total strong{font-size:19px}
+.fare-count{font-size:14px;color:var(--muted);margin:0 0 8px}
+/* An inline text button for "Clear filters" — reads as a link, keeps
+   the button behavior (keyboard, screen reader). */
+.linklike{background:none;border:none;padding:0;font:inherit;font-size:inherit;color:var(--accent-text);text-decoration:underline;cursor:pointer}
+.linklike:hover{color:var(--accent-ink)}
+@media(max-width:900px){
+  .fare-sources{grid-template-columns:1fr}
+}
+
 
 /* Direction v3 site header (Nov 14, 2026): sticky, one row — logo,
    category nav, one "Plan with AI" pill, sign in, My Trips, theme

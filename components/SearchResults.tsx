@@ -21,12 +21,14 @@ import {
   type TabRow,
 } from '../lib/homeTabs';
 import {
+  cheapestOutBackTotal,
   destinationPhoto,
   flightBudgetCopy,
   flightContextFromSearch,
   isKnownPlace,
   rowIncludesPlace,
   searchRequestLabel,
+  sortFareOffers,
   sortTabRows,
   type RowSort,
   type SearchQuery,
@@ -77,11 +79,37 @@ function fareRow(o: DuffelFareOffer) {
     <li key={`${o.airline}-${o.price}`} className="fare-row">
       <strong>{o.airline}</strong>
       <span>
-        ${o.price.toLocaleString()} · {o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}
+        {o.departTime ? `${o.departTime}${o.arriveTime ? ` → ${o.arriveTime}` : ''} · ` : ''}${o.price.toLocaleString()} · {o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}
         {o.duration ? ` · ${o.duration}` : ''}
         {o.bags ? ` · ${o.bags}` : ''}
       </span>
     </li>
+  );
+}
+
+// One labeled column per fare source (multi-API panel, Nov 15 2026):
+// the traveler sees where each price came from and how fresh it is,
+// never a merged or averaged price. A source that isn't connected
+// yet renders NO column at all — the column appears only when its
+// source can say something (live fares, cached fares, or an honest
+// empty state from a connected source).
+function FareSourceColumn({
+  title,
+  freshness,
+  children,
+}: {
+  title: string;
+  freshness: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="fare-source" aria-label={title}>
+      <div className="fare-source-head">
+        <h4>{title}</h4>
+        <p className="plan-muted">{freshness}</p>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -122,14 +150,25 @@ function FlightResults({
   airlinesFilter,
   onLiveOptions,
   onSave,
+  onClearLiveFilters,
+  onClearPrice,
 }: {
   query: SearchQuery;
   sort: RowSort;
   maxPrice: number | null;
   stopsFilter: number[];
   airlinesFilter: string[];
-  onLiveOptions: (opts: { airlines: string[]; stops: number[] } | null) => void;
+  onLiveOptions: (opts: {
+    airlines: string[];
+    stops: number[];
+    // How many live fares (outbound + return combined) each filter
+    // option holds — the counts in the filters panel come from the
+    // fares themselves, never from the planner.
+    counts: { airlines: Record<string, number>; stops: Record<number, number> };
+  } | null) => void;
   onSave: (label: string) => void;
+  onClearLiveFilters: () => void;
+  onClearPrice: () => void;
 }) {
   const ctx = useMemo(() => flightContextFromSearch(query), [query]);
   const known = isKnownPlace(ctx.destination);
@@ -189,7 +228,12 @@ function FlightResults({
       if (pc?.live) {
         const airlines = [...new Set([...pc.out, ...pc.back].map((o) => o.airline))].sort();
         const stops = [...new Set([...pc.out, ...pc.back].map((o) => o.stops))].sort((a, b) => a - b);
-        onLiveOptions({ airlines, stops });
+        const counts = { airlines: {} as Record<string, number>, stops: {} as Record<number, number> };
+        for (const o of [...pc.out, ...pc.back]) {
+          counts.airlines[o.airline] = (counts.airlines[o.airline] ?? 0) + 1;
+          counts.stops[o.stops] = (counts.stops[o.stops] ?? 0) + 1;
+        }
+        onLiveOptions({ airlines, stops, counts });
       }
       if (pc?.departDate && pc?.returnDate) {
         setCompetitor({ status: 'loading', data: null });
@@ -216,8 +260,11 @@ function FlightResults({
         (stopsFilter.length === 0 || stopsFilter.includes(o.stops)) &&
         (airlinesFilter.length === 0 || airlinesFilter.includes(o.airline))
     );
-  const out = fares.data ? filterOffers(fares.data.out) : [];
-  const back = fares.data ? filterOffers(fares.data.back) : [];
+  // The sidebar sort re-orders the live fares too — cheapest, shortest
+  // or earliest departure — not just the estimate rows below.
+  const out = fares.data ? sortFareOffers(filterOffers(fares.data.out), sort) : [];
+  const back = fares.data ? sortFareOffers(filterOffers(fares.data.back), sort) : [];
+  const liveFiltersActive = stopsFilter.length > 0 || airlinesFilter.length > 0;
 
   return (
     <div aria-label="Flight results">
@@ -225,75 +272,115 @@ function FlightResults({
         Flights · {ctx.origin} → {destCity} · {departIso} – {returnIso} · {query.travelers} traveler
         {query.travelers > 1 ? 's' : ''} · {query.cabin}
       </h3>
-      {fares.status === 'loading' && <p>Checking live fares…</p>}
-      {fares.status === 'done' && fares.data?.live && (
-        <div className="fare-block">
-          <h4>Outbound — {fares.data.departDate}</h4>
-          <ul className="fare-list">
-            {out.map(fareRow)}
-            {out.length === 0 && <li className="plan-muted">No outbound fares match the filters.</li>}
-          </ul>
-          <h4>Return — {fares.data.returnDate}</h4>
-          <ul className="fare-list">
-            {back.map(fareRow)}
-            {back.length === 0 && <li className="plan-muted">No return fares match the filters.</li>}
-          </ul>
-          {/* The fare label follows the configured Duffel key: test
-              fares today, the live label once the live key is in —
-              swapping the key needs no code change. */}
-          <p className="plan-muted">{duffelFareLabel(fares.data.mode)}</p>
-          {fares.data.liveTotal > 0 && (
+      <div className="fare-sources">
+        <FareSourceColumn
+          title="Duffel"
+          freshness={
+            fares.status === 'done' && fares.data
+              ? duffelFareLabel(fares.data.mode)
+              : 'Live fares — checking now…'
+          }
+        >
+          {fares.status === 'loading' && <p>Checking live fares…</p>}
+          {fares.status === 'done' && fares.data?.live && (
+            <>
+              {liveFiltersActive && (
+                <p className="fare-count">
+                  Showing {out.length} of {fares.data.out.length} outbound · {back.length} of {fares.data.back.length} return fares.{' '}
+                  <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                    Clear filters
+                  </button>
+                </p>
+              )}
+              <h5>Outbound — {fares.data.departDate}</h5>
+              <ul className="fare-list">
+                {out.map(fareRow)}
+                {out.length === 0 && (
+                  <li className="plan-muted">
+                    No outbound fares match the filters.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </li>
+                )}
+              </ul>
+              <h5>Return — {fares.data.returnDate}</h5>
+              <ul className="fare-list">
+                {back.map(fareRow)}
+                {back.length === 0 && (
+                  <li className="plan-muted">
+                    No return fares match the filters.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </li>
+                )}
+              </ul>
+              {cheapestOutBackTotal(out, back) > 0 && (
+                <p className="fare-total">
+                  Cheapest out + back: <strong>${cheapestOutBackTotal(out, back).toLocaleString()}</strong> for {query.travelers} traveler
+                  {query.travelers > 1 ? 's' : ''}.
+                </p>
+              )}
+              {/* The "Book-now read" line is NOT rendered here (defect,
+                  Nov 14 2026: it read as a stray paragraph on the results
+                  page). The API still returns it — the chat's trip card
+                  uses it where it belongs. */}
+              <p>
+                <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
+                  Save this search
+                </button>
+              </p>
+            </>
+          )}
+          {fares.status === 'done' && fares.data && !fares.data.live && (
+            <p>{noFareMessage(fares.data.reason, plannerFlight, budget.qualifier)}</p>
+          )}
+          {fares.status === 'done' && !fares.data && (
             <p>
-              Cheapest out + back: <strong>${fares.data.liveTotal.toLocaleString()}</strong> for {query.travelers} traveler
-              {query.travelers > 1 ? 's' : ''}.
+              Could not check live fares right now.
+              {known ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (${budget.qualifier}).` : ''}
             </p>
           )}
-          {/* The "Book-now read" line is NOT rendered here (defect,
-              Nov 14 2026: it read as a stray paragraph on the results
-              page). The API still returns it — the chat's trip card
-              uses it where it belongs. */}
-          <p>
-            <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
-              Save this search
-            </button>
-          </p>
-        </div>
-      )}
-      {fares.status === 'done' && fares.data && !fares.data.live && (
-        <p>{noFareMessage(fares.data.reason, plannerFlight, budget.qualifier)}</p>
-      )}
-      {fares.status === 'done' && !fares.data && (
-        <p>
-          Could not check live fares right now.
-          {known ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (${budget.qualifier}).` : ''}
-        </p>
-      )}
+        </FareSourceColumn>
+        {competitor.status !== 'idle' && (
+          <FareSourceColumn
+            title="Other sites (cached)"
+            freshness={
+              competitor.status === 'loading'
+                ? 'Checking other sites…'
+                : competitor.data?.available
+                  ? competitor.data.label
+                  : 'Cached fares from other sites'
+            }
+          >
+            {competitor.status === 'loading' && <p>Checking other sites…</p>}
+            {competitor.status === 'done' && competitor.data?.available && (
+              <p>
+                {competitor.data.airline ? `${competitor.data.airline} · ` : ''}${(competitor.data.total ?? 0).toLocaleString()} round trip ·{' '}
+                {competitor.data.travelers} traveler{competitor.data.travelers > 1 ? 's' : ''}
+              </p>
+            )}
+            {competitor.status === 'done' && competitor.data && !competitor.data.available && (
+              <p className="plan-muted">{competitor.data.label}</p>
+            )}
+          </FareSourceColumn>
+        )}
+      </div>
       {known && (
         <p>
           {budget.label}: <strong>${plannerFlight.toLocaleString()}</strong> · {query.travelers} traveler
           {query.travelers > 1 ? 's' : ''} · {budget.qualifier}
         </p>
       )}
-      {competitor.status === 'loading' && <p>Checking other sites…</p>}
-      {competitor.status === 'done' && competitor.data?.available && (
-        <div className="fare-block">
-          <h4>Other sites (cached)</h4>
-          <p>
-            {competitor.data.airline ? `${competitor.data.airline} · ` : ''}${(competitor.data.total ?? 0).toLocaleString()} round trip ·{' '}
-            {competitor.data.travelers} traveler{competitor.data.travelers > 1 ? 's' : ''}
-          </p>
-          <p className="plan-muted">{competitor.data.label}</p>
-        </div>
-      )}
-      {competitor.status === 'done' && competitor.data && !competitor.data.available && (
-        <div className="fare-block">
-          <h4>Other sites (cached)</h4>
-          <p className="plan-muted">{competitor.data.label}</p>
-        </div>
-      )}
       <h4>Flights by destination — planning estimates</h4>
       {rows.length === 0 ? (
-        <p className="plan-muted">No destinations under that price — raise the max price or clear it.</p>
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
       ) : (
         <div className="result-cards">
           {rows.map((r) => (
@@ -356,11 +443,13 @@ function CategoryResults({
   sort,
   maxPrice,
   onSave,
+  onClearPrice,
 }: {
   query: SearchQuery;
   sort: RowSort;
   maxPrice: number | null;
   onSave: (label: string) => void;
+  onClearPrice: () => void;
 }) {
   const rows = useMemo(() => {
     const all = tabRowsFor(query.tab, query.travelers);
@@ -384,7 +473,12 @@ function CategoryResults({
       {note && <p className="results-note">{note}</p>}
       {listNote && <p className="plan-muted">{listNote}</p>}
       {rows.length === 0 ? (
-        <p className="plan-muted">No destinations under that price — raise the max price or clear it.</p>
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
       ) : (
         <div className="result-cards">
           {rows.map((r) => (
@@ -420,10 +514,18 @@ export default function SearchResults({
   const label = HOME_TABS.find((t) => t.id === query.tab)?.label ?? query.tab;
   const [sort, setSort] = useState<RowSort>('best');
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
-  const [liveOptions, setLiveOptions] = useState<{ airlines: string[]; stops: number[] } | null>(null);
+  const [liveOptions, setLiveOptions] = useState<{
+    airlines: string[];
+    stops: number[];
+    counts: { airlines: Record<string, number>; stops: Record<number, number> };
+  } | null>(null);
   const [stopsFilter, setStopsFilter] = useState<number[]>([]);
   const [airlinesFilter, setAirlinesFilter] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // The estimate rows behind the max-price counts — the counts on the
+  // price options come from the same rows the list shows.
+  const estimateRows = useMemo(() => tabRowsFor(query.tab, query.travelers), [query.tab, query.travelers]);
+  const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
   // page had no "map" at all — the toggle existed only on Stays). It
   // lives here now, shared by Flights and Stays: the discovery pins
@@ -457,6 +559,8 @@ export default function SearchResults({
         <select value={sort} onChange={(e) => setSort(e.target.value as RowSort)} aria-label="Sort results">
           <option value="best">Best value first</option>
           <option value="cheapest">Cheapest first</option>
+          {query.tab === 'flights' && <option value="duration">Shortest first</option>}
+          {query.tab === 'flights' && <option value="departure">Earliest departure</option>}
         </select>
       </div>
       <div className="filter-group">
@@ -467,9 +571,9 @@ export default function SearchResults({
           aria-label="Maximum price per traveler"
         >
           <option value="">Any price</option>
-          <option value="1000">Under $1,000</option>
-          <option value="1500">Under $1,500</option>
-          <option value="2000">Under $2,000</option>
+          <option value="1000">Under $1,000 ({underCount(1000)})</option>
+          <option value="1500">Under $1,500 ({underCount(1500)})</option>
+          <option value="2000">Under $2,000 ({underCount(2000)})</option>
         </select>
       </div>
       {query.tab === 'flights' && liveOptions && (
@@ -479,7 +583,7 @@ export default function SearchResults({
             {liveOptions.stops.map((s) => (
               <label key={s} className="filter-check">
                 <input type="checkbox" checked={stopsFilter.includes(s)} onChange={() => setStopsFilter((l) => toggleIn(l, s))} />
-                {s === 0 ? 'Nonstop' : `${s} stop${s > 1 ? 's' : ''}`}
+                {s === 0 ? 'Nonstop' : `${s} stop${s > 1 ? 's' : ''}`} ({liveOptions.counts.stops[s] ?? 0})
               </label>
             ))}
           </div>
@@ -488,7 +592,7 @@ export default function SearchResults({
             {liveOptions.airlines.map((a) => (
               <label key={a} className="filter-check">
                 <input type="checkbox" checked={airlinesFilter.includes(a)} onChange={() => setAirlinesFilter((l) => toggleIn(l, a))} />
-                {a}
+                {a} ({liveOptions.counts.airlines[a] ?? 0})
               </label>
             ))}
           </div>
@@ -575,9 +679,14 @@ export default function SearchResults({
                 airlinesFilter={airlinesFilter}
                 onLiveOptions={setLiveOptions}
                 onSave={onSaveSearch}
+                onClearLiveFilters={() => {
+                  setStopsFilter([]);
+                  setAirlinesFilter([]);
+                }}
+                onClearPrice={() => setMaxPrice(null)}
               />
             ) : (
-              <CategoryResults query={query} sort={sort} maxPrice={maxPrice} onSave={onSaveSearch} />
+              <CategoryResults query={query} sort={sort} maxPrice={maxPrice} onSave={onSaveSearch} onClearPrice={() => setMaxPrice(null)} />
             )}
           </div>
         </div>

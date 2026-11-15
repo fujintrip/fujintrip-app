@@ -7,7 +7,7 @@ import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
 import { appendObservation, trendLine } from '../lib/duffel';
 import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
-import { type SearchQuery } from '../lib/searchPlaces';
+import { type SearchQuery, searchQueryToParams } from '../lib/searchPlaces';
 import { DIETARY_OPTIONS, parseProfile, profileSummary, type TravelerProfile } from '../lib/preferences';
 import { useTheme } from '../lib/theme';
 import { mergeOfferNeeded, readMergeRecord, recordMerge, type MergeRecord } from '../lib/auth';
@@ -211,6 +211,19 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // button, and the homepage never writes the seed keys.
   const [widgetTab, setWidgetTab] = useState<HomeTabId>(initialTab ?? 'flights');
   const [search, setSearch] = useState<SearchQuery | null>(initialSearch ?? null);
+  // A shared deep link followed while already on the page (or Back)
+  // changes initialSearch without remounting — the results follow the
+  // link instead of the stale search from the first load. A bare
+  // ?tab= link carries no search, so it never clears the results a
+  // tab switch leaves in place; and the widget's own submit writes
+  // the same query back, so that round-trip is a no-op here.
+  const initialSearchKey = initialSearch ? searchQueryToParams(initialSearch) : '';
+  useEffect(() => {
+    if (!initialSearch) return;
+    if (search && searchQueryToParams(search) === initialSearchKey) return;
+    setSearch(initialSearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearchKey]);
   const [prefill, setPrefill] = useState<{ destination: string; nonce: number } | null>(null);
   const [showAllDestinations, setShowAllDestinations] = useState(false);
   const selectCategory = (id: HomeTabId) => {

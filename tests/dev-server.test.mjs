@@ -234,6 +234,38 @@ test('search deep link: flights with off-suggested dates shows the SEARCHED date
   assert.ok(!html.includes('Book-now read:'), 'no Book-now read paragraph on the results page');
 });
 
+test('search deep link: flights offers Shortest first and Earliest departure sorts (Flights section build, Nov 15 2026)', async () => {
+  // The sort re-orders the live fare lists, not just the estimate
+  // rows — so the options have to exist on the flights results.
+  const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=Central%20Europe&depart=2027-01-15&return=2027-01-22&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Shortest first'), 'the Shortest first sort is offered');
+  assert.ok(html.includes('Earliest departure'), 'the Earliest departure sort is offered');
+  assert.ok(html.includes('Best value first'), 'Best value first stays');
+  assert.ok(html.includes('Cheapest first'), 'Cheapest first stays');
+});
+
+test('search deep link: flights with past dates falls back to flexible dates (Flights section build, Nov 15 2026)', async () => {
+  // A shared link from last year is a stale link: the past dates
+  // drop in the parser, the search falls back to the planner's
+  // suggested dates, and the results still render — the page never
+  // shows fares for dates that have already passed. The raw dates
+  // still sit in Next.js's embedded router payload (framework
+  // plumbing, not content), so the check strips <script> blocks and
+  // asserts on the visible page.
+  const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=Central%20Europe&depart=2020-01-04&return=2020-01-17&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  const visible = html.replace(/<script[\s\S]*?<\/script>/g, '');
+  assert.ok(!visible.includes('2020-01-04'), 'the past departure never appears in visible content');
+  assert.ok(!visible.includes('2020-01-17'), 'the past return never appears in visible content');
+  assert.ok(visible.includes('aria-label="Departure date" value=""'), 'the Depart field is empty, not pre-filled with a past date');
+  assert.ok(visible.includes('aria-label="Return date" value=""'), 'the Return field is empty, not pre-filled with a past date');
+  assert.ok(html.includes('Plan flight budget'), 'the results still render with the planner budget');
+  assert.ok(html.includes('Save this search'), 'the primary action is still Save this search');
+});
+
 test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {
   const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=1&travelers=2`);
   assert.equal(r.status, 200);

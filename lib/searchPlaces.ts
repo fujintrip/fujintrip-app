@@ -12,7 +12,7 @@ import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
-import { cabinClassFor, type DuffelCabinClass } from './duffel';
+import { cabinClassFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
 
 let placeCache: string[] | null = null;
 
@@ -100,6 +100,43 @@ export function flightBudgetCopy(cabin: string | undefined): { label: string; qu
   };
 }
 
+// The search widget's field values for a query — the same mapping
+// its useState initializers use, extracted so the widget can re-sync
+// when a deep link changes under it (a shared link followed while
+// already on the page, or Back) instead of showing stale values
+// while the results show the new search. Pure, so tests can pin it.
+export function formValuesFromQuery(q: SearchQuery | null): {
+  place: string;
+  from: string;
+  depart: string;
+  ret: string;
+  travelers: number;
+  cabin: string;
+  guests: number;
+  rooms: number;
+  pickupTime: string;
+  dropoffTime: string;
+  sameLocation: boolean;
+  dropoff: string;
+  month: string;
+} {
+  return {
+    place: q?.dest || q?.to || '',
+    from: q?.from || '',
+    depart: q?.depart || '',
+    ret: q?.ret || '',
+    travelers: q?.travelers ?? 2,
+    cabin: q?.cabin || 'Economy',
+    guests: q?.guests ?? 2,
+    rooms: q?.rooms ?? 1,
+    pickupTime: q?.pickupTime || '',
+    dropoffTime: q?.dropoffTime || '',
+    sameLocation: q?.sameLocation ?? true,
+    dropoff: q?.dropoff || '',
+    month: q?.month || '',
+  };
+}
+
 export function emptySearchQuery(tab: HomeTabId): SearchQuery {
   return {
     tab,
@@ -138,11 +175,24 @@ function cleanInt(v: unknown, min: number, max: number, fallback: number): numbe
   return Number.isFinite(n) && Math.floor(n) >= min && Math.floor(n) <= max ? Math.floor(n) : fallback;
 }
 
+// Today's date, local calendar (YYYY-MM-DD). The form validation
+// and the deep-link parser share it — a date before today is a stale
+// link or a mistyped date, never a trip.
+export function todayIsoLocal(today: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+}
+
 // Parse URL params into a search query. Nothing is invented: an
 // unknown place stays as typed (the results handle it honestly), a
-// bad date is dropped, a bad number falls back to the default.
+// bad date is dropped, a bad number falls back to the default. A date
+// before today is dropped too — a shared link from last month is a
+// stale link, and the search falls back to flexible dates instead of
+// showing fares for dates that have already passed. `todayIso` is
+// injectable so tests can pin it; it defaults to the local today.
 export function searchQueryFromParams(
-  params: Record<string, string | string[] | undefined>
+  params: Record<string, string | string[] | undefined>,
+  todayIso: string = todayIsoLocal()
 ): SearchQuery | null {
   const tab = homeTabIdFromQuery(params.tab ?? null);
   const q = emptySearchQuery(tab);
@@ -151,6 +201,8 @@ export function searchQueryFromParams(
   q.dest = cleanPlace(params.dest);
   q.depart = cleanDate(params.depart);
   q.ret = cleanDate(params.return);
+  if (q.depart && q.depart < todayIso) q.depart = '';
+  if (q.ret && q.ret < todayIso) q.ret = '';
   if (q.depart && q.ret && q.ret < q.depart) q.ret = '';
   q.travelers = cleanInt(params.travelers, 1, 9, 2);
   const cabin = cleanPlace(params.cabin);
@@ -278,14 +330,46 @@ export function searchButtonLabel(tab: HomeTabId): string {
   }
 }
 
-export type RowSort = 'best' | 'cheapest';
+export type RowSort = 'best' | 'cheapest' | 'duration' | 'departure';
 
 // Best value first = the planner's own order (the discovery order);
 // cheapest first = per-traveler price ascending. Never a second
-// price table — the same rows, reordered.
+// price table — the same rows, reordered. Estimate rows carry no
+// duration or departure time, so 'duration' / 'departure' leave them
+// in best-value order — those sorts re-order the live fare lists
+// (sortFareOffers), not the estimates.
 export function sortTabRows(rows: TabRow[], sort: RowSort): TabRow[] {
   if (sort === 'cheapest') return [...rows].sort((a, b) => a.pricePerTraveler - b.pricePerTraveler);
   return rows;
+}
+
+// The cheapest out + back total for the fares actually shown —
+// cheapest visible outbound + cheapest visible return. When filters
+// hide the cheapest fare, the total follows the visible list instead
+// of quoting a fare the traveler can't see. Zero when either
+// direction is empty (no round trip to total).
+export function cheapestOutBackTotal(out: DuffelFareOffer[], back: DuffelFareOffer[]): number {
+  if (!out.length || !back.length) return 0;
+  return Math.min(...out.map((o) => o.price)) + Math.min(...back.map((o) => o.price));
+}
+
+// The live fare lists, re-ordered by the same sort the sidebar
+// offers: cheapest = price ascending (Duffel's own order, made
+// explicit); shortest = duration ascending; earliest = departure
+// time ascending. An offer missing the sorted value sorts last,
+// price breaking the tie — nothing is dropped for lacking a time.
+export function sortFareOffers(offers: DuffelFareOffer[], sort: RowSort): DuffelFareOffer[] {
+  if (sort === 'duration') {
+    return [...offers].sort(
+      (a, b) => (a.durationMinutes ?? Infinity) - (b.durationMinutes ?? Infinity) || a.price - b.price
+    );
+  }
+  if (sort === 'departure') {
+    return [...offers].sort(
+      (a, b) => (a.departMinutes ?? Infinity) - (b.departMinutes ?? Infinity) || a.price - b.price
+    );
+  }
+  return [...offers].sort((a, b) => a.price - b.price);
 }
 
 // The saved-request label for My Trips — the same shape the old

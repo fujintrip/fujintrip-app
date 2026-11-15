@@ -7,10 +7,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  cheapestOutBackTotal,
   destinationPhoto,
   emptySearchQuery,
   flightBudgetCopy,
   flightContextFromSearch,
+  formValuesFromQuery,
   isKnownPlace,
   knownPlaceNames,
   rowIncludesPlace,
@@ -18,7 +20,9 @@ import {
   searchQueryFromParams,
   searchQueryToParams,
   searchRequestLabel,
+  sortFareOffers,
   sortTabRows,
+  todayIsoLocal,
 } from '../lib/searchPlaces.ts';
 import { tabRowsFor } from '../lib/homeTabs.ts';
 import { bestTimeFor } from '../lib/bestTime.ts';
@@ -340,4 +344,148 @@ test('mobile: phone rules — no zoom, no horizontal scroll, wrapping bar, fitti
 test('mobile: the filter checkbox still sits next to its label (defect, Nov 15 2026)', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   assert.ok(/\.filter-check input\{flex:none/.test(css), 'filter checkboxes keep their natural size, so the label sits next to them');
+});
+
+// Flights section build (Nov 15, 2026): the sort re-orders the live
+// fares too — cheapest, shortest, earliest departure — and a stale
+// deep link falls back to flexible dates instead of showing fares
+// for dates that have already passed.
+
+test('todayIsoLocal: the local calendar date, not UTC', () => {
+  assert.equal(todayIsoLocal(new Date(2026, 10, 15, 23, 30)), '2026-11-15');
+  assert.equal(todayIsoLocal(new Date(2027, 0, 4, 0, 5)), '2027-01-04');
+});
+
+test('searchQueryFromParams: past dates drop, today and future dates stay', () => {
+  const today = '2026-11-15';
+  const stale = searchQueryFromParams(
+    { tab: 'flights', from: 'New York', to: 'Central Europe', depart: '2026-11-01', return: '2026-11-10', travelers: '2' },
+    today
+  );
+  assert.equal(stale?.depart, '', 'a past departure drops');
+  assert.equal(stale?.ret, '', 'a past return drops');
+  assert.equal(stale?.from, 'New York', 'the route survives a stale link');
+  assert.equal(stale?.to, 'Central Europe');
+  const todayTrip = searchQueryFromParams(
+    { tab: 'flights', from: 'New York', to: 'Central Europe', depart: '2026-11-15', return: '2026-11-22' },
+    today
+  );
+  assert.equal(todayTrip?.depart, '2026-11-15', "today's date is not past");
+  assert.equal(todayTrip?.ret, '2026-11-22');
+  const future = searchQueryFromParams(
+    { tab: 'flights', from: 'New York', to: 'Central Europe', depart: '2027-01-04', return: '2027-01-17' },
+    today
+  );
+  assert.equal(future?.depart, '2027-01-04');
+  assert.equal(future?.ret, '2027-01-17');
+});
+
+test('formValuesFromQuery: the widget fields for a query, both directions', () => {
+  const flights = formValuesFromQuery({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Central Europe',
+    depart: '2027-01-04',
+    ret: '2027-01-17',
+    travelers: 1,
+    cabin: 'Business',
+  });
+  assert.equal(flights.place, 'Central Europe', 'the To field feeds the shared place');
+  assert.equal(flights.from, 'New York');
+  assert.equal(flights.depart, '2027-01-04');
+  assert.equal(flights.ret, '2027-01-17');
+  assert.equal(flights.travelers, 1);
+  assert.equal(flights.cabin, 'Business');
+  const hotels = formValuesFromQuery({ ...emptySearchQuery('hotels'), dest: 'Kyoto', guests: 4, rooms: 2 });
+  assert.equal(hotels.place, 'Kyoto', 'the Destination field feeds the shared place');
+  assert.equal(hotels.guests, 4);
+  assert.equal(hotels.rooms, 2);
+  assert.deepEqual(formValuesFromQuery(null), {
+    place: '',
+    from: '',
+    depart: '',
+    ret: '',
+    travelers: 2,
+    cabin: 'Economy',
+    guests: 2,
+    rooms: 1,
+    pickupTime: '',
+    dropoffTime: '',
+    sameLocation: true,
+    dropoff: '',
+    month: '',
+  });
+});
+
+test('sortFareOffers: price, duration and departure re-order the live fares', () => {
+  const offers = [
+    { airline: 'Slow', price: 300, currency: 'USD', stops: 1, duration: '11h 45m', departTime: '5:40 PM', departMinutes: 1060, durationMinutes: 705 },
+    { airline: 'Cheap', price: 218, currency: 'USD', stops: 0, duration: '7h 5m', departTime: '8:30 AM', departMinutes: 510, durationMinutes: 425 },
+    { airline: 'Early', price: 250, currency: 'USD', stops: 0, duration: '9h 20m', departTime: '6:00 AM', departMinutes: 360, durationMinutes: 560 },
+    { airline: 'NoTimes', price: 240, currency: 'USD', stops: 0, duration: '', departTime: undefined, departMinutes: undefined, durationMinutes: undefined },
+  ];
+  assert.deepEqual(
+    sortFareOffers(offers, 'cheapest').map((o) => o.airline),
+    ['Cheap', 'NoTimes', 'Early', 'Slow'],
+    'cheapest is price ascending'
+  );
+  assert.deepEqual(
+    sortFareOffers(offers, 'best').map((o) => o.airline),
+    ['Cheap', 'NoTimes', 'Early', 'Slow'],
+    'best value is the price order for live fares'
+  );
+  assert.deepEqual(
+    sortFareOffers(offers, 'duration').map((o) => o.airline),
+    ['Cheap', 'Early', 'Slow', 'NoTimes'],
+    'shortest first, an offer with no duration sorts last'
+  );
+  assert.deepEqual(
+    sortFareOffers(offers, 'departure').map((o) => o.airline),
+    ['Early', 'Cheap', 'Slow', 'NoTimes'],
+    'earliest departure first, an offer with no time sorts last'
+  );
+  assert.deepEqual(
+    offers.map((o) => o.airline),
+    ['Slow', 'Cheap', 'Early', 'NoTimes'],
+    'sorting never mutates the input list'
+  );
+});
+
+test('sortTabRows: duration and departure leave estimate rows in best-value order', () => {
+  const rows = tabRowsFor('flights', 2);
+  assert.deepEqual(sortTabRows(rows, 'duration'), rows, 'estimates carry no duration');
+  assert.deepEqual(sortTabRows(rows, 'departure'), rows, 'estimates carry no departure time');
+});
+
+test('flights columns: the per-source column structure exists in the results UI', () => {
+  const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  assert.ok(src.includes('FareSourceColumn'), 'one labeled column component per fare source');
+  assert.ok(src.includes('title="Duffel"'), 'the Duffel column renders');
+  assert.ok(src.includes('title="Other sites (cached)"'), 'the cached competitor column renders');
+  assert.ok(!src.includes('Mystifly'), 'no column for a source that is not connected yet');
+  assert.ok(!src.includes('Etraveli'), 'no column for a source that is not connected yet');
+  assert.ok(!src.includes('Ignav'), 'no column for a source that is not connected yet');
+  assert.ok(src.includes('fare-total'), 'the cheapest out + back total is a highlighted block');
+  assert.ok(src.includes('Clear filters'), 'a filtered-empty list has a way back');
+  // "Book now" appears in the file header and in the comment explaining
+  // why the "Book-now read" line is NOT rendered — neither is a
+  // rendered button. The check is for a rendered Book now action.
+  assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');
+  assert.ok(!src.includes("primary") || src.includes('Save this search'), 'the primary action is Save this search');
+});
+
+test('cheapestOutBackTotal: the total follows the visible fares, never a filtered-out fare', () => {
+  const out = [
+    { airline: 'Cheap', price: 218, currency: 'USD', stops: 0, duration: '7h 5m' },
+    { airline: 'Pricey', price: 300, currency: 'USD', stops: 0, duration: '7h 5m' },
+  ];
+  const back = [
+    { airline: 'Cheap', price: 216, currency: 'USD', stops: 0, duration: '7h 5m' },
+    { airline: 'Pricey', price: 290, currency: 'USD', stops: 0, duration: '7h 5m' },
+  ];
+  assert.equal(cheapestOutBackTotal(out, back), 434, 'cheapest out + cheapest back');
+  // A filter that hides the cheapest outbound leaves the next cheapest.
+  assert.equal(cheapestOutBackTotal(out.slice(1), back), 516);
+  assert.equal(cheapestOutBackTotal([], back), 0, 'no outbound, no round-trip total');
+  assert.equal(cheapestOutBackTotal(out, []), 0, 'no return, no round-trip total');
 });

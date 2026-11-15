@@ -29,6 +29,14 @@ export type DuffelFareOffer = {
   // FTC rule (12 May 2025) asks for: a fare that hides a bag fee is not
   // the true total.
   bags?: string;
+  // Times as Duffel reports them (airport-local time on the segment):
+  // "8:30 AM" departure, "8:45 PM" arrival — or undefined when the
+  // offer carries no segment times, never guessed. The minute values
+  // are for sorting only, derived from the same segment data.
+  departTime?: string;
+  arriveTime?: string;
+  departMinutes?: number;
+  durationMinutes?: number;
 };
 
 export type LiveFares = {
@@ -55,7 +63,8 @@ export function parseLiveFares(value: unknown): LiveFares | null {
   if (v.live !== true) return null;
   const okOffer = (o: unknown): o is DuffelFareOffer =>
     !!o && typeof o === 'object' && typeof (o as DuffelFareOffer).airline === 'string' && (o as DuffelFareOffer).airline.length > 0 &&
-    typeof (o as DuffelFareOffer).price === 'number' && Number.isFinite((o as DuffelFareOffer).price) && (o as DuffelFareOffer).price > 0;
+    typeof (o as DuffelFareOffer).price === 'number' && Number.isFinite((o as DuffelFareOffer).price) && (o as DuffelFareOffer).price > 0 &&
+    okOptionalOfferFields(o);
   const okOffers = (arr: unknown): arr is DuffelFareOffer[] =>
     Array.isArray(arr) && arr.every(okOffer);
   const okDate = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -132,10 +141,26 @@ export const CITY_IATA: Record<string, string> = {
   Oaxaca: 'OAX',
 };
 
+// The optional time/minute fields on an offer, when present, must be
+// the right shape — a malformed time never reaches a fare card.
+function okOptionalOfferFields(o: unknown): boolean {
+  const r = o as Record<string, unknown>;
+  for (const k of ['departTime', 'arriveTime']) {
+    if (r[k] !== undefined && typeof r[k] !== 'string') return false;
+  }
+  for (const k of ['stops', 'departMinutes', 'durationMinutes']) {
+    if (r[k] !== undefined && (typeof r[k] !== 'number' || !Number.isFinite(r[k]))) return false;
+  }
+  return true;
+}
+
 type DuffelSegment = {
   operating_carrier?: { name?: string };
   marketing_carrier?: { name?: string };
   baggages?: Array<{ type?: string; quantity?: number }>;
+  // ISO 8601 times as Duffel reports them (airport-local time).
+  departing_at?: string;
+  arriving_at?: string;
 };
 
 type DuffelOffer = {
@@ -152,6 +177,37 @@ function parseIsoDuration(iso: string | undefined): string {
   const h = m[1] ? `${Number(m[1])}h` : '';
   const min = m[2] ? ` ${Number(m[2])}m` : '';
   return `${h}${min}`.trim();
+}
+
+// The same ISO duration as total minutes, for sorting — undefined
+// when the offer carries no parseable duration, never guessed.
+function parseIsoDurationMinutes(iso: string | undefined): number | undefined {
+  if (!iso) return undefined;
+  const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!m || (!m[1] && !m[2] && !m[3])) return undefined;
+  return Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0);
+}
+
+// "2027-01-15T08:30:00" (or with a timezone offset) → "8:30 AM".
+// The time is the airport-local time as Duffel reports it — no
+// timezone conversion is applied, and a missing or malformed time
+// returns undefined instead of a guessed time.
+export function formatTime12(iso: string | undefined): string | undefined {
+  const mins = minutesFromIsoTime(iso);
+  if (mins === undefined) return undefined;
+  const h = Math.floor(mins / 60);
+  const m = String(mins % 60).padStart(2, '0');
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${m} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+function minutesFromIsoTime(iso: string | undefined): number | undefined {
+  if (!iso) return undefined;
+  const m = iso.match(/T(\d{2}):(\d{2})/);
+  if (!m) return undefined;
+  const h = Number(m[1]);
+  if (h > 23 || Number(m[2]) > 59) return undefined;
+  return h * 60 + Number(m[2]);
 }
 
 function bagsFromSegments(segments: DuffelSegment[]): string | undefined {
@@ -181,7 +237,12 @@ export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined |
       const slice = o.slices![0];
       const segments = slice.segments ?? [];
       const first = segments[0];
+      const last = segments[segments.length - 1];
       const bags = bagsFromSegments(segments);
+      const departTime = formatTime12(first?.departing_at);
+      const arriveTime = formatTime12(last?.arriving_at);
+      const departMinutes = minutesFromIsoTime(first?.departing_at);
+      const durationMinutes = parseIsoDurationMinutes(slice.duration);
       return {
         airline: first?.operating_carrier?.name || first?.marketing_carrier?.name || 'See details',
         price: Math.round(Number(o.total_amount)),
@@ -189,6 +250,10 @@ export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined |
         stops: Math.max(0, segments.length - 1),
         duration: parseIsoDuration(slice.duration),
         ...(bags ? { bags } : {}),
+        ...(departTime ? { departTime } : {}),
+        ...(arriveTime ? { arriveTime } : {}),
+        ...(departMinutes !== undefined ? { departMinutes } : {}),
+        ...(durationMinutes !== undefined ? { durationMinutes } : {}),
       };
     })
     .sort((a, b) => a.price - b.price)

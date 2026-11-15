@@ -12,8 +12,10 @@ import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
 import {
   CABINS,
   emptySearchQuery,
+  formValuesFromQuery,
   searchButtonLabel,
   searchQueryToParams,
+  todayIsoLocal,
   type SearchQuery,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
@@ -84,6 +86,14 @@ export default function SearchWidget({
   const [dropoff, setDropoff] = useState(initialSearch?.dropoff || '');
   const [month, setMonth] = useState(initialSearch?.month || '');
   const [note, setNote] = useState<string | null>(null);
+  // Today's date for the date pickers' min attribute — set after
+  // mount, never during render: the server's today (UTC) and the
+  // traveler's today can differ by a day, and a differing min would
+  // be a hydration mismatch.
+  const [today, setToday] = useState('');
+  useEffect(() => {
+    setToday(todayIsoLocal());
+  }, []);
 
   const prefillNonce = prefill?.nonce ?? 0;
   useEffect(() => {
@@ -91,6 +101,33 @@ export default function SearchWidget({
     setPlace(prefill.destination);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillNonce]);
+
+  // A deep link followed while already on the page (or Back) changes
+  // initialSearch without remounting the widget — the form re-syncs
+  // to the link so "Edit search" shows the values the results were
+  // built from, not the stale values from the first load. Typing
+  // never changes initialSearch, so typing is never clobbered; the
+  // widget's own submit writes the same values back, so its
+  // router.replace is a no-op here.
+  const initialSearchKey = initialSearch ? searchQueryToParams(initialSearch) : '';
+  useEffect(() => {
+    if (!initialSearch) return;
+    const v = formValuesFromQuery(initialSearch);
+    setPlace(v.place);
+    setFrom(v.from);
+    setDepart(v.depart);
+    setRet(v.ret);
+    setTravelers(v.travelers);
+    setCabin(v.cabin);
+    setGuests(v.guests);
+    setRooms(v.rooms);
+    setPickupTime(v.pickupTime);
+    setDropoffTime(v.dropoffTime);
+    setSameLocation(v.sameLocation);
+    setDropoff(v.dropoff);
+    setMonth(v.month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearchKey]);
 
   // A deep-linked search (?tab=flights&from=...&to=...) runs once on
   // mount — a shared link lands on results, not an empty form.
@@ -105,20 +142,35 @@ export default function SearchWidget({
   const submit = (e?: React.FormEvent) => {
     e?.preventDefault();
     setNote(null);
-    if (tab === 'flights' && !from.trim() && !place.trim()) {
+    // A route needs both ends — the old check only failed when both
+    // were empty, while the message already promised both.
+    if (tab === 'flights' && (!from.trim() || !place.trim())) {
       setNote('Add the route first — where are you flying from, and to where?');
       return;
     }
-    if (tab === 'buses' && !from.trim() && !place.trim()) {
+    if (tab === 'buses' && (!from.trim() || !place.trim())) {
       setNote('Add the route first — where are you traveling from, and to where?');
       return;
     }
-    if (tab === 'taxis' && !from.trim() && !dropoff.trim()) {
+    if (tab === 'taxis' && (!from.trim() || !dropoff.trim())) {
       setNote('Add the trip first — where should the ride pick you up, and drop you off?');
       return;
     }
     if (tab !== 'flights' && tab !== 'buses' && tab !== 'taxis' && !place.trim()) {
       setNote('Add a destination first — where do you want to go?');
+      return;
+    }
+    // Dates can't be in the past (checked against the traveler's
+    // local today, at submit time) and the return can't precede the
+    // departure. A missing date stays flexible — only a given date
+    // is validated.
+    const now = todayIsoLocal();
+    if (depart && depart < now) {
+      setNote('That date is in the past — pick a date from today on.');
+      return;
+    }
+    if (ret && ret < now) {
+      setNote('That return date is in the past — pick a date from today on.');
       return;
     }
     if (depart && ret && ret < depart) {
@@ -173,10 +225,10 @@ export default function SearchWidget({
                 <PlaceField id="hotels-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where are you staying?" />
               </Field>
               <Field label="Check-in">
-                <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Check-in date" />
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Check-in date" />
               </Field>
               <Field label="Check-out">
-                <input type="date" value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Check-out date" />
+                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Check-out date" />
               </Field>
               <Field label="Guests">
                 <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} aria-label="Guests">
@@ -207,10 +259,10 @@ export default function SearchWidget({
                 <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
               </Field>
               <Field label="Depart">
-                <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
               </Field>
               <Field label="Return">
-                <input type="date" value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
+                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
               <Field label="Cabin">
@@ -230,13 +282,13 @@ export default function SearchWidget({
                 <PlaceField id="cars-pickup" label="Pick-up location" value={place} onChange={setPlace} placeholder="City or airport" />
               </Field>
               <Field label="Pick-up date">
-                <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Pick-up date" />
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Pick-up date" />
               </Field>
               <Field label="Pick-up time">
                 <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} aria-label="Pick-up time" />
               </Field>
               <Field label="Drop-off date">
-                <input type="date" value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Drop-off date" />
+                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Drop-off date" />
               </Field>
               <Field label="Drop-off time">
                 <input type="time" value={dropoffTime} onChange={(e) => setDropoffTime(e.target.value)} aria-label="Drop-off time" />
@@ -258,7 +310,7 @@ export default function SearchWidget({
                 <PlaceField id="tours-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where to?" />
               </Field>
               <Field label="Date">
-                <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>
@@ -290,7 +342,7 @@ export default function SearchWidget({
                 <PlaceField id="buses-to" label="Traveling to" value={place} onChange={setPlace} placeholder="Destination city" />
               </Field>
               <Field label="Date">
-                <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>
@@ -304,7 +356,7 @@ export default function SearchWidget({
                 <PlaceField id="taxis-dropoff" label="Drop-off" value={dropoff} onChange={setDropoff} placeholder="Drop-off place" />
               </Field>
               <Field label="Date">
-                <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
               </Field>
               <Field label="Time">
                 <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} aria-label="Time" />

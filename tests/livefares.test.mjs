@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, serviceFee } from '../lib/planner.ts';
 import { addDays, buildTripCard, suggestedStart } from '../lib/tripCard.ts';
-import { cabinClassFor, duffelMode, parseLiveFares } from '../lib/duffel.ts';
+import { cabinClassFor, duffelMode, formatTime12, parseDuffelOffers, parseLiveFares } from '../lib/duffel.ts';
 import { bundleFromLegs, bundleTotal } from '../lib/bundle.ts';
 
 // Local calendar date (the card formats dates locally, not UTC — see
@@ -258,4 +258,132 @@ test('duffelMode: the fare label follows the key, so test → live needs no code
     if (saved === undefined) delete process.env.DUFFEL_API_KEY;
     else process.env.DUFFEL_API_KEY = saved;
   }
+});
+
+// Flights section build (Nov 15, 2026): fare cards show the times
+// Duffel actually returns — departure/arrival from the offer's own
+// segments, never guessed. The canned payload below is the shape
+// Duffel's Offer Requests return (slices → segments with
+// departing_at / arriving_at, duration as ISO 8601).
+
+test('formatTime12: airport-local times read as 12-hour, malformed times drop', () => {
+  assert.equal(formatTime12('2027-01-15T08:30:00'), '8:30 AM');
+  assert.equal(formatTime12('2027-01-15T00:00:00'), '12:00 AM');
+  assert.equal(formatTime12('2027-01-15T12:00:00'), '12:00 PM');
+  assert.equal(formatTime12('2027-01-15T23:59:00'), '11:59 PM');
+  assert.equal(formatTime12('2027-01-15T20:35:00+01:00'), '8:35 PM');
+  assert.equal(formatTime12(undefined), undefined);
+  assert.equal(formatTime12('not-a-time'), undefined);
+  assert.equal(formatTime12('2027-01-15T25:00:00'), undefined);
+});
+
+test('parseDuffelOffers: times, duration minutes and bags come from the segments', () => {
+  const payload = {
+    offers: [
+      {
+        id: 'off_american',
+        total_amount: '434.00',
+        total_currency: 'USD',
+        slices: [
+          {
+            duration: 'PT7H5M',
+            segments: [
+              {
+                operating_carrier: { name: 'American Airlines' },
+                departing_at: '2027-01-15T08:30:00',
+                arriving_at: '2027-01-15T20:35:00',
+                baggages: [
+                  { type: 'checked', quantity: 1 },
+                  { type: 'carry_on', quantity: 1 },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'off_tap',
+        total_amount: '300.00',
+        total_currency: 'USD',
+        slices: [
+          {
+            duration: 'PT11H45M',
+            segments: [
+              {
+                operating_carrier: { name: 'TAP Air Portugal' },
+                departing_at: '2027-01-15T17:40:00',
+                arriving_at: '2027-01-16T06:25:00',
+                baggages: [{ type: 'carry_on', quantity: 1 }],
+              },
+              {
+                operating_carrier: { name: 'TAP Air Portugal' },
+                departing_at: '2027-01-16T07:30:00',
+                arriving_at: '2027-01-16T11:25:00',
+                baggages: [],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'off_ba',
+        total_amount: '500.00',
+        total_currency: 'USD',
+        slices: [
+          {
+            duration: 'PT9H20M',
+            segments: [{ operating_carrier: { name: 'British Airways' }, baggages: [] }],
+          },
+        ],
+      },
+    ],
+  };
+  const offers = parseDuffelOffers(payload);
+  // Cheapest first, as before.
+  assert.deepEqual(
+    offers.map((o) => o.airline),
+    ['TAP Air Portugal', 'American Airlines', 'British Airways']
+  );
+  const tap = offers[0];
+  assert.equal(tap.stops, 1, 'two segments is one stop');
+  assert.equal(tap.duration, '11h 45m');
+  assert.equal(tap.durationMinutes, 705, '11h45m is 705 minutes');
+  assert.equal(tap.departTime, '5:40 PM', 'departure is the FIRST segment');
+  assert.equal(tap.arriveTime, '11:25 AM', 'arrival is the LAST segment');
+  assert.equal(tap.departMinutes, 17 * 60 + 40);
+  assert.equal(tap.bags, 'carry-on only (no checked bag included)');
+  const aa = offers[1];
+  assert.equal(aa.stops, 0);
+  assert.equal(aa.durationMinutes, 425);
+  assert.equal(aa.departTime, '8:30 AM');
+  assert.equal(aa.arriveTime, '8:35 PM');
+  assert.equal(aa.bags, '1 checked bag included');
+  const ba = offers[2];
+  assert.equal(ba.departTime, undefined, 'no segment times means no times, never guessed');
+  assert.equal(ba.arriveTime, undefined);
+  assert.equal(ba.departMinutes, undefined);
+  assert.equal(ba.durationMinutes, 560, 'the duration still parses without segment times');
+  assert.equal(ba.bags, undefined, 'no baggage data means no baggage line');
+  // An offer with no amount or no slices is still dropped.
+  assert.deepEqual(parseDuffelOffers({ offers: [{ total_amount: '', slices: [{}] }] }), []);
+  assert.deepEqual(parseDuffelOffers(null), []);
+});
+
+test('parseLiveFares: the new time fields pass when well-formed, fail when malformed', () => {
+  const good = faresFor({ destCity: 'Prague', days: 14 });
+  const withTimes = {
+    ...good,
+    out: [{ ...good.out[0], departTime: '8:30 AM', arriveTime: '8:35 PM', departMinutes: 510, durationMinutes: 425 }],
+  };
+  assert.deepEqual(parseLiveFares(withTimes), withTimes, 'well-formed times pass through');
+  assert.equal(
+    parseLiveFares({ ...good, out: [{ ...good.out[0], departMinutes: '8:30' }] }),
+    null,
+    'a malformed departMinutes fails the payload'
+  );
+  assert.equal(
+    parseLiveFares({ ...good, out: [{ ...good.out[0], departTime: 830 }] }),
+    null,
+    'a malformed departTime fails the payload'
+  );
 });
