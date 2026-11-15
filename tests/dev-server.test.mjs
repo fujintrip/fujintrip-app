@@ -9,6 +9,7 @@ import { spawn, execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { buildTripCard } from '../lib/tripCard.ts';
 import { snapshotFor } from '../lib/today.ts';
+import { HERO_SLIDES } from '../lib/heroRotation.ts';
 
 const PORT = 3106;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -111,6 +112,21 @@ test('homepage: photo hero + search widget with 7 tabs, destinations, trust stri
   assert.ok(!html.includes('Start from a link'), 'no Start from a link section');
   assert.ok(!html.includes('Paste a link or article text'), 'no link box');
   assert.ok(html.includes('My Trips'), 'My Trips stays on the homepage');
+});
+
+test('homepage hero rotates: dot indicators for every slide in served HTML, first photo is Kyoto', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  // The rotator renders server-side: the first photo (Kyoto torii) is
+  // in the HTML and every slide has a dot button to jump to it.
+  assert.ok(html.includes('hero-rotator'), 'hero rotator renders');
+  assert.ok(html.includes('hero-dots'), 'hero dot indicators render');
+  assert.ok(html.includes('aria-label="Show Kyoto photo"'), 'Kyoto dot present');
+  assert.ok(html.includes('aria-label="Show Prague photo"'), 'Prague dot present');
+  assert.ok(html.includes('aria-label="Show St. George photo"'), 'St. George dot present');
+  const dots = html.match(/aria-label="Show [^"]+ photo"/g) || [];
+  assert.equal(dots.length, HERO_SLIDES.length, `one dot per slide (${HERO_SLIDES.length})`);
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'first photo is the Kyoto torii');
 });
 
 test('tabs: ?tab=flights shows the Flights form, still no results before a search', async () => {

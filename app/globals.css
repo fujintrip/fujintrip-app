@@ -661,6 +661,26 @@ html{scroll-padding-bottom:96px}
 .hero-booking-photo .safeimg{height:100%}
 .hero-booking-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .hero-booking-photo .img-fallback,.hero-booking-photo .img-loading{height:100%}
+/* Rotating hero background (Nov 14, 2026): one destination photo at
+   a time, crossfading every ~7s. The scrim (::after on the photo
+   container) paints above the slides, so the headline and the white
+   search card stay legible over every photo; the dots sit above the
+   scrim. Under prefers-reduced-motion there is no fade and no
+   rotation — the first photo stays. */
+.hero-rotator{position:absolute;inset:0}
+.hero-slide{position:absolute;inset:0}
+.hero-slide .safeimg{height:100%}
+.hero-slide img{width:100%;height:100%;object-fit:cover;display:block}
+.hero-slide .img-fallback,.hero-slide .img-loading{height:100%}
+.hero-slide-current{animation:hero-fade-in 1s ease}
+@keyframes hero-fade-in{from{opacity:0}to{opacity:1}}
+.hero-dots{position:absolute;right:16px;bottom:14px;z-index:2;display:flex;gap:6px}
+.hero-dot{width:9px;height:9px;border-radius:999px;border:1px solid rgba(255,255,255,.9);background:rgba(255,255,255,.35);padding:0;cursor:pointer}
+.hero-dot.active{background:#fff}
+.hero-dot:focus-visible{outline:2px solid #fff;outline-offset:2px}
+@media (prefers-reduced-motion: reduce){
+  .hero-slide-current{animation:none}
+}
 .hero-booking-inner{position:relative;z-index:1;padding:64px 20px 56px}
 .hero-booking-inner h1{color:#fff;font-size:clamp(40px,6vw,64px)}
 .hero-booking-sub{color:rgba(255,255,255,.92);font-size:18px;margin:8px 0 24px;max-width:640px}

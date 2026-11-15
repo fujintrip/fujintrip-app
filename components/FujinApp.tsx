@@ -14,13 +14,14 @@ import { mergeOfferNeeded, readMergeRecord, recordMerge, type MergeRecord } from
 import { AccountButton, useAccount } from '../components/AccountGate';
 import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import AdSlot from '../components/AdSlot';
+import HeroRotator from '../components/HeroRotator';
 import PhotoCarousel from '../components/PhotoCarousel';
 import ReelsFeed from '../components/ReelsFeed';
 import ReelComposer from '../components/ReelComposer';
 import SiteHeader from './SiteHeader';
 import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
-import { Chat, HERO_PHOTO, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
+import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Seed handoff: the /chat page consumes this once on mount so the
 // chat greets with the route ready, then drops it. Direction v3:
@@ -433,7 +434,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       {variant === 'home' && (
         <section className="hero-booking">
           <div className="hero-booking-photo">
-            <SafeImg src={HERO_PHOTO} alt="Torii gates at Fushimi Inari, Kyoto" label="Kyoto" loading="eager" />
+            <HeroRotator />
           </div>
           <div className="wrap hero-booking-inner">
             <h1>Where to?</h1>
