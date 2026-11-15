@@ -654,46 +654,25 @@ html{scroll-padding-bottom:96px}
   .ai-pill{padding:9px 12px}
 }
 
-/* Direction v3 homepage (Nov 14, 2026): Booking-style photo hero
-   with the search widget on it, trust strip, category tiles,
-   results list (sort above, filters left), footer columns. */
+/* Direction v3 homepage (Nov 14, 2026): Booking-style hero with the
+   search widget, trust strip, category tiles, results list (sort
+   above, filters left), footer columns. */
 
-/* Hero: the photo fills the banner; the headline and the white
-   search card sit on top of it. On a phone the photo shortens to
-   ~40vh and the card drops below it so the fields stay legible. */
-.hero-booking{position:relative;overflow:hidden;background:var(--surface)}
-.hero-booking-photo{position:absolute;inset:0}
-.hero-booking-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.52))}
-.hero-booking-photo .safeimg{height:100%}
-.hero-booking-photo img{width:100%;height:100%;object-fit:cover;display:block}
-.hero-booking-photo .img-fallback,.hero-booking-photo .img-loading{height:100%}
-/* Rotating hero background (Nov 14, 2026): one destination photo at
-   a time, crossfading every ~7s. The scrim (::after on the photo
-   container) paints above the slides, so the headline and the white
-   search card stay legible over every photo; the dots sit above the
-   scrim. Under prefers-reduced-motion there is no fade and no
-   rotation — the first photo stays. */
-.hero-rotator{position:absolute;inset:0}
-.hero-slide{position:absolute;inset:0}
-.hero-slide .safeimg{height:100%}
-.hero-slide img{width:100%;height:100%;object-fit:cover;display:block}
-.hero-slide .img-fallback,.hero-slide .img-loading{height:100%}
-.hero-slide-current{animation:hero-fade-in 1s ease}
-@keyframes hero-fade-in{from{opacity:0}to{opacity:1}}
-.hero-dots{position:absolute;right:16px;bottom:14px;z-index:2;display:flex;gap:6px}
-.hero-dot{width:9px;height:9px;border-radius:999px;border:1px solid rgba(255,255,255,.9);background:rgba(255,255,255,.35);padding:0;cursor:pointer}
-.hero-dot.active{background:#fff}
-.hero-dot:focus-visible{outline:2px solid #fff;outline-offset:2px}
-@media (prefers-reduced-motion: reduce){
-  .hero-slide-current{animation:none}
-}
-.hero-booking-inner{position:relative;z-index:1;padding:64px 20px 56px}
-.hero-booking-inner h1{color:#fff;font-size:clamp(40px,6vw,64px)}
-.hero-booking-sub{color:rgba(255,255,255,.92);font-size:18px;margin:8px 0 24px;max-width:640px}
+/* White hero (Nov 15, 2026): the rotating photo background is gone —
+   the hero is the theme surface itself (white in light mode, the dark
+   surface in dark mode), with generous whitespace, a tight modern
+   headline, and the search card doing the visual work. No photo, no
+   scrim, no dots, no rotation. */
+.hero-booking{background:var(--card)}
+.hero-booking-inner{padding:80px 20px 72px}
+.hero-booking-inner h1{color:var(--ink);font-size:clamp(38px,5vw,56px);letter-spacing:-.03em}
+.hero-booking-sub{color:var(--muted);font-size:18px;margin:12px 0 32px;max-width:640px}
 
 /* Search widget: white card, category tabs across the top, fields
-   below, one accent Search button, one honest line. */
-.search-widget{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+   below, one accent Search button, one honest line. On the white
+   hero the card carries the section — a clear border and a soft
+   layered shadow keep it prominent without a photo behind it. */
+.search-widget{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;box-shadow:0 16px 44px rgba(15,15,15,.10),0 1px 3px rgba(15,15,15,.08)}
 .sw-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin:-4px -4px 16px;padding:0 4px 12px}
 .sw-tab{flex:0 0 auto;border:1px solid transparent;background:transparent;border-radius:999px;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap}
 .sw-tab:hover{background:var(--surface)}
@@ -781,10 +760,7 @@ html{scroll-padding-bottom:96px}
   .footer-cols{grid-template-columns:1fr 1fr}
 }
 @media(max-width:640px){
-  .hero-booking-photo{position:relative;height:40vh}
-  .hero-booking-inner{padding:28px 20px 32px}
-  .hero-booking-inner h1{color:var(--ink)}
-  .hero-booking-sub{color:var(--muted)}
+  .hero-booking-inner{padding:48px 20px 40px}
   .sw-fields{grid-template-columns:1fr}
   .sw-search{width:100%}
   .footer-cols{grid-template-columns:1fr}

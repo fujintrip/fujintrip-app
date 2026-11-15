@@ -14,7 +14,6 @@ import { mergeOfferNeeded, readMergeRecord, recordMerge, type MergeRecord } from
 import { AccountButton, useAccount } from '../components/AccountGate';
 import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import AdSlot from '../components/AdSlot';
-import HeroRotator from '../components/HeroRotator';
 import PhotoCarousel from '../components/PhotoCarousel';
 import ReelsFeed from '../components/ReelsFeed';
 import ReelComposer from '../components/ReelComposer';
@@ -433,9 +432,6 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       )}
       {variant === 'home' && (
         <section className="hero-booking">
-          <div className="hero-booking-photo">
-            <HeroRotator />
-          </div>
           <div className="wrap hero-booking-inner">
             <h1>Where to?</h1>
             <p className="hero-booking-sub">Flights, stays, cars, tours and more — compare prices from different sources, all in one place.</p>

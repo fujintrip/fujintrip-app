@@ -9,7 +9,6 @@ import { spawn, execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { buildTripCard } from '../lib/tripCard.ts';
 import { snapshotFor } from '../lib/today.ts';
-import { HERO_SLIDES } from '../lib/heroRotation.ts';
 
 const PORT = 3106;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -65,13 +64,16 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
-test('homepage: photo hero + search widget with 7 tabs, destinations, trust strip, exactly one Plan with AI pill, no results before a search', async () => {
+test('homepage: white hero + search widget with 7 tabs, destinations, trust strip, exactly one Plan with AI pill, no results before a search', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // Photo hero with the one question.
+  // White hero with the one question — no background photo, no
+  // rotator, no dots (Nov 15, 2026: the photo background is gone).
   assert.ok(html.includes('Where to?'), 'hero asks Where to?');
-  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
+  assert.ok(!html.includes('hero-rotator'), 'no hero rotator');
+  assert.ok(!html.includes('hero-dots'), 'no hero dot indicators');
+  assert.ok(!html.includes('hero-booking-photo'), 'no hero photo container');
   // The search widget: 7 category tabs switch the SEARCH FORM.
   assert.equal((html.match(/role="tab"/g) || []).length, 7, '7 widget tabs');
   for (const label of ['Stays', 'Flights', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']) {
@@ -118,19 +120,23 @@ test('homepage: photo hero + search widget with 7 tabs, destinations, trust stri
   assert.ok(html.includes('My Trips'), 'My Trips stays on the homepage');
 });
 
-test('homepage hero rotates: dot indicators for every slide in served HTML, first photo is Kyoto', async () => {
+test('homepage hero is white: no background photo, no rotation, headline + sub + widget render', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The rotator renders server-side: the first photo (Kyoto torii) is
-  // in the HTML and every slide has a dot button to jump to it.
-  assert.ok(html.includes('hero-rotator'), 'hero rotator renders');
-  assert.ok(html.includes('hero-dots'), 'hero dot indicators render');
-  assert.ok(html.includes('aria-label="Show Kyoto photo"'), 'Kyoto dot present');
-  assert.ok(html.includes('aria-label="Show Prague photo"'), 'Prague dot present');
-  assert.ok(html.includes('aria-label="Show St. George photo"'), 'St. George dot present');
-  const dots = html.match(/aria-label="Show [^"]+ photo"/g) || [];
-  assert.equal(dots.length, HERO_SLIDES.length, `one dot per slide (${HERO_SLIDES.length})`);
-  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'first photo is the Kyoto torii');
+  // The hero is the theme surface itself — no photo markup anywhere
+  // in the hero section, and no rotation machinery in the HTML.
+  assert.ok(html.includes('hero-booking'), 'hero section renders');
+  assert.ok(html.includes('Where to?'), 'hero headline renders');
+  assert.ok(html.includes('Flights, stays, cars, tours and more'), 'hero sub renders');
+  assert.ok(!html.includes('hero-rotator'), 'no rotator in the hero');
+  assert.ok(!html.includes('hero-slide'), 'no rotator slides');
+  assert.ok(!html.includes('hero-dots'), 'no dot indicators');
+  assert.ok(!html.includes('hero-dot'), 'no dot buttons');
+  assert.ok(!html.includes('aria-label="Show Kyoto photo"'), 'no Kyoto dot');
+  assert.ok(!html.includes('aria-label="Show Prague photo"'), 'no Prague dot');
+  // The Kyoto photo still renders on the homepage — but only as the
+  // Kyoto destination card, not as a hero background.
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto card photo still renders');
 });
 
 test('tabs: ?tab=flights shows the Flights form, still no results before a search', async () => {
@@ -744,11 +750,14 @@ test('search widget: place fields are combobox type-aheads, the datalist is gone
   assert.ok(fhtml.includes('aria-label="Flying to"'), 'To field is labelled');
 });
 
-test('hero alt: the first slide describes the Yasaka pagoda street, never torii gates', async () => {
-  const r = await fetch(`${BASE}/`);
+test('hero alt: the chat hero photo describes the Yasaka pagoda street, never torii gates', async () => {
+  // The homepage hero is white now (Nov 15, 2026) — the Kyoto photo
+  // lives on /chat, where its alt must still describe the actual
+  // photo: the Yasaka pagoda street at sunset, not torii gates.
+  const r = await fetch(`${BASE}/chat`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
   assert.ok(html.includes('Yasaka pagoda street at sunset, Kyoto'), 'hero alt describes the actual photo');
-  assert.ok(!html.includes('Torii gates'), 'no torii-gates alt anywhere on the homepage');
+  assert.ok(!html.includes('Torii gates'), 'no torii-gates alt anywhere on /chat');
 });
 
 test('fujin: every reply carries liveFares (null here — no key, no trip slots), so the card can thread it', async () => {
@@ -954,9 +963,11 @@ test('images: no img on / or /chat is display:none — the lazy + display:none d
     for (const tag of imgs) {
       assert.ok(!/display\s*:\s*none/i.test(tag), `${path}: no img is display:none — ${tag.slice(0, 120)}`);
     }
-    // The hero photo URL is present on the homepage.
+    // The Kyoto photo URL is still present on the homepage — as the
+    // Kyoto destination card, not a hero background (white hero,
+    // Nov 15, 2026).
     if (path === '/') {
-      assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'hero photo URL renders on the homepage');
+      assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto card photo renders on the homepage');
     }
   }
 });

@@ -1,11 +1,15 @@
-// Homepage photos — every photo URL the homepage renders must return
-// real image bytes, not a placeholder or an error.
+// Site photos — every photo URL the site renders must return real
+// image bytes, not a placeholder or an error.
 // (Defect, Nov 14 2026: the Kyoto hero and the package cards showed
 // flat gradients with no photos — 0 decoded images — while the chat
 // page's photos decoded fine. The URLs themselves were fine; the
 // cause was SafeImg/PhotoCarousel hiding lazy images with
 // display:none, which never fetches. This test pins the URLs so a
 // dead photo cannot hide behind that fix.)
+// The Kyoto photo (HERO_PHOTO) is the /chat hero now — the homepage
+// hero went white on Nov 15, 2026 — but the same photo ID also
+// backs the Kyoto destination card, so it still renders on both
+// pages and stays in this list.
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/images.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -36,14 +40,14 @@ async function fetchImage(url) {
   return buf;
 }
 
-test('homepage photos: hero + every destination card image returns real image bytes', async () => {
+test('site photos: chat hero + every destination card image returns real image bytes', async () => {
   const urls = [
     heroPhotoUrl(),
     ...GLOBAL_DESTINATIONS.map((d) => d.image),
     ...HIDDEN_GEMS.map((d) => d.image),
     ...Object.values(CITY_PHOTOS),
   ];
-  assert.ok(urls.length >= 21, `expected the hero + destination + city photos, got ${urls.length}`);
+  assert.ok(urls.length >= 21, `expected the chat hero + destination + city photos, got ${urls.length}`);
   const bufs = [];
   for (const url of urls) bufs.push(await fetchImage(url));
   // No two photos are byte-identical — a placeholder or error image
