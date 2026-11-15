@@ -11,23 +11,78 @@ import { useRouter } from 'next/navigation';
 import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
 import {
   CABINS,
+  cleanFlightLegs,
   emptySearchQuery,
+  FLIGHT_TRIP_TYPES,
   formValuesFromQuery,
+  MAX_FLIGHT_LEGS,
   searchButtonLabel,
   searchQueryToParams,
   todayIsoLocal,
+  type FlightLeg,
+  type FlightTripType,
   type SearchQuery,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
 import PlaceField from './PlaceField';
-import { Icon } from './icons';
+import { Icon, type IconName } from './icons';
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+// One field: label above, Lucide icon inside the control, the input
+// or select below it. The icon is decorative (aria-hidden inside the
+// Icon component) — the label carries the field for assistive tech.
+function Field({ label, icon, children }: { label: string; icon?: IconName; children: React.ReactNode }) {
   return (
     <label className="sw-field">
       <span>{label}</span>
-      {children}
+      {icon ? (
+        <span className="sw-field-control">
+          <span className="sw-field-icon" aria-hidden="true">
+            <Icon name={icon} size={18} />
+          </span>
+          {children}
+        </span>
+      ) : (
+        children
+      )}
     </label>
+  );
+}
+
+// The trip-type segmented control (Nov 15, 2026): One-way /
+// Round-trip / Multi-city as a pill radiogroup — the traveler sees
+// all three options up front, the selected one filled in the accent,
+// 44px targets, keyboard-operable (arrow keys move between radios
+// natively; Tab reaches the group once).
+function TripTypeControl({
+  value,
+  onChange,
+}: {
+  value: FlightTripType;
+  onChange: (t: FlightTripType) => void;
+}) {
+  const icons: Record<FlightTripType, IconName> = {
+    oneway: 'arrowRight',
+    roundtrip: 'arrowLeftRight',
+    multicity: 'route',
+  };
+  return (
+    <div className="sw-trip-type" role="radiogroup" aria-label="Trip type">
+      {FLIGHT_TRIP_TYPES.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="radio"
+          aria-checked={value === t.id}
+          className={value === t.id ? 'selected' : ''}
+          onClick={() => onChange(t.id)}
+        >
+          <span className="sw-trip-type-icon" aria-hidden="true">
+            <Icon name={icons[t.id]} size={16} />
+          </span>
+          {t.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -41,7 +96,7 @@ function TravelersSelect({
   label: string;
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} icon="users">
       <select value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={label}>
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
           <option key={n} value={n}>
@@ -87,6 +142,48 @@ export default function SearchWidget({
   const [dropoff, setDropoff] = useState(initialSearch?.dropoff || '');
   const [month, setMonth] = useState(initialSearch?.month || '');
   const [note, setNote] = useState<string | null>(null);
+  // Flights trip type (Nov 15, 2026): one-way / round-trip /
+  // multi-city. Multi-city legs live here — leg 1 mirrors the shared
+  // from/place/depart state, so the round-trip/one-way form and the
+  // deep-link re-sync never see a second source of truth.
+  const [tripType, setTripType] = useState<FlightTripType>(initialSearch?.tripType ?? 'roundtrip');
+  const [legs, setLegs] = useState<FlightLeg[]>(() => padLegs(initialSearch?.legs ?? [], initialSearch));
+
+  // A multi-city search always has 2–4 legs. A fresh multi-city
+  // form starts from the route already typed (leg 1) plus one empty
+  // leg whose From is leg 1's To — the traveler chains the trip
+  // instead of retyping the city they just landed in.
+  function padLegs(raw: FlightLeg[], q: SearchQuery | null | undefined): FlightLeg[] {
+    const clean = cleanFlightLegs(raw);
+    if (clean.length >= 2) return clean;
+    const first: FlightLeg = clean[0] ?? {
+      from: q?.from || '',
+      to: q?.to || '',
+      depart: q?.depart || '',
+    };
+    return [
+      first,
+      { from: first.to, to: '', depart: '' },
+    ];
+  }
+
+  // One leg's edit — leg 1 also writes the shared from/place/depart
+  // state, so the form, the deep link and the results all read the
+  // same first hop.
+  const updateLeg = (i: number, patch: Partial<FlightLeg>) => {
+    setLegs(legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+    if (i === 0) {
+      if (patch.from !== undefined) setFrom(patch.from);
+      if (patch.to !== undefined) setPlace(patch.to);
+      if (patch.depart !== undefined) setDepart(patch.depart);
+    }
+  };
+
+  const switchTripType = (t: FlightTripType) => {
+    setTripType(t);
+    if (t === 'multicity') setLegs((prev) => padLegs(prev, { ...emptySearchQuery('flights'), from, to: place, depart }));
+    setNote(null);
+  };
   // Today's date for the date pickers' min attribute — set after
   // mount, never during render: the server's today (UTC) and the
   // traveler's today can differ by a day, and a differing min would
@@ -127,6 +224,8 @@ export default function SearchWidget({
     setSameLocation(v.sameLocation);
     setDropoff(v.dropoff);
     setMonth(v.month);
+    setTripType(v.tripType);
+    setLegs(padLegs(v.legs, initialSearch));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -145,7 +244,33 @@ export default function SearchWidget({
     setNote(null);
     // A route needs both ends — the old check only failed when both
     // were empty, while the message already promised both.
-    if (tab === 'flights' && (!from.trim() || !place.trim())) {
+    if (tab === 'flights' && tripType === 'multicity') {
+      // Every leg needs both ends and a date, and a later leg cannot
+      // depart before the one before it — the note names the leg.
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i];
+        if (!leg.from.trim() || !leg.to.trim()) {
+          setNote(`Leg ${i + 1} needs both ends — where are you flying from, and to where?`);
+          return;
+        }
+        if (!leg.depart) {
+          setNote(`Leg ${i + 1} needs a date — when are you flying?`);
+          return;
+        }
+      }
+      const now = todayIsoLocal();
+      for (let i = 0; i < legs.length; i++) {
+        if (legs[i].depart < now) {
+          setNote(`Leg ${i + 1} is in the past — pick a date from today on.`);
+          return;
+        }
+        if (i > 0 && legs[i].depart < legs[i - 1].depart) {
+          setNote(`Leg ${i + 1} departs before leg ${i} — check the dates.`);
+          return;
+        }
+      }
+    }
+    if (tab === 'flights' && tripType !== 'multicity' && (!from.trim() || !place.trim())) {
       setNote('Add the route first — where are you flying from, and to where?');
       return;
     }
@@ -164,19 +289,23 @@ export default function SearchWidget({
     // Dates can't be in the past (checked against the traveler's
     // local today, at submit time) and the return can't precede the
     // departure. A missing date stays flexible — only a given date
-    // is validated.
+    // is validated. Multi-city legs were already checked one by one
+    // above; the shared dates mirror leg 1 there, so re-checking
+    // them would only repeat the same verdict in vaguer words.
     const now = todayIsoLocal();
-    if (depart && depart < now) {
-      setNote('That date is in the past — pick a date from today on.');
-      return;
-    }
-    if (ret && ret < now) {
-      setNote('That return date is in the past — pick a date from today on.');
-      return;
-    }
-    if (depart && ret && ret < depart) {
-      setNote('The return date is before the departure date — check the dates.');
-      return;
+    if (tab !== 'flights' || tripType !== 'multicity') {
+      if (depart && depart < now) {
+        setNote('That date is in the past — pick a date from today on.');
+        return;
+      }
+      if (ret && ret < now) {
+        setNote('That return date is in the past — pick a date from today on.');
+        return;
+      }
+      if (depart && ret && ret < depart) {
+        setNote('The return date is before the departure date — check the dates.');
+        return;
+      }
     }
     const q: SearchQuery = {
       ...emptySearchQuery(tab),
@@ -194,7 +323,23 @@ export default function SearchWidget({
       sameLocation,
       dropoff: tab === 'cars' ? (sameLocation ? '' : dropoff.trim()) : tab === 'taxis' ? dropoff.trim() : '',
       month,
+      // Flights trip type: one-way carries no return (a return left
+      // over from a round-trip switch is dropped, not searched);
+      // multi-city carries the legs, with leg 1 mirrored onto the
+      // shared from/to/depart so every consumer reads the first hop.
+      tripType: tab === 'flights' ? tripType : 'roundtrip',
+      legs:
+        tab === 'flights' && tripType === 'multicity'
+          ? legs.map((l) => ({ from: l.from.trim(), to: l.to.trim(), depart: l.depart }))
+          : [],
     };
+    if (tab === 'flights' && tripType === 'oneway') q.ret = '';
+    if (tab === 'flights' && tripType === 'multicity') {
+      q.from = legs[0].from.trim();
+      q.to = legs[0].to.trim();
+      q.depart = legs[0].depart;
+      q.ret = '';
+    }
     try {
       router.replace(`/?${searchQueryToParams(q)}`, { scroll: false });
     } catch {}
@@ -256,20 +401,67 @@ export default function SearchWidget({
           )}
           {tab === 'flights' && (
             <>
-              <Field label="From">
-                <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
-              </Field>
-              <Field label="To">
-                <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
-              </Field>
-              <Field label="Depart">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
-              </Field>
-              <Field label="Return">
-                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
-              </Field>
+              <TripTypeControl value={tripType} onChange={switchTripType} />
+              {tripType === 'multicity' ? (
+                <div className="flight-legs">
+                  {legs.map((leg, i) => (
+                    <div key={i} className="flight-leg">
+                      <div className="flight-leg-head">
+                        <span className="flight-leg-title">Leg {i + 1}</span>
+                        {i >= 1 && legs.length > 2 && (
+                          <button
+                            type="button"
+                            className="ghost flight-leg-remove"
+                            aria-label={`Remove leg ${i + 1}`}
+                            onClick={() => setLegs(legs.filter((_, j) => j !== i))}
+                          >
+                            <Icon name="close" size={16} /> Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="sw-fields">
+                        <Field label="From" icon="pin">
+                          <PlaceField id={`flights-leg${i + 1}-from`} label={`Leg ${i + 1} flying from`} value={leg.from} onChange={(v) => updateLeg(i, { from: v })} placeholder="Departure city" />
+                        </Field>
+                        <Field label="To" icon="pin">
+                          <PlaceField id={`flights-leg${i + 1}-to`} label={`Leg ${i + 1} flying to`} value={leg.to} onChange={(v) => updateLeg(i, { to: v })} placeholder="Destination" />
+                        </Field>
+                        <Field label="Date" icon="calendar">
+                          <input type="date" min={today || undefined} value={leg.depart} onChange={(e) => updateLeg(i, { depart: e.target.value })} aria-label={`Leg ${i + 1} date`} />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                  {legs.length < MAX_FLIGHT_LEGS && (
+                    <button
+                      type="button"
+                      className="ghost flight-leg-add"
+                      onClick={() => setLegs([...legs, { from: legs[legs.length - 1].to, to: '', depart: '' }])}
+                    >
+                      <Icon name="plus" size={16} /> Add another flight
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <Field label="From" icon="pin">
+                    <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
+                  </Field>
+                  <Field label="To" icon="pin">
+                    <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
+                  </Field>
+                  <Field label="Depart" icon="calendar">
+                    <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
+                  </Field>
+                  {tripType === 'roundtrip' && (
+                    <Field label="Return" icon="calendar">
+                      <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
+                    </Field>
+                  )}
+                </>
+              )}
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
-              <Field label="Cabin">
+              <Field label="Cabin" icon="ticket">
                 <select value={cabin} onChange={(e) => setCabin(e.target.value)} aria-label="Cabin">
                   {CABINS.map((c) => (
                     <option key={c} value={c}>
@@ -370,6 +562,9 @@ export default function SearchWidget({
           )}
         </div>
         <button type="submit" className="primary sw-search">
+          <span className="sw-search-icon" aria-hidden="true">
+            <Icon name="search" size={20} />
+          </span>
           {searchButtonLabel(tab)}
         </button>
       </form>

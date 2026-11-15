@@ -710,6 +710,48 @@ html{scroll-padding-bottom:96px}
 .sw-search{margin-top:16px;min-height:52px;padding:0 28px;font-size:16px}
 .sw-note{margin:12px 0 0;font-size:14px;color:var(--danger)}
 .sw-honest{margin:12px 0 0;font-size:13px;color:var(--muted)}
+/* Flights trip types (Nov 15, 2026): One-way / Round-trip /
+   Multi-city as a pill segmented control above the flight fields.
+   The selected segment is filled in the accent — white on
+   --accent-text in light mode, ink on --accent-text in dark — the
+   same pair the search button uses, so the contrast holds in both
+   themes. The control spans the full width of the field grid. */
+.sw-trip-type{grid-column:1/-1;display:inline-flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;margin-bottom:4px;justify-self:start}
+.sw-trip-type button{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border:1px solid transparent;background:transparent;border-radius:999px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap;transition:background-color 200ms ease,color 200ms ease,transform 200ms ease}
+.sw-trip-type button:hover{background:var(--card)}
+.sw-trip-type button:active{transform:scale(.98)}
+.sw-trip-type button.selected{background:var(--accent-text);color:var(--on-ink)}
+.sw-trip-type button:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
+.sw-trip-type-icon{display:inline-flex;align-items:center}
+.sw-trip-type-icon svg{display:block}
+/* Icons inside the search fields (Nov 15, 2026): a Lucide icon sits
+   at the left of the control, the input keeps 38px of left padding
+   so text never runs under it. The icon is decorative — the label
+   carries the field. */
+.sw-field-control{position:relative;display:block}
+.sw-field-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;display:inline-flex}
+.sw-field-icon svg{display:block}
+.sw-field-control input,.sw-field-control select{padding-left:38px}
+/* The search button (Nov 15, 2026): the accent, large and rounded,
+   with a search icon — the one action on the card. Hover lifts,
+   press settles; transform + shadow only, 200ms. The button.primary
+   selector beats a bare class, so this rule names the full chain. */
+button.primary.sw-search{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--accent-text);color:var(--on-ink);border-radius:999px;min-height:56px;padding:0 32px;font-size:17px;transition:transform 200ms ease,box-shadow 200ms ease}
+button.primary.sw-search:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,15,15,.16)}
+button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:none}
+.sw-search-icon{display:inline-flex;align-items:center}
+.sw-search-icon svg{display:block}
+/* Multi-city legs (Nov 15, 2026): each leg is a bordered card with
+   its own field grid; the add-leg button is a full-width dashed
+   ghost. The legs column spans the field grid. */
+.flight-legs{grid-column:1/-1;display:flex;flex-direction:column;gap:12px}
+.flight-leg{border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--card)}
+.flight-leg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.flight-leg-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.flight-leg-remove{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px}
+.flight-leg-add{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px;width:100%;border:1px dashed var(--line);border-radius:12px;background:transparent;color:var(--accent-text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform 200ms ease,border-color 200ms ease}
+.flight-leg-add:hover{border-color:var(--accent-text);transform:translateY(-1px)}
+.flight-leg-add:active{transform:scale(.99)}
 /* Place type-ahead (API phase round 1, Nov 14, 2026): the suggestion
    listbox drops below its field, above the hero and the sections
    under it (z-index 30 — below the sticky site header at 60, above
@@ -800,6 +842,12 @@ html{scroll-padding-bottom:96px}
   .hero-booking-inner{padding:32px 16px 28px}
   .sw-fields{grid-template-columns:1fr}
   .sw-search{width:100%}
+  /* Flights trip types on a phone: the three segments share the row
+     instead of overflowing it; the leg cards lose their desktop
+     padding. */
+  .sw-trip-type{width:100%}
+  .sw-trip-type button{flex:1;justify-content:center;padding:0 8px}
+  .flight-leg{padding:12px}
   .footer-cols{grid-template-columns:1fr}
   .results-bar{top:61px}
 }

@@ -373,6 +373,110 @@ test('tabs: price-check carries the picked cabin and the Duffel mode (the Flight
   assert.equal(bj.mode, 'test');
 });
 
+test('tabs: one-way price-check asks for the outbound slice only — no return is fetched or invented', async () => {
+  const r = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tripType: 'oneway', origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 8, depart: '2027-01-15', cabin: 'Economy' }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.tripType, 'oneway');
+  assert.equal(j.live, false);
+  assert.equal(j.reason, 'no_key');
+  assert.deepEqual(j.out, []);
+  assert.deepEqual(j.back, [], 'a one-way check has no return list');
+  assert.equal(j.returnDate, '', 'a one-way check has no return date');
+  assert.equal(j.departDate, '2027-01-15', 'the checked depart is the searched date');
+  assert.deepEqual(j.legs, []);
+  // A one-way call with no depart falls back to the planner suggestion, never crashes.
+  const nodate = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tripType: 'oneway', origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14 }),
+  });
+  assert.equal(nodate.status, 200);
+  const nj = await nodate.json();
+  assert.equal(nj.tripType, 'oneway');
+  assert.equal(nj.departDate, '2027-01-04');
+  assert.equal(nj.returnDate, '');
+});
+
+test('tabs: multi-city price-check runs one one-way request per leg', async () => {
+  const r = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tripType: 'multicity',
+      legs: [
+        { origin: 'New York', destination: 'London', date: '2027-01-15' },
+        { origin: 'London', destination: 'Paris', date: '2027-01-20' },
+      ],
+      travelers: 2,
+      cabin: 'Economy',
+    }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.tripType, 'multicity');
+  assert.equal(j.live, false);
+  assert.equal(j.legs.length, 2, 'one entry per leg');
+  assert.equal(j.legs[0].origin, 'New York');
+  assert.equal(j.legs[0].destination, 'London');
+  assert.equal(j.legs[0].destCity, 'London');
+  assert.equal(j.legs[0].date, '2027-01-15');
+  assert.equal(j.legs[0].live, false);
+  assert.equal(j.legs[0].reason, 'no_key');
+  assert.deepEqual(j.legs[0].out, []);
+  assert.equal(j.legs[1].destCity, 'Paris');
+  assert.equal(j.departDate, '2027-01-15', 'the trip starts on leg 1');
+  assert.equal(j.returnDate, '2027-01-20', 'the trip ends on the last leg');
+  assert.equal(j.liveTotal, 0, 'no fare on any leg, no combined total');
+  // Fewer than 2 clean legs is not a multi-city search — honestly empty.
+  const one = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tripType: 'multicity', legs: [{ origin: 'New York', destination: 'London', date: '2027-01-15' }], travelers: 2 }),
+  });
+  assert.equal(one.status, 200);
+  const oj = await one.json();
+  assert.equal(oj.live, false);
+  assert.equal(oj.reason, 'missing_slots');
+  assert.deepEqual(oj.legs, []);
+});
+
+test('tabs: round-trip price-check still carries tripType roundtrip and no legs', async () => {
+  const r = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14 }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.tripType, 'roundtrip', 'a call with no tripType is a round-trip');
+  assert.deepEqual(j.legs, []);
+  // A junk tripType falls back to round-trip, never crashes the check.
+  const junk = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tripType: 'teleport', origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14 }),
+  });
+  assert.equal(junk.status, 200);
+  const jj = await junk.json();
+  assert.equal(jj.tripType, 'roundtrip');
+  assert.equal(jj.live, false);
+});
+
+test('tabs: the Flights form offers all three trip types in the rendered page', async () => {
+  const r = await fetch(`${BASE}/?tab=flights`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('Round-trip'), 'the form offers round-trip');
+  assert.ok(html.includes('One-way'), 'the form offers one-way');
+  assert.ok(html.includes('Multi-city'), 'the form offers multi-city');
+  assert.ok(html.includes('Trip type'), 'the trip-type control is labeled');
+});
+
 test('service worker serves with the cache version', async () => {
   const r = await fetch(`${BASE}/sw.js`);
   assert.equal(r.status, 200);

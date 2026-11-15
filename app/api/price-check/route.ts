@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { appendObservation, cabinClassFor, duffelMode, fetchLiveFares, priceCheck, trendLine, type TrendObservation } from '../../../lib/duffel';
+import { appendObservation, cabinClassFor, duffelMode, fetchLiveFares, fetchOneWayFares, priceCheck, trendLine, type TrendObservation } from '../../../lib/duffel';
 import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../../../lib/planner';
 import { suggestedStart } from '../../../lib/tripCard';
 
@@ -7,7 +7,7 @@ import { suggestedStart } from '../../../lib/tripCard';
  * POST /api/price-check — the whole-trip price check (competitor
  * learning, Nov 11 #4: Mindtrip / Kayak).
  *
- * Body: { origin, destination, travelers, month, durationDays, history?, depart?, return?, cabin? }.
+ * Body: { origin, destination, travelers, month, durationDays, history?, depart?, return?, cabin?, tripType?, legs? }.
  * Asks Duffel for the live fares for the exact trip (same dates the
  * trip card uses), compares the cheapest out+back total with the
  * plan's Best-value flight leg, and returns the honest "book now or
@@ -23,12 +23,28 @@ import { suggestedStart } from '../../../lib/tripCard';
  * stands: suggestedStart(month) + durationDays (the chat's callers
  * send month/durationDays only).
  *
+ * tripType (optional, Nov 15 2026): 'roundtrip' (default), 'oneway'
+ * or 'multicity'. One-way asks Duffel for the outbound slice only —
+ * no return is fetched and none is invented; the response carries
+ * returnDate '' and back []. Multi-city sends legs: [{ origin,
+ * destination, date }] and runs one one-way Offer Request per leg in
+ * parallel (Duffel has no multi-slice shortcut — each leg is its own
+ * honest request); the response carries legs: [{ origin, destination,
+ * destCity, date, live, reason?, out }] and liveTotal is the sum of
+ * the cheapest fare per leg, 0 unless every leg has a fare. The
+ * book-now read (verdict/line) is a round-trip comparison only — for
+ * one-way and multi-city the verdict is 'fares' when fares exist
+ * ("fares found, no round-trip budget to compare against") and the
+ * line stays empty, never a comparison against a budget that does
+ * not apply.
+ *
  * history (optional, round 2 #3): the watch's own past observations
  * [{ at, total }] — the fresh check is appended (deduped) before the
  * trend is read, so the returned trend always ends with today's fare.
  * The trend is a humble read of the traveler's own checks ("Since you
  * started watching…", confidence low/medium), never a forecast and
- * never "95% accurate".
+ * never "95% accurate". The trend is round-trip only — one-way and
+ * multi-city return the history's own trend, unappended.
  *
  * The Duffel key never leaves the server; the response carries airline
  * names and prices only.
@@ -58,6 +74,27 @@ export async function POST(req: NextRequest) {
   // Offer Request is asked for this cabin, never silently economy.
   // Junk falls back to economy.
   const cabin = cabinClassFor(raw.cabin);
+  // The trip type (Nov 15, 2026): junk falls back to round-trip, so
+  // every caller that never heard of trip types — the chat included —
+  // keeps the round-trip behavior it already had.
+  const tripType =
+    raw.tripType === 'oneway' || raw.tripType === 'multicity' ? (raw.tripType as 'oneway' | 'multicity') : 'roundtrip';
+  // The multi-city legs, validated one by one — a leg with an empty
+  // end or a bad date is dropped, never guessed; fewer than 2 clean
+  // legs is not a multi-city search.
+  const legsIn = Array.isArray(raw.legs)
+    ? (raw.legs as unknown[])
+        .map((l) => {
+          if (!l || typeof l !== 'object' || Array.isArray(l)) return null;
+          const o = l as Record<string, unknown>;
+          const oFrom = typeof o.origin === 'string' ? o.origin.trim() : '';
+          const oTo = typeof o.destination === 'string' ? o.destination.trim() : '';
+          const oDate = typeof o.date === 'string' ? o.date.trim() : '';
+          return oFrom && oTo && validIso(oDate) ? { origin: oFrom, destination: oTo, date: oDate } : null;
+        })
+        .filter((l): l is { origin: string; destination: string; date: string } => !!l)
+        .slice(0, 4)
+    : [];
 
   const plannerFlight = destination ? comparisonFor(destination, travelers).best.flight : 0;
   // The watch's own past checks, validated and capped — arbitrary
@@ -73,6 +110,149 @@ export async function POST(req: NextRequest) {
 
   const routeKey = destination ? routeKeyForDestination(destination) : '';
   const fareDestCity = routeKey ? ROUTE_STOPS[routeKey][0].city : destination;
+
+  // --- Multi-city: one one-way request per leg, in parallel. ---
+  if (tripType === 'multicity') {
+    const first = legsIn[0];
+    const firstFlight = first ? comparisonFor(first.destination, travelers).best.flight : 0;
+    if (legsIn.length < 2 || !first) {
+      return NextResponse.json({
+        live: false,
+        reason: 'missing_slots',
+        tripType: 'multicity',
+        origin: first?.origin ?? '',
+        destination: first?.destination ?? '',
+        destCity: '',
+        departDate: first?.date ?? '',
+        returnDate: legsIn.length ? legsIn[legsIn.length - 1].date : '',
+        travelers,
+        cabin,
+        mode: duffelMode(),
+        out: [],
+        back: [],
+        legs: [],
+        liveTotal: 0,
+        plannerFlight: firstFlight,
+        diff: 0,
+        verdict: 'no_fare',
+        line: '',
+        trend: trendLine(history),
+      });
+    }
+    const legResults = await Promise.all(
+      legsIn.map(async (leg) => {
+        const lk = routeKeyForDestination(leg.destination);
+        const destCity = lk ? ROUTE_STOPS[lk][0].city : leg.destination;
+        const fares = await fetchOneWayFares({
+          origin: leg.origin,
+          destCity,
+          departDate: leg.date,
+          travelers,
+          cabinClass: cabin,
+        }).catch(() => null);
+        return {
+          origin: leg.origin,
+          destination: leg.destination,
+          destCity,
+          date: leg.date,
+          live: fares?.live ?? false,
+          reason: fares?.reason,
+          out: fares?.out ?? [],
+        };
+      })
+    );
+    const allLive = legResults.every((l) => l.live && l.out.length > 0);
+    const liveTotal = allLive
+      ? legResults.reduce((sum, l) => sum + Math.min(...l.out.map((o) => o.price)), 0)
+      : 0;
+    return NextResponse.json({
+      live: allLive,
+      reason: allLive ? undefined : 'no_fare',
+      tripType: 'multicity',
+      origin: first.origin,
+      destination: first.destination,
+      destCity: legResults[0].destCity,
+      departDate: first.date,
+      returnDate: legsIn[legsIn.length - 1].date,
+      travelers,
+      cabin,
+      mode: duffelMode(),
+      out: legResults[0].out,
+      back: [],
+      legs: legResults,
+      liveTotal,
+      plannerFlight: firstFlight,
+      diff: 0,
+      verdict: allLive ? 'fares' : 'no_fare',
+      line: '',
+      trend: trendLine(history),
+    });
+  }
+
+  // --- One-way: the outbound slice only. ---
+  if (tripType === 'oneway') {
+    const departDate = validIso(departRaw)
+      ? new Date(`${departRaw}T00:00:00Z`)
+      : month
+        ? suggestedStart(month)
+        : null;
+    if (!origin || !fareDestCity || !departDate) {
+      return NextResponse.json({
+        live: false,
+        reason: 'missing_slots',
+        tripType: 'oneway',
+        origin,
+        destination,
+        destCity: fareDestCity,
+        departDate: departDate ? departDate.toISOString().slice(0, 10) : '',
+        returnDate: '',
+        travelers,
+        cabin,
+        mode: duffelMode(),
+        out: [],
+        back: [],
+        legs: [],
+        liveTotal: 0,
+        plannerFlight,
+        diff: 0,
+        verdict: 'no_fare',
+        line: '',
+        trend: trendLine(history),
+      });
+    }
+    const liveFares = await fetchOneWayFares({
+      origin,
+      destCity: fareDestCity,
+      departDate: departDate.toISOString().slice(0, 10),
+      travelers,
+      cabinClass: cabin,
+    }).catch(() => null);
+    const liveTotal = liveFares?.live && liveFares.out.length ? Math.min(...liveFares.out.map((o) => o.price)) : 0;
+    return NextResponse.json({
+      live: liveFares?.live ?? false,
+      reason: liveFares?.reason ?? (liveFares?.live ? undefined : 'no_fare'),
+      tripType: 'oneway',
+      origin: liveFares?.origin ?? origin,
+      destination,
+      destCity: liveFares?.destCity ?? fareDestCity,
+      departDate: liveFares?.departDate ?? departDate.toISOString().slice(0, 10),
+      returnDate: '',
+      travelers,
+      cabin,
+      mode: duffelMode(),
+      out: liveFares?.out ?? [],
+      back: [],
+      legs: [],
+      liveTotal,
+      plannerFlight,
+      diff: 0,
+      verdict: liveFares?.live ? 'fares' : 'no_fare',
+      line: '',
+      trend: trendLine(history),
+    });
+  }
+
+  // --- Round-trip: the original path, unchanged in behavior. ---
   const departDate = validIso(departRaw)
     ? new Date(`${departRaw}T00:00:00Z`)
     : month
@@ -89,6 +269,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       live: false,
       reason: 'missing_slots',
+      tripType: 'roundtrip',
       origin,
       destination,
       destCity: fareDestCity,
@@ -99,6 +280,7 @@ export async function POST(req: NextRequest) {
       mode: duffelMode(),
       out: [],
       back: [],
+      legs: [],
       liveTotal: 0,
       plannerFlight,
       diff: 0,
@@ -129,6 +311,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     live: check.live,
     reason: liveFares?.reason ?? (check.live ? undefined : 'no_fare'),
+    tripType: 'roundtrip',
     origin: liveFares?.origin ?? origin,
     destination,
     destCity: liveFares?.destCity ?? fareDestCity,
@@ -139,6 +322,7 @@ export async function POST(req: NextRequest) {
     mode: duffelMode(),
     out: liveFares?.out ?? [],
     back: liveFares?.back ?? [],
+    legs: [],
     liveTotal: check.liveTotal,
     plannerFlight: check.plannerFlight,
     diff: check.diff,

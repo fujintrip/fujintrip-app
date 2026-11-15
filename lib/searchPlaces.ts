@@ -67,6 +67,74 @@ export function rowIncludesPlace(destination: string, place: string): boolean {
   return entry?.stops.some((s) => s.city.toLowerCase() === place.toLowerCase()) ?? false;
 }
 
+// Flights trip types (Nov 15, 2026 — the airline interface the user
+// asked for): one-way, round-trip, multi-city. A multi-city leg is one
+// hop: from → to on a date. Legs are 2–4, never fewer — a single hop is
+// a one-way search, not a multi-city one.
+export type FlightTripType = 'roundtrip' | 'oneway' | 'multicity';
+export type FlightLeg = { from: string; to: string; depart: string };
+
+export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
+  { id: 'roundtrip', label: 'Round-trip' },
+  { id: 'oneway', label: 'One-way' },
+  { id: 'multicity', label: 'Multi-city' },
+];
+
+export function flightTripTypeFromValue(v: unknown): FlightTripType {
+  return v === 'oneway' || v === 'multicity' ? v : 'roundtrip';
+}
+
+export const MAX_FLIGHT_LEGS = 4;
+export const MIN_FLIGHT_LEGS = 2;
+
+// One leg's shape, validated — a leg with an empty end or a bad date
+// is not a leg, never a guessed one. Used by the deep-link parser and
+// the widget, so both agree on what counts.
+export function cleanFlightLeg(raw: unknown): FlightLeg | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const from = cleanPlace(r.from);
+  const to = cleanPlace(r.to);
+  const depart = cleanDate(r.depart);
+  if (!from || !to || !depart) return null;
+  return { from, to, depart };
+}
+
+// The legs a multi-city search carries: 2–4 clean legs, in order.
+// Fewer than 2 is not a multi-city search (the caller falls back);
+// more than 4 is capped at 4. Past dates drop when a today is given
+// — a shared link from last month is stale, never a trip.
+export function cleanFlightLegs(raw: unknown, todayIso?: string): FlightLeg[] {
+  if (!Array.isArray(raw)) return [];
+  const legs = raw
+    .map(cleanFlightLeg)
+    .filter((l): l is FlightLeg => !!l)
+    .filter((l) => !todayIso || l.depart >= todayIso)
+    .slice(0, MAX_FLIGHT_LEGS);
+  return legs.length >= MIN_FLIGHT_LEGS ? legs : [];
+}
+
+// The deep-link encoding for legs: from|to|date, legs joined by ','.
+// City names carry no '|' or ',' in the app's data, so the scheme is
+// unambiguous; URLSearchParams percent-encodes the separators on the
+// way out and decodes them on the way in.
+export function flightLegsToParam(legs: FlightLeg[]): string {
+  return legs.map((l) => `${l.from}|${l.to}|${l.depart}`).join(',');
+}
+
+export function flightLegsFromParam(v: unknown, todayIso?: string): FlightLeg[] {
+  if (typeof v !== 'string' || !v.trim()) return [];
+  const raw = v
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const parts = s.split('|');
+      return parts.length === 3 ? { from: parts[0], to: parts[1], depart: parts[2] } : null;
+    });
+  return cleanFlightLegs(raw, todayIso);
+}
+
 export type SearchQuery = {
   tab: HomeTabId;
   from: string;
@@ -83,6 +151,13 @@ export type SearchQuery = {
   sameLocation: boolean;
   dropoff: string;
   month: string; // '' = any month, else '1'..'12'
+  // Flights only: the trip type + the multi-city legs. For round-trip
+  // and one-way the legs are empty and from/to/depart/ret carry the
+  // trip; for multi-city legs[0] mirrors from/to/depart so every
+  // existing consumer (summary, saved label, fare context) still
+  // reads the first hop without knowing about legs.
+  tripType: FlightTripType;
+  legs: FlightLeg[];
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -119,6 +194,8 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   sameLocation: boolean;
   dropoff: string;
   month: string;
+  tripType: FlightTripType;
+  legs: FlightLeg[];
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -134,6 +211,8 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     sameLocation: q?.sameLocation ?? true,
     dropoff: q?.dropoff || '',
     month: q?.month || '',
+    tripType: q?.tripType ?? 'roundtrip',
+    legs: q?.legs ?? [],
   };
 }
 
@@ -154,6 +233,8 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     sameLocation: true,
     dropoff: '',
     month: '',
+    tripType: 'roundtrip',
+    legs: [],
   };
 }
 
@@ -217,6 +298,36 @@ export function searchQueryFromParams(
   q.dropoff = cleanPlace(params.dropoff);
   const month = cleanInt(params.month, 1, 12, 0);
   q.month = month ? String(month) : '';
+  // Flights trip type + multi-city legs (Nov 15, 2026): ?type=oneway
+  // | roundtrip | multicity, and ?legs=from|to|date,from|to|date.
+  // Junk type falls back to round-trip; fewer than 2 clean legs is
+  // not a multi-city search — it falls back to the round-trip (or
+  // one-way) the link's from/to/depart describe, never a guessed
+  // second leg. A one-way link drops any return it carries.
+  if (tab === 'flights') {
+    const type = flightTripTypeFromValue(params.type);
+    if (type === 'multicity') {
+      const legs = flightLegsFromParam(params.legs, todayIso);
+      if (legs.length >= MIN_FLIGHT_LEGS) {
+        q.tripType = 'multicity';
+        q.legs = legs;
+        q.from = legs[0].from;
+        q.to = legs[0].to;
+        q.depart = legs[0].depart;
+        q.ret = '';
+      } else {
+        q.tripType = 'roundtrip';
+        q.legs = [];
+      }
+    } else if (type === 'oneway') {
+      q.tripType = 'oneway';
+      q.legs = [];
+      q.ret = '';
+    } else {
+      q.tripType = 'roundtrip';
+      q.legs = [];
+    }
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -231,6 +342,10 @@ export function searchQueryToParams(q: SearchQuery): string {
   if (q.dest) p.set('dest', q.dest);
   if (q.depart) p.set('depart', q.depart);
   if (q.ret) p.set('return', q.ret);
+  if (q.tab === 'flights' && q.tripType !== 'roundtrip') p.set('type', q.tripType);
+  if (q.tab === 'flights' && q.tripType === 'multicity' && q.legs.length) {
+    p.set('legs', flightLegsToParam(q.legs));
+  }
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));
@@ -343,6 +458,34 @@ export function sortTabRows(rows: TabRow[], sort: RowSort): TabRow[] {
   return rows;
 }
 
+// The multi-city legs a search carries — the query's own legs when
+// the trip type is multi-city, empty otherwise. A multi-city query
+// whose legs were dropped (fewer than 2 clean legs) carries none.
+export function flightLegsFromSearch(q: SearchQuery): FlightLeg[] {
+  if (q.tab !== 'flights' || q.tripType !== 'multicity') return [];
+  return cleanFlightLegs(q.legs);
+}
+
+// The cheapest one-way total for the fares actually shown — the
+// cheapest visible outbound fare. Zero when the list is empty.
+export function cheapestOneWayTotal(out: DuffelFareOffer[]): number {
+  if (!out.length) return 0;
+  return Math.min(...out.map((o) => o.price));
+}
+
+// The cheapest multi-city total for the fares actually shown — the
+// cheapest visible fare of each leg, summed. Zero when any leg has
+// no visible fare (there is no complete trip to total).
+export function cheapestMultiCityTotal(legs: { out: DuffelFareOffer[] }[]): number {
+  if (!legs.length) return 0;
+  let total = 0;
+  for (const leg of legs) {
+    if (!leg.out.length) return 0;
+    total += Math.min(...leg.out.map((o) => o.price));
+  }
+  return total;
+}
+
 // The cheapest out + back total for the fares actually shown —
 // cheapest visible outbound + cheapest visible return. When filters
 // hide the cheapest fare, the total follows the visible list instead
@@ -378,10 +521,16 @@ export function searchRequestLabel(q: SearchQuery, rowDestination?: string): str
   const travelers = `${q.travelers} traveler${q.travelers > 1 ? 's' : ''}`;
   const dest = rowDestination ?? q.to ?? q.dest ?? '';
   switch (q.tab) {
-    case 'flights':
+    case 'flights': {
+      if (q.tripType === 'multicity' && q.legs.length >= 2) {
+        const hops = q.legs.map((l) => `${l.from} → ${l.to}`).join(' · ');
+        const dates = q.legs.map((l) => l.depart).join(', ');
+        return `Flights: ${hops} · ${dates} · ${travelers} · ${q.cabin}`;
+      }
       return `Flights: ${q.from || 'Anywhere'} → ${q.to || 'Anywhere'} · ${q.depart || 'Flexible'}${
         q.ret ? ` – ${q.ret}` : ''
       } · ${travelers} · ${q.cabin}`;
+    }
     case 'hotels':
       return `Stays: ${dest || 'Anywhere'} · ${q.depart || 'Flexible'}${
         q.ret ? ` – ${q.ret}` : ''

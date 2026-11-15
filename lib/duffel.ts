@@ -366,6 +366,46 @@ export async function fetchLiveFares(opts: {
   return result;
 }
 
+// One-way fares (Nov 15, 2026 — the Flights form's one-way and
+// multi-city trip types): a single outbound Offer Request, no return
+// leg asked for and none invented. The shape is the same LiveFares
+// the round-trip call returns, with back: [] and returnDate standing
+// in as the depart date — callers read tripType first and never
+// render a return from it.
+export async function fetchOneWayFares(opts: {
+  origin: string;
+  destCity: string;
+  departDate: string;
+  travelers: number;
+  cabinClass?: DuffelCabinClass;
+}): Promise<LiveFares> {
+  const base: LiveFares = {
+    live: false,
+    origin: opts.origin,
+    destCity: opts.destCity,
+    departDate: opts.departDate,
+    returnDate: opts.departDate,
+    travelers: opts.travelers,
+    out: [],
+    back: [],
+  };
+  const apiKey = process.env.DUFFEL_API_KEY;
+  if (!apiKey) return { ...base, reason: 'no_key' };
+  const from = CITY_IATA[opts.origin];
+  const to = CITY_IATA[opts.destCity];
+  if (!from || !to) return { ...base, reason: 'no_airport_code' };
+  const cabin = opts.cabinClass ?? 'economy';
+  const key = `oneway-${from}-${to}-${opts.departDate}-${opts.travelers}-${cabin}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.result;
+  const out = await offerRequest(apiKey, from, to, opts.departDate, opts.travelers, cabin);
+  const result: LiveFares = out.length
+    ? { ...base, live: true, out }
+    : { ...base, reason: 'no_offers' };
+  cache.set(key, { ts: Date.now(), result });
+  return result;
+}
+
 // The text block the model gets in its prompt: exact dates, the
 // cheapest fares with airline names, and the test-mode label.
 export function faresPromptBlock(f: LiveFares): string {

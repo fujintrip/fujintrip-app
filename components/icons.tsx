@@ -9,6 +9,7 @@
 // is for the homepage: header, search tabs, category tiles, trust
 // strip and package cards.
 import {
+  ArrowLeftRight,
   ArrowRight,
   BedDouble,
   Bookmark,
@@ -27,6 +28,8 @@ import {
   Moon,
   Package,
   Plane,
+  Plus,
+  Route,
   Search,
   ShieldCheck,
   Ship,
@@ -59,6 +62,9 @@ export type IconName =
   | 'users'
   | 'clock'
   | 'arrowRight'
+  | 'arrowLeftRight'
+  | 'route'
+  | 'plus'
   | 'shield'
   | 'tag'
   | 'compass'
@@ -88,6 +94,9 @@ const COMPONENTS: Record<IconName, LucideIcon> = {
   users: Users,
   clock: Clock,
   arrowRight: ArrowRight,
+  arrowLeftRight: ArrowLeftRight,
+  route: Route,
+  plus: Plus,
   shield: ShieldCheck,
   tag: Tag,
   compass: Compass,

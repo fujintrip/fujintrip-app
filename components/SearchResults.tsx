@@ -21,10 +21,13 @@ import {
   type TabRow,
 } from '../lib/homeTabs';
 import {
+  cheapestMultiCityTotal,
+  cheapestOneWayTotal,
   cheapestOutBackTotal,
   destinationPhoto,
   flightBudgetCopy,
   flightContextFromSearch,
+  flightLegsFromSearch,
   isKnownPlace,
   rowIncludesPlace,
   searchRequestLabel,
@@ -52,6 +55,7 @@ const DiscoveryMap = dynamic(() => import('../components/DiscoveryMap'), {
 type PriceCheckResponse = {
   live: boolean;
   reason?: string;
+  tripType: 'roundtrip' | 'oneway' | 'multicity';
   origin: string;
   destination: string;
   destCity: string;
@@ -62,6 +66,17 @@ type PriceCheckResponse = {
   mode: 'test' | 'live';
   out: DuffelFareOffer[];
   back: DuffelFareOffer[];
+  // Multi-city only: one entry per leg, each with its own fares.
+  // Empty for round-trip and one-way.
+  legs: {
+    origin: string;
+    destination: string;
+    destCity: string;
+    date: string;
+    live: boolean;
+    reason?: string;
+    out: DuffelFareOffer[];
+  }[];
   liveTotal: number;
   plannerFlight: number;
   line: string;
@@ -117,8 +132,17 @@ function searchSummary(q: SearchQuery): string {
   const travelers = `${q.travelers} traveler${q.travelers > 1 ? 's' : ''}`;
   const dates = q.depart ? `${q.depart}${q.ret ? ` – ${q.ret}` : ''}` : 'Flexible dates';
   switch (q.tab) {
-    case 'flights':
+    case 'flights': {
+      if (q.tripType === 'multicity' && q.legs.length >= 2) {
+        const hops = q.legs.map((l) => `${l.from} → ${l.to}`).join(' · ');
+        const dates = q.legs.map((l) => l.depart).join(', ');
+        return `Multi-city · ${hops} · ${dates} · ${travelers} · ${q.cabin}`;
+      }
+      if (q.tripType === 'oneway') {
+        return `One-way · ${q.from || 'Anywhere'} → ${q.to || 'Anywhere'} · ${q.depart || 'Flexible dates'} · ${travelers} · ${q.cabin}`;
+      }
       return `${q.from || 'Anywhere'} → ${q.to || 'Anywhere'} · ${dates} · ${travelers} · ${q.cabin}`;
+    }
     case 'hotels':
       return `${q.dest || 'Anywhere'} · ${dates} · ${q.guests} guest${q.guests > 1 ? 's' : ''} · ${q.rooms} room${q.rooms > 1 ? 's' : ''}`;
     case 'cars':
@@ -202,7 +226,9 @@ function FlightResults({
     data: null,
   });
   const fetchedKeyRef = useRef('');
-  const ctxKey = `${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}|${ctx.cabin}`;
+  const tripType = query.tripType ?? 'roundtrip';
+  const queryLegs = useMemo(() => flightLegsFromSearch(query), [query]);
+  const ctxKey = `${tripType}|${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}|${ctx.cabin}|${queryLegs.map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
 
   useEffect(() => {
     if (fetchedKeyRef.current === ctxKey) return;
@@ -214,10 +240,43 @@ function FlightResults({
     (async () => {
       let pc: PriceCheckResponse | null = null;
       try {
+        // The price-check body follows the trip type: round-trip sends
+        // depart + return; one-way sends depart only (no return is
+        // fetched and none is invented); multi-city sends one leg per
+        // hop and the route runs one one-way request per leg.
+        const body =
+          tripType === 'multicity'
+            ? {
+                tripType: 'multicity',
+                legs: queryLegs.map((l) => ({ origin: l.from, destination: l.to, date: l.depart })),
+                travelers: query.travelers,
+                cabin: ctx.cabin,
+              }
+            : tripType === 'oneway'
+              ? {
+                  tripType: 'oneway',
+                  origin: ctx.origin,
+                  destination: ctx.destination,
+                  travelers: query.travelers,
+                  month: ctx.month,
+                  durationDays: ctx.durationDays,
+                  depart: ctx.depart,
+                  cabin: ctx.cabin,
+                }
+              : {
+                  origin: ctx.origin,
+                  destination: ctx.destination,
+                  travelers: query.travelers,
+                  month: ctx.month,
+                  durationDays: ctx.durationDays,
+                  depart: ctx.depart,
+                  return: ctx.return,
+                  cabin: ctx.cabin,
+                };
         const r = await fetch('/api/price-check', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: ctx.origin, destination: ctx.destination, travelers: query.travelers, month: ctx.month, durationDays: ctx.durationDays, depart: ctx.depart, return: ctx.return, cabin: ctx.cabin }),
+          body: JSON.stringify(body),
         });
         pc = (await r.json()) as PriceCheckResponse;
       } catch {
@@ -226,16 +285,28 @@ function FlightResults({
       if (cancelled) return;
       setFares({ status: 'done', data: pc });
       if (pc?.live) {
-        const airlines = [...new Set([...pc.out, ...pc.back].map((o) => o.airline))].sort();
-        const stops = [...new Set([...pc.out, ...pc.back].map((o) => o.stops))].sort((a, b) => a - b);
+        // The filter options come from every fare the search found:
+        // out + back for round-trip, out only for one-way, all legs
+        // for multi-city — the counts in the filters panel come from
+        // the fares themselves, never from the planner.
+        const allOffers = [
+          ...(pc.out ?? []),
+          ...(pc.back ?? []),
+          ...(pc.legs ?? []).flatMap((l) => l.out),
+        ];
+        const airlines = [...new Set(allOffers.map((o) => o.airline))].sort();
+        const stops = [...new Set(allOffers.map((o) => o.stops))].sort((a, b) => a - b);
         const counts = { airlines: {} as Record<string, number>, stops: {} as Record<number, number> };
-        for (const o of [...pc.out, ...pc.back]) {
+        for (const o of allOffers) {
           counts.airlines[o.airline] = (counts.airlines[o.airline] ?? 0) + 1;
           counts.stops[o.stops] = (counts.stops[o.stops] ?? 0) + 1;
         }
         onLiveOptions({ airlines, stops, counts });
       }
-      if (pc?.departDate && pc?.returnDate) {
+      // The cached competitor fare is a round-trip fare (Travelpayouts
+      // prices_for_dates) — one-way and multi-city have no round-trip
+      // to compare, so the column stays out instead of faking one.
+      if (tripType === 'roundtrip' && pc?.departDate && pc?.returnDate) {
         setCompetitor({ status: 'loading', data: null });
         try {
           const cr = await fetch(
@@ -264,13 +335,32 @@ function FlightResults({
   // or earliest departure — not just the estimate rows below.
   const out = fares.data ? sortFareOffers(filterOffers(fares.data.out), sort) : [];
   const back = fares.data ? sortFareOffers(filterOffers(fares.data.back), sort) : [];
+  // Multi-city: one filtered + sorted list per leg, from the
+  // response's own legs — each leg keeps its route and its date.
+  const legLists = (fares.data?.legs ?? []).map((leg) => ({
+    ...leg,
+    offers: sortFareOffers(filterOffers(leg.out), sort),
+  }));
   const liveFiltersActive = stopsFilter.length > 0 || airlinesFilter.length > 0;
+  // The plan flight budget is a round-trip figure — for one-way and
+  // multi-city it would quote a budget that does not apply, so the
+  // line (and the budget inside noFareMessage) stays round-trip only.
+  const budgetFlight = tripType === 'roundtrip' ? plannerFlight : 0;
 
   return (
     <div aria-label="Flight results">
       <h3>
-        Flights · {ctx.origin} → {destCity} · {departIso} – {returnIso} · {query.travelers} traveler
-        {query.travelers > 1 ? 's' : ''} · {query.cabin}
+        {tripType === 'multicity'
+          ? `Flights · Multi-city · ${queryLegs.map((l) => `${l.from} → ${l.to}`).join(' · ')} · ${query.travelers} traveler${
+              query.travelers > 1 ? 's' : ''
+            } · ${query.cabin}`
+          : tripType === 'oneway'
+            ? `Flights · One-way · ${ctx.origin} → ${destCity} · ${departIso} · ${query.travelers} traveler${
+                query.travelers > 1 ? 's' : ''
+              } · ${query.cabin}`
+            : `Flights · ${ctx.origin} → ${destCity} · ${departIso} – ${returnIso} · ${query.travelers} traveler${
+                query.travelers > 1 ? 's' : ''
+              } · ${query.cabin}`}
       </h3>
       <div className="fare-sources">
         <FareSourceColumn
@@ -282,7 +372,87 @@ function FlightResults({
           }
         >
           {fares.status === 'loading' && <p>Checking live fares…</p>}
-          {fares.status === 'done' && fares.data?.live && (
+          {fares.status === 'done' && fares.data?.live && tripType === 'oneway' && (
+            <>
+              {liveFiltersActive && (
+                <p className="fare-count">
+                  Showing {out.length} of {fares.data.out.length} fares.{' '}
+                  <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                    Clear filters
+                  </button>
+                </p>
+              )}
+              <h5>Outbound — {fares.data.departDate}</h5>
+              <ul className="fare-list">
+                {out.map(fareRow)}
+                {out.length === 0 && (
+                  <li className="plan-muted">
+                    No outbound fares match the filters.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </li>
+                )}
+              </ul>
+              {cheapestOneWayTotal(out) > 0 && (
+                <p className="fare-total">
+                  Cheapest one-way: <strong>${cheapestOneWayTotal(out).toLocaleString()}</strong> for {query.travelers} traveler
+                  {query.travelers > 1 ? 's' : ''}.
+                </p>
+              )}
+              <p>
+                <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
+                  Save this search
+                </button>
+              </p>
+            </>
+          )}
+          {fares.status === 'done' && fares.data?.live && tripType === 'multicity' && (
+            <>
+              {legLists.map((leg, i) => (
+                <div key={`${leg.origin}-${leg.destCity}-${leg.date}`}>
+                  <h5>
+                    Leg {i + 1} — {leg.origin} → {leg.destCity} · {leg.date}
+                  </h5>
+                  {liveFiltersActive && leg.out.length > 0 && (
+                    <p className="fare-count">
+                      Showing {leg.offers.length} of {leg.out.length} fares.{' '}
+                      <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                        Clear filters
+                      </button>
+                    </p>
+                  )}
+                  <ul className="fare-list">
+                    {leg.offers.map(fareRow)}
+                    {leg.offers.length === 0 && (
+                      <li className="plan-muted">
+                        {leg.out.length === 0
+                          ? 'No fares for this leg.'
+                          : 'No fares for this leg match the filters.'}{' '}
+                        {leg.out.length > 0 && (
+                          <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                            Clear filters
+                          </button>
+                        )}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              ))}
+              {cheapestMultiCityTotal(legLists) > 0 && (
+                <p className="fare-total">
+                  Cheapest all legs: <strong>${cheapestMultiCityTotal(legLists).toLocaleString()}</strong> for {query.travelers} traveler
+                  {query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed.
+                </p>
+              )}
+              <p>
+                <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
+                  Save this search
+                </button>
+              </p>
+            </>
+          )}
+          {fares.status === 'done' && fares.data?.live && tripType === 'roundtrip' && (
             <>
               {liveFiltersActive && (
                 <p className="fare-count">
@@ -334,12 +504,14 @@ function FlightResults({
             </>
           )}
           {fares.status === 'done' && fares.data && !fares.data.live && (
-            <p>{noFareMessage(fares.data.reason, plannerFlight, budget.qualifier)}</p>
+            <p>{noFareMessage(fares.data.reason, budgetFlight, budget.qualifier)}</p>
           )}
           {fares.status === 'done' && !fares.data && (
             <p>
               Could not check live fares right now.
-              {known ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (${budget.qualifier}).` : ''}
+              {known && tripType === 'roundtrip'
+                ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (${budget.qualifier}).`
+                : ''}
             </p>
           )}
         </FareSourceColumn>
@@ -367,7 +539,7 @@ function FlightResults({
           </FareSourceColumn>
         )}
       </div>
-      {known && (
+      {known && tripType === 'roundtrip' && (
         <p>
           {budget.label}: <strong>${plannerFlight.toLocaleString()}</strong> · {query.travelers} traveler
           {query.travelers > 1 ? 's' : ''} · {budget.qualifier}
@@ -536,7 +708,7 @@ export default function SearchResults({
   const selectedDiscovery: DiscoveryEntry | null =
     discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
-  const queryKey = `${query.tab}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}`;
+  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
   useEffect(() => {

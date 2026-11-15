@@ -414,6 +414,8 @@ test('formValuesFromQuery: the widget fields for a query, both directions', () =
     sameLocation: true,
     dropoff: '',
     month: '',
+    tripType: 'roundtrip',
+    legs: [],
   });
 });
 
