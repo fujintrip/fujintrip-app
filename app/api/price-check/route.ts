@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { appendObservation, fetchLiveFares, priceCheck, trendLine, type TrendObservation } from '../../../lib/duffel';
+import { appendObservation, cabinClassFor, duffelMode, fetchLiveFares, priceCheck, trendLine, type TrendObservation } from '../../../lib/duffel';
 import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../../../lib/planner';
 import { suggestedStart } from '../../../lib/tripCard';
 
@@ -7,7 +7,7 @@ import { suggestedStart } from '../../../lib/tripCard';
  * POST /api/price-check — the whole-trip price check (competitor
  * learning, Nov 11 #4: Mindtrip / Kayak).
  *
- * Body: { origin, destination, travelers, month, durationDays, history?, depart?, return? }.
+ * Body: { origin, destination, travelers, month, durationDays, history?, depart?, return?, cabin? }.
  * Asks Duffel for the live fares for the exact trip (same dates the
  * trip card uses), compares the cheapest out+back total with the
  * plan's Best-value flight leg, and returns the honest "book now or
@@ -54,6 +54,10 @@ export async function POST(req: NextRequest) {
   };
   const departRaw = typeof raw.depart === 'string' ? raw.depart.trim() : '';
   const returnRaw = typeof raw.return === 'string' ? raw.return.trim() : '';
+  // The cabin the traveler picked (UI label or Duffel class) — the
+  // Offer Request is asked for this cabin, never silently economy.
+  // Junk falls back to economy.
+  const cabin = cabinClassFor(raw.cabin);
 
   const plannerFlight = destination ? comparisonFor(destination, travelers).best.flight : 0;
   // The watch's own past checks, validated and capped — arbitrary
@@ -91,6 +95,8 @@ export async function POST(req: NextRequest) {
       departDate: departDate ? departDate.toISOString().slice(0, 10) : '',
       returnDate: returnDate ? returnDate.toISOString().slice(0, 10) : '',
       travelers,
+      cabin,
+      mode: duffelMode(),
       out: [],
       back: [],
       liveTotal: 0,
@@ -108,6 +114,7 @@ export async function POST(req: NextRequest) {
     departDate: departDate.toISOString().slice(0, 10),
     returnDate: returnDate.toISOString().slice(0, 10),
     travelers,
+    cabinClass: cabin,
   }).catch(() => null);
   const check = liveFares ? priceCheck(liveFares, plannerFlight) : { live: false, liveTotal: 0, plannerFlight, diff: 0, verdict: 'no_fare' as const, line: '' };
   // The trend reads the watch's own past checks plus today's fresh
@@ -128,6 +135,8 @@ export async function POST(req: NextRequest) {
     departDate: liveFares?.departDate ?? departDate.toISOString().slice(0, 10),
     returnDate: liveFares?.returnDate ?? returnDate.toISOString().slice(0, 10),
     travelers,
+    cabin,
+    mode: duffelMode(),
     out: liveFares?.out ?? [],
     back: liveFares?.back ?? [],
     liveTotal: check.liveTotal,

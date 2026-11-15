@@ -77,8 +77,12 @@ test('homepage: photo hero + search widget with 7 tabs, destinations, trust stri
   for (const label of ['Stays', 'Flights', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']) {
     assert.ok(html.includes(label), `widget tab ${label} renders`);
   }
-  // Stays is the default form; the honest line sits under the button.
-  assert.ok(html.includes('Search stays'), 'the Stays search form renders by default');
+  // Flights first: the first window is airline booking (Nov 15 2026)
+  // — the Flights tab comes before Stays in the served HTML.
+  assert.ok(html.indexOf('Flights') < html.indexOf('Stays'), 'Flights tab precedes Stays');
+  // Flights is the default form (airline booking is the first window,
+  // Nov 15 2026); the honest line sits under the button.
+  assert.ok(html.includes('Search flights'), 'the Flights search form renders by default');
   assert.ok(html.includes('All-in prices. No hidden fees. Planning estimates until live suppliers connect.'), 'the widget honesty line renders');
   // Exactly ONE AI entry point on the site — the header pill.
   assert.equal((html.match(/Plan with AI/g) || []).length, 1, 'exactly one Plan with AI pill');
@@ -199,11 +203,19 @@ test('search deep link: cruises renders the honest not-broken-out note and full-
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
 });
 
-test('tabs: ?tab=bogus falls back to Stays', async () => {
+test('tabs: ?tab=bogus falls back to Flights', async () => {
   const r = await fetch(`${BASE}/?tab=bogus`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  assert.ok(html.includes('Search stays'), 'a bad tab param falls back to Stays');
+  assert.ok(html.includes('Search flights'), 'a bad tab param falls back to Flights');
+  assert.ok(!html.includes('Search stays'), 'the Stays form waits for its tab');
+});
+
+test('tabs: ?tab=hotels still lands on Stays — deep links override the Flights default', async () => {
+  const r = await fetch(`${BASE}/?tab=hotels`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Search stays'), 'the Stays search form renders for ?tab=hotels');
   assert.ok(!html.includes('Search flights'), 'the Flights form waits for its tab');
 });
 
@@ -254,6 +266,34 @@ test('tabs: price-check with explicit searched dates checks THOSE dates, not the
   const bj = await bad.json();
   assert.equal(bj.departDate, '2027-01-04');
   assert.equal(bj.returnDate, '2027-01-17');
+});
+
+test('tabs: price-check carries the picked cabin and the Duffel mode (the Flights tab wiring)', async () => {
+  // The Cabin select used to stop at the UI: the Offer Request always
+  // asked for economy, so a Business search returned economy fares.
+  // The check now echoes the cabin it asked Duffel for, and the mode
+  // the configured key implies — test here (no key in this env).
+  const r = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14, cabin: 'Business' }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.live, false);
+  assert.equal(j.reason, 'no_key');
+  assert.equal(j.cabin, 'business', 'the Business cabin travels through to the check');
+  assert.equal(j.mode, 'test', 'no key means test mode');
+  // A junk cabin falls back to economy, never crashes the check.
+  const bad = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14, cabin: 'Rocket' }),
+  });
+  assert.equal(bad.status, 200);
+  const bj = await bad.json();
+  assert.equal(bj.cabin, 'economy', 'a junk cabin falls back to economy');
+  assert.equal(bj.mode, 'test');
 });
 
 test('service worker serves with the cache version', async () => {

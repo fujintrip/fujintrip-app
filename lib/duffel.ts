@@ -195,12 +195,39 @@ export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined |
     .slice(0, 3);
 }
 
+// The cabin the traveler picked, in Duffel's own vocabulary. The
+// search widget offers Economy / Premium economy / Business / First;
+// the Offer Request takes cabin_class economy / premium_economy /
+// business / first. Anything unrecognized (including a Duffel class
+// passed straight through) falls back to economy — never a crash,
+// never a guessed cabin.
+export type DuffelCabinClass = 'economy' | 'premium_economy' | 'business' | 'first';
+
+export function cabinClassFor(value: unknown): DuffelCabinClass {
+  if (typeof value !== 'string') return 'economy';
+  const v = value.trim().toLowerCase();
+  if (v === 'premium_economy' || v === 'premium economy') return 'premium_economy';
+  if (v === 'business') return 'business';
+  if (v === 'first') return 'first';
+  return 'economy';
+}
+
+// Which Duffel mode the configured key is: a live key (duffel_live_…)
+// means real fares; anything else set — or no key at all — is test
+// mode. The fare label follows the key, so swapping test → live
+// needs no code change. (The chat's prompt block still says "test
+// fares" — a one-line follow-up when the live key goes in.)
+export function duffelMode(): 'test' | 'live' {
+  return (process.env.DUFFEL_API_KEY ?? '').startsWith('duffel_live_') ? 'live' : 'test';
+}
+
 async function offerRequest(
   apiKey: string,
   origin: string,
   destination: string,
   date: string,
-  travelers: number
+  travelers: number,
+  cabinClass: DuffelCabinClass = 'economy'
 ): Promise<DuffelFareOffer[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -216,7 +243,7 @@ async function offerRequest(
         data: {
           slices: [{ origin, destination, departure_date: date }],
           passengers: Array.from({ length: travelers }, () => ({ type: 'adult' })),
-          cabin_class: 'economy',
+          cabin_class: cabinClass,
         },
       }),
       signal: controller.signal,
@@ -241,6 +268,7 @@ export async function fetchLiveFares(opts: {
   departDate: string;
   returnDate: string;
   travelers: number;
+  cabinClass?: DuffelCabinClass;
 }): Promise<LiveFares> {
   const base: LiveFares = {
     live: false,
@@ -257,12 +285,13 @@ export async function fetchLiveFares(opts: {
   const from = CITY_IATA[opts.origin];
   const to = CITY_IATA[opts.destCity];
   if (!from || !to) return { ...base, reason: 'no_airport_code' };
-  const key = `${from}-${to}-${opts.departDate}-${opts.returnDate}-${opts.travelers}`;
+  const cabin = opts.cabinClass ?? 'economy';
+  const key = `${from}-${to}-${opts.departDate}-${opts.returnDate}-${opts.travelers}-${cabin}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.result;
   const [out, back] = await Promise.all([
-    offerRequest(apiKey, from, to, opts.departDate, opts.travelers),
-    offerRequest(apiKey, to, from, opts.returnDate, opts.travelers),
+    offerRequest(apiKey, from, to, opts.departDate, opts.travelers, cabin),
+    offerRequest(apiKey, to, from, opts.returnDate, opts.travelers, cabin),
   ]);
   const result: LiveFares =
     out.length || back.length

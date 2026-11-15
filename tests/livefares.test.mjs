@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, serviceFee } from '../lib/planner.ts';
 import { addDays, buildTripCard, suggestedStart } from '../lib/tripCard.ts';
-import { parseLiveFares } from '../lib/duffel.ts';
+import { cabinClassFor, duffelMode, parseLiveFares } from '../lib/duffel.ts';
 import { bundleFromLegs, bundleTotal } from '../lib/bundle.ts';
 
 // Local calendar date (the card formats dates locally, not UTC — see
@@ -225,4 +225,37 @@ test('tripCard live fares: the intercity nudge moves only estimates, never the l
   assert.equal(card.stops[1].transportIn.price, leg(card, 'leg-1').price);
   assert.equal(card.stops[2].transportIn.price, leg(card, 'leg-2').price);
   assert.equal(card.legs.reduce((s, l) => s + l.price, 0), card.total - plan.activities);
+});
+
+test('cabinClassFor: UI labels and Duffel classes map, junk falls back to economy', () => {
+  assert.equal(cabinClassFor('Economy'), 'economy');
+  assert.equal(cabinClassFor('Premium economy'), 'premium_economy');
+  assert.equal(cabinClassFor('Business'), 'business');
+  assert.equal(cabinClassFor('First'), 'first');
+  // A Duffel class passed straight through is kept, not re-mapped.
+  assert.equal(cabinClassFor('premium_economy'), 'premium_economy');
+  assert.equal(cabinClassFor('business'), 'business');
+  assert.equal(cabinClassFor('Rocket'), 'economy', 'junk cabin falls back to economy');
+  assert.equal(cabinClassFor(undefined), 'economy');
+  assert.equal(cabinClassFor(null), 'economy');
+  assert.equal(cabinClassFor(42), 'economy');
+});
+
+test('duffelMode: the fare label follows the key, so test → live needs no code change', () => {
+  // The key is read at call time, so the mode follows whatever key
+  // is configured — the live swap is a key swap, not a code change.
+  const saved = process.env.DUFFEL_API_KEY;
+  try {
+    delete process.env.DUFFEL_API_KEY;
+    assert.equal(duffelMode(), 'test', 'no key is test mode');
+    process.env.DUFFEL_API_KEY = 'duffel_test_abc123';
+    assert.equal(duffelMode(), 'test', 'a test key is test mode');
+    process.env.DUFFEL_API_KEY = 'duffel_live_abc123';
+    assert.equal(duffelMode(), 'live', 'a live key is live mode');
+    process.env.DUFFEL_API_KEY = 'something-else';
+    assert.equal(duffelMode(), 'test', 'an unrecognized key is test mode, never live by accident');
+  } finally {
+    if (saved === undefined) delete process.env.DUFFEL_API_KEY;
+    else process.env.DUFFEL_API_KEY = saved;
+  }
 });

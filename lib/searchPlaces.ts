@@ -12,6 +12,7 @@ import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
+import { cabinClassFor, type DuffelCabinClass } from './duffel';
 
 let placeCache: string[] | null = null;
 
@@ -197,6 +198,7 @@ export function flightContextFromSearch(q: SearchQuery): {
   durationDays: number;
   depart: string;
   return: string;
+  cabin: DuffelCabinClass;
 } {
   const destination = q.to || q.dest || 'Central Europe';
   const origin = q.from || 'New York';
@@ -225,7 +227,9 @@ export function flightContextFromSearch(q: SearchQuery): {
     q.depart && q.ret && q.ret >= depart
       ? q.ret
       : isoDate(addDays(parseLocalDate(depart), durationDays - 1));
-  return { origin, destination, month, durationDays, depart, return: ret };
+  // The cabin the traveler picked, in Duffel's vocabulary — the
+  // Offer Request is asked for this cabin, never silently economy.
+  return { origin, destination, month, durationDays, depart, return: ret, cabin: cabinClassFor(q.cabin) };
 }
 
 // Parse a YYYY-MM-DD string as a local-midnight Date, matching the

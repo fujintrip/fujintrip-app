@@ -13,8 +13,8 @@ import dynamic from 'next/dynamic';
 import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../lib/planner';
 import { discoveryDestinations, type DiscoveryEntry } from '../lib/discovery';
 import {
-  DUFFEL_TEST_LABEL,
   HOME_TABS,
+  duffelFareLabel,
   noFareMessage,
   noLegNote,
   tabRowsFor,
@@ -55,6 +55,8 @@ type PriceCheckResponse = {
   departDate: string;
   returnDate: string;
   travelers: number;
+  cabin: string;
+  mode: 'test' | 'live';
   out: DuffelFareOffer[];
   back: DuffelFareOffer[];
   liveTotal: number;
@@ -154,7 +156,7 @@ function FlightResults({
     data: null,
   });
   const fetchedKeyRef = useRef('');
-  const ctxKey = `${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}`;
+  const ctxKey = `${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}|${ctx.cabin}`;
 
   useEffect(() => {
     if (fetchedKeyRef.current === ctxKey) return;
@@ -169,7 +171,7 @@ function FlightResults({
         const r = await fetch('/api/price-check', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: ctx.origin, destination: ctx.destination, travelers: query.travelers, month: ctx.month, durationDays: ctx.durationDays, depart: ctx.depart, return: ctx.return }),
+          body: JSON.stringify({ origin: ctx.origin, destination: ctx.destination, travelers: query.travelers, month: ctx.month, durationDays: ctx.durationDays, depart: ctx.depart, return: ctx.return, cabin: ctx.cabin }),
         });
         pc = (await r.json()) as PriceCheckResponse;
       } catch {
@@ -214,7 +216,7 @@ function FlightResults({
     <div aria-label="Flight results">
       <h3>
         Flights · {ctx.origin} → {destCity} · {departIso} – {returnIso} · {query.travelers} traveler
-        {query.travelers > 1 ? 's' : ''}
+        {query.travelers > 1 ? 's' : ''} · {query.cabin}
       </h3>
       {fares.status === 'loading' && <p>Checking live fares…</p>}
       {fares.status === 'done' && fares.data?.live && (
@@ -229,7 +231,10 @@ function FlightResults({
             {back.map(fareRow)}
             {back.length === 0 && <li className="plan-muted">No return fares match the filters.</li>}
           </ul>
-          <p className="plan-muted">{DUFFEL_TEST_LABEL}</p>
+          {/* The fare label follows the configured Duffel key: test
+              fares today, the live label once the live key is in —
+              swapping the key needs no code change. */}
+          <p className="plan-muted">{duffelFareLabel(fares.data.mode)}</p>
           {fares.data.liveTotal > 0 && (
             <p>
               Cheapest out + back: <strong>${fares.data.liveTotal.toLocaleString()}</strong> for {query.travelers} traveler
