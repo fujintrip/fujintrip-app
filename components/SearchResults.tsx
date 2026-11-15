@@ -236,7 +236,10 @@ function FlightResults({
               {query.travelers > 1 ? 's' : ''}.
             </p>
           )}
-          {fares.data.line && <p className="plan-muted">{fares.data.line}</p>}
+          {/* The "Book-now read" line is NOT rendered here (defect,
+              Nov 14 2026: it read as a stray paragraph on the results
+              page). The API still returns it — the chat's trip card
+              uses it where it belongs. */}
           <p>
             <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
               Save this search

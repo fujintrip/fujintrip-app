@@ -167,6 +167,10 @@ test('search deep link: flights with off-suggested dates shows the SEARCHED date
   // The map toggle (defect, Nov 14 2026): the live flights results
   // page had no "map" at all — the toggle existed only on Stays.
   assert.ok(html.includes('Show on map'), 'the flights results keep the map toggle, like Stays');
+  // The stray "Book-now read" paragraph (defect, Nov 14 2026): it
+  // read as stray copy on the results page. The API still returns
+  // the line — the chat's trip card uses it — but results never show it.
+  assert.ok(!html.includes('Book-now read:'), 'no Book-now read paragraph on the results page');
 });
 
 test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {

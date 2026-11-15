@@ -5,6 +5,7 @@
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/normalSite.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   destinationPhoto,
   emptySearchQuery,
@@ -185,6 +186,17 @@ test('flightContextFromSearch: dates map to month + length, else the planner def
   const bare = flightContextFromSearch(emptySearchQuery('flights'));
   assert.equal(bare.destination, 'Central Europe');
   assert.equal(bare.origin, 'New York');
+});
+
+test('results heading clears the sticky bar (defect, Nov 14 2026)', () => {
+  // After a search submits, the page scrolls to #results — without
+  // scroll-margin the "Flights" heading slides underneath the sticky
+  // header + sticky results bar. The rule lives in globals.css; the
+  // value must clear 61px of header + ~50px of bar + margin.
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const m = css.match(/#results\{scroll-margin-top:(\d+)px\}/);
+  assert.ok(m, '#results has a scroll-margin-top rule');
+  assert.ok(Number(m[1]) >= 120, `scroll-margin-top clears header + bar, got ${m[1]}px`);
 });
 
 test('sortTabRows: best value keeps the planner order, cheapest sorts by price', () => {
