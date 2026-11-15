@@ -614,7 +614,6 @@ html{scroll-padding-bottom:96px}
 .fare-block{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:16px 0;background:var(--card)}
 .fare-block h4:first-child{margin-top:0}
 .fare-list{list-style:none;margin:0 0 8px;padding:0}
-.fare-row{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;padding:6px 0;font-size:15px}
 .results-note{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);font-size:14px}
 
 /* Per-source fare columns (Flights section build, Nov 15, 2026):
@@ -634,6 +633,51 @@ html{scroll-padding-bottom:96px}
 .fare-total{background:var(--accent-soft);border:1px solid var(--accent-text);border-radius:12px;padding:12px 16px;font-size:16px;margin:12px 0}
 .fare-total strong{font-size:19px}
 .fare-count{font-size:14px;color:var(--muted);margin:0 0 8px}
+
+/* Rich flight fare cards (Nov 15, 2026): Google-Flights style —
+   airline logo + name, timeline, price. One card per offer; the
+   list keeps .fare-list so sort/filters still address it. The price
+   is the largest type on the card; the per-traveler price sits under
+   it. All colors are theme tokens, so dark mode follows for free.
+   The details region fades in 200ms (transform + opacity only) and
+   is killed by the global prefers-reduced-motion rule. */
+.fare-card{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--card);margin:0 0 10px;list-style:none}
+.fare-card-main{display:flex;gap:16px;align-items:flex-start}
+.fare-card-airline{display:flex;gap:10px;align-items:center;min-width:0;flex:0 0 180px}
+.fare-card-airline-name{min-width:0}
+.fare-card-airline-name strong{display:block;font-size:15px}
+.fare-card-sub{display:block;font-size:13px}
+.airline-logo{width:32px;height:32px;border-radius:8px;object-fit:contain;flex:0 0 auto;background:var(--surface)}
+.airline-logo-fallback{border-radius:8px;background:var(--surface);color:var(--ink);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:0 0 auto}
+.fare-card-times{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.fare-card-time{display:flex;flex-direction:column;gap:2px;flex:0 0 auto}
+.fare-card-time strong{font-size:17px;font-variant-numeric:tabular-nums}
+.fare-card-time span{font-size:13px;color:var(--muted)}
+.fare-card-route{flex:1;min-width:0;text-align:center}
+.fare-card-duration{display:block;font-size:13px;color:var(--muted)}
+.fare-card-line{display:block;height:2px;background:var(--line);border-radius:2px;margin:5px 0;position:relative}
+.fare-card-line::after{content:"";position:absolute;right:0;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--accent-text)}
+.fare-card-stops{display:block;font-size:13px;color:var(--muted)}
+.fare-card-price{margin-left:auto;text-align:right;flex:0 0 auto}
+.fare-card-price strong{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.fare-card-price span{display:block;font-size:13px;color:var(--muted)}
+.fare-card-bags{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:10px 0 0}
+.fare-card-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:600;color:var(--accent-text);cursor:pointer}
+.fare-card-toggle:hover{color:var(--accent-ink)}
+.fare-card-chevron{transition:transform 200ms ease}
+.fare-card-chevron.open{transform:rotate(180deg)}
+.fare-card-details{animation:fare-details-in 200ms ease}
+@keyframes fare-details-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.fare-card-segments{list-style:none;margin:8px 0 0;padding:0}
+.fare-card-segment{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:14px;padding:8px 0;border-top:1px solid var(--line-soft)}
+.fare-card-layover{font-size:13px;color:var(--muted);margin:0 0 4px}
+@media(max-width:640px){
+  .fare-card{padding:12px}
+  .fare-card-main{flex-wrap:wrap}
+  .fare-card-airline{flex:1 1 100%}
+  .fare-card-times{flex:1 1 100%}
+  .fare-card-price{margin-left:0;text-align:left;flex:1 1 100%}
+}
 /* An inline text button for "Clear filters" — reads as a link, keeps
    the button behavior (keyboard, screen reader). */
 .linklike{background:none;border:none;padding:0;font:inherit;font-size:inherit;color:var(--accent-text);text-decoration:underline;cursor:pointer}

@@ -37,6 +37,112 @@ export type DuffelFareOffer = {
   arriveTime?: string;
   departMinutes?: number;
   durationMinutes?: number;
+  // The operating carrier's IATA code (first segment) — the airline
+  // logo comes from this code, never from a guessed URL or a
+  // hardcoded per-airline map. Undefined when Duffel gives no code.
+  carrierCode?: string;
+  // The offer's own segments, in order — the rich fare card renders
+  // flight numbers, airports, aircraft and layovers from these, never
+  // from invented data. Undefined for offers parsed before segments
+  // existed (old callers), never faked.
+  segments?: DuffelFareSegment[];
+};
+
+// One flight leg inside an offer slice, as the fare card shows it.
+// Everything here comes from Duffel's segment object; a field Duffel
+// does not provide is absent, never guessed. from/to are IATA codes
+// ('' when Duffel gives none — the card then shows times without
+// airport codes rather than a code it made up). departIso/arriveIso
+// are the raw ISO times, kept only so layovers can be computed from
+// absolute timestamps (same-airport times share a timezone, so the
+// difference is the real layover).
+export type DuffelFareSegment = {
+  carrierCode?: string;
+  carrierName: string;
+  flightNumber?: string;
+  from: string;
+  to: string;
+  departTime?: string;
+  arriveTime?: string;
+  duration?: string;
+  durationMinutes?: number;
+  aircraft?: string;
+  departIso?: string;
+  arriveIso?: string;
+};
+
+// Airline logo (rich fare cards, Nov 15 2026): Kiwi's public airline
+// logo set, verified live Nov 15 — BA/AA/TP/LH/EK all return HTTP 200
+// image/png at 64x64, an unknown code 303s to Kiwi's generic
+// placeholder image. The URL is built from the carrier code only —
+// no per-airline map, no hardcoded logos.
+export function airlineLogoUrl(code: string): string {
+  return `https://images.kiwi.com/airlines/64x64/${code.trim().toUpperCase()}.png`;
+}
+
+// Initials tile fallback: the first letters of the first two words
+// ("British Airways" → "BA", "TAP Air Portugal" → "TA", "American" →
+// "A"). Shown when there is no carrier code, the logo fails to load,
+// or the carrier is a test carrier with no real logo.
+export function airlineInitials(name: string): string {
+  const letters = (name ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('');
+  return (letters || '?').toUpperCase();
+}
+
+// Duffel's test mode flies a fictional carrier, "Duffel Airways"
+// (its own docs call it proof of test mode) — it has no real logo,
+// so the card shows the initials tile, never a logo fetched for a
+// code that belongs to some other airline.
+export function isTestCarrier(name: string): boolean {
+  return /duffel/i.test(name ?? '');
+}
+
+// Minutes as a human duration: 65 → "1h 5m", 45 → "45m", 120 → "2h".
+// Used for layovers computed from segment times.
+export function formatMinutes(mins: number): string {
+  if (!Number.isFinite(mins) || mins < 0) return '';
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+// The layovers between an offer's segments, in order: the airport the
+// traveler waits at (the arriving segment's destination) and the wait
+// in minutes, computed from the segments' absolute ISO times —
+// minutes is undefined when either time is missing or unparseable,
+// never guessed. A nonstop offer has no layovers.
+export type Layover = { airport: string; minutes: number | undefined };
+
+export function layoversFor(offer: DuffelFareOffer): Layover[] {
+  const segs = offer.segments ?? [];
+  const out: Layover[] = [];
+  for (let i = 0; i + 1 < segs.length; i++) {
+    const arrive = segs[i].arriveIso;
+    const depart = segs[i + 1].departIso;
+    let minutes: number | undefined;
+    if (arrive && depart) {
+      const a = Date.parse(arrive);
+      const d = Date.parse(depart);
+      if (Number.isFinite(a) && Number.isFinite(d) && d >= a) minutes = Math.round((d - a) / 60000);
+    }
+    out.push({ airport: segs[i].to, minutes });
+  }
+  return out;
+}
+
+// Per-traveler price from the party total Duffel quotes: rounded to
+// the nearest dollar, never a fraction. A party of 1 (or a bad count)
+// is the total itself.
+export function perTravelerPrice(total: number, travelers: number): number {
+  if (!Number.isFinite(total) || travelers < 1) return total;
+  return Math.round(total / travelers);
 };
 
 export type LiveFares = {
@@ -151,12 +257,38 @@ function okOptionalOfferFields(o: unknown): boolean {
   for (const k of ['stops', 'departMinutes', 'durationMinutes']) {
     if (r[k] !== undefined && (typeof r[k] !== 'number' || !Number.isFinite(r[k]))) return false;
   }
+  if (r.carrierCode !== undefined && typeof r.carrierCode !== 'string') return false;
+  if (r.segments !== undefined) {
+    if (!Array.isArray(r.segments)) return false;
+    for (const s of r.segments as unknown[]) {
+      if (!s || typeof s !== 'object' || Array.isArray(s)) return false;
+      const seg = s as Record<string, unknown>;
+      for (const k of ['carrierCode', 'flightNumber', 'departTime', 'arriveTime', 'duration', 'aircraft', 'departIso', 'arriveIso']) {
+        if (seg[k] !== undefined && typeof seg[k] !== 'string') return false;
+      }
+      if (seg.durationMinutes !== undefined && (typeof seg.durationMinutes !== 'number' || !Number.isFinite(seg.durationMinutes))) return false;
+      if (typeof seg.carrierName !== 'string' || !seg.carrierName) return false;
+      if (typeof seg.from !== 'string' || typeof seg.to !== 'string') return false;
+    }
+  }
   return true;
 }
 
 type DuffelSegment = {
-  operating_carrier?: { name?: string };
-  marketing_carrier?: { name?: string };
+  // Duffel v2 segment shape (verified against Duffel's own typings,
+  // Nov 15 2026): carriers carry iata_code + name; flight numbers
+  // are separate fields; origin/destination are airports with
+  // iata_code; aircraft is { name } when the carrier reports one.
+  // Every field is optional here — a segment that lacks one simply
+  // renders without it, never with a guessed value.
+  operating_carrier?: { name?: string; iata_code?: string };
+  marketing_carrier?: { name?: string; iata_code?: string };
+  operating_carrier_flight_number?: string;
+  marketing_carrier_flight_number?: string;
+  origin?: { iata_code?: string; name?: string };
+  destination?: { iata_code?: string; name?: string };
+  aircraft?: { name?: string } | null;
+  duration?: string;
   baggages?: Array<{ type?: string; quantity?: number }>;
   // ISO 8601 times as Duffel reports them (airport-local time).
   departing_at?: string;
@@ -230,6 +362,37 @@ function bagsFromSegments(segments: DuffelSegment[]): string | undefined {
 
 // The offer → fare mapping, exported so tests can run it against a canned
 // Duffel payload (the live call is best-effort and needs a key).
+// Segments are mapped in full: carrier code + name, flight number
+// (marketing first — the number the traveler booked — operating as
+// fallback), airport codes, times, duration, aircraft. Anything
+// Duffel does not provide is omitted from the segment, never guessed.
+function parseDuffelSegment(s: DuffelSegment): DuffelFareSegment {
+  const op = s.operating_carrier ?? {};
+  const mk = s.marketing_carrier ?? {};
+  const code = op.iata_code || mk.iata_code;
+  const flightNumber =
+    (mk.iata_code && s.marketing_carrier_flight_number ? `${mk.iata_code}${s.marketing_carrier_flight_number}` : undefined) ||
+    (op.iata_code && s.operating_carrier_flight_number ? `${op.iata_code}${s.operating_carrier_flight_number}` : undefined);
+  const departTime = formatTime12(s.departing_at);
+  const arriveTime = formatTime12(s.arriving_at);
+  const duration = parseIsoDuration(s.duration);
+  const durationMinutes = parseIsoDurationMinutes(s.duration);
+  return {
+    ...(code ? { carrierCode: code } : {}),
+    carrierName: op.name || mk.name || 'See details',
+    ...(flightNumber ? { flightNumber } : {}),
+    from: s.origin?.iata_code ?? '',
+    to: s.destination?.iata_code ?? '',
+    ...(departTime ? { departTime } : {}),
+    ...(arriveTime ? { arriveTime } : {}),
+    ...(duration ? { duration } : {}),
+    ...(durationMinutes !== undefined ? { durationMinutes } : {}),
+    ...(s.aircraft?.name ? { aircraft: s.aircraft.name } : {}),
+    ...(s.departing_at ? { departIso: s.departing_at } : {}),
+    ...(s.arriving_at ? { arriveIso: s.arriving_at } : {}),
+  };
+}
+
 export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined | null): DuffelFareOffer[] {
   return (data?.offers ?? [])
     .filter((o) => o.total_amount && o.slices?.length)
@@ -243,6 +406,8 @@ export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined |
       const arriveTime = formatTime12(last?.arriving_at);
       const departMinutes = minutesFromIsoTime(first?.departing_at);
       const durationMinutes = parseIsoDurationMinutes(slice.duration);
+      const parsedSegments = segments.map(parseDuffelSegment);
+      const carrierCode = parsedSegments[0]?.carrierCode;
       return {
         airline: first?.operating_carrier?.name || first?.marketing_carrier?.name || 'See details',
         price: Math.round(Number(o.total_amount)),
@@ -254,6 +419,8 @@ export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined |
         ...(arriveTime ? { arriveTime } : {}),
         ...(departMinutes !== undefined ? { departMinutes } : {}),
         ...(durationMinutes !== undefined ? { durationMinutes } : {}),
+        ...(carrierCode ? { carrierCode } : {}),
+        ...(parsedSegments.length ? { segments: parsedSegments } : {}),
       };
     })
     .sort((a, b) => a.price - b.price)

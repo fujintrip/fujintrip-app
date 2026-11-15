@@ -19,9 +19,11 @@ import {
   Car,
   CarTaxiFront,
   Check,
+  ChevronDown,
   Clock,
   Compass,
   Globe,
+  Luggage,
   Map,
   MapPin,
   Menu,
@@ -72,7 +74,9 @@ export type IconName =
   | 'bookmark'
   | 'map'
   | 'camera'
-  | 'globe';
+  | 'globe'
+  | 'luggage'
+  | 'chevronDown';
 
 const COMPONENTS: Record<IconName, LucideIcon> = {
   plane: Plane,
@@ -105,6 +109,8 @@ const COMPONENTS: Record<IconName, LucideIcon> = {
   map: Map,
   camera: Camera,
   globe: Globe,
+  luggage: Luggage,
+  chevronDown: ChevronDown,
 };
 
 export function Icon({ name, size = 20, className }: { name: IconName; size?: number; className?: string }) {

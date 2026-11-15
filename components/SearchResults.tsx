@@ -38,7 +38,11 @@ import {
 } from '../lib/searchPlaces';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { DuffelFareOffer } from '../lib/duffel';
+import { formatMinutes, layoversFor, perTravelerPrice } from '../lib/duffel';
+import { serviceFee } from '../lib/planner';
 import { SafeImg } from './FujinChat';
+import { AirlineLogo } from './AirlineLogo';
+import { Icon } from './icons';
 
 // Discovery map (design #15) — same client-only pattern as the trip
 // map. Used only by the Stays "Show on map" toggle.
@@ -89,15 +93,112 @@ function destCityFor(destination: string): string {
   return routeKey ? ROUTE_STOPS[routeKey][0].city : destination;
 }
 
-function fareRow(o: DuffelFareOffer) {
+// One fare as a full card (rich fare cards, Nov 15 2026): airline
+// logo + name, departure/arrival times with airport codes, total
+// duration, stops with the layover airport + wait (computed from the
+// offer's own segment times, never invented), flight number, cabin,
+// baggage and aircraft only when Duffel provides them — and the
+// price in the largest type on the card, with the per-traveler price
+// underneath. The segment list opens behind a "Flight details"
+// toggle (44px target, aria-expanded). Every field Duffel does not
+// provide is omitted, not guessed: no times → times show "—", no
+// airport codes → no codes, no bags → no bags line, no aircraft →
+// no aircraft line, no segments at all → no details toggle.
+function FareCard({ offer, travelers, cabin }: { offer: DuffelFareOffer; travelers: number; cabin: string }) {
+  const [open, setOpen] = useState(false);
+  const segs = offer.segments ?? [];
+  const layovers = layoversFor(offer);
+  const fromCode = segs[0]?.from ?? '';
+  const toCode = segs.length ? segs[segs.length - 1].to : '';
+  const stopsLabel = offer.stops === 0 ? 'Nonstop' : `${offer.stops} stop${offer.stops > 1 ? 's' : ''}`;
+  const layoverLabel = layovers
+    .map((l) => `${l.airport}${l.minutes !== undefined ? ` ${formatMinutes(l.minutes)}` : ''}`)
+    .filter((s) => s)
+    .join(' · ');
+  const singleFlight = segs.length === 1 ? segs[0].flightNumber : undefined;
+  const perPerson = travelers > 1 ? perTravelerPrice(offer.price, travelers) : null;
   return (
-    <li key={`${o.airline}-${o.price}`} className="fare-row">
-      <strong>{o.airline}</strong>
-      <span>
-        {o.departTime ? `${o.departTime}${o.arriveTime ? ` → ${o.arriveTime}` : ''} · ` : ''}${o.price.toLocaleString()} · {o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}
-        {o.duration ? ` · ${o.duration}` : ''}
-        {o.bags ? ` · ${o.bags}` : ''}
-      </span>
+    <li className="fare-card">
+      <div className="fare-card-main">
+        <div className="fare-card-airline">
+          <AirlineLogo code={offer.carrierCode} name={offer.airline} />
+          <div className="fare-card-airline-name">
+            <strong>{offer.airline}</strong>
+            {singleFlight && <span className="plan-muted"> · {singleFlight}</span>}
+            <span className="plan-muted fare-card-sub">{cabin}</span>
+          </div>
+        </div>
+        <div className="fare-card-times">
+          <div className="fare-card-time">
+            <strong>{offer.departTime ?? '—'}</strong>
+            {fromCode && <span>{fromCode}</span>}
+          </div>
+          <div className="fare-card-route">
+            <span className="fare-card-duration">{offer.duration || '—'}</span>
+            <span className="fare-card-line" aria-hidden="true" />
+            <span className="fare-card-stops">
+              {stopsLabel}
+              {layoverLabel ? ` · ${layoverLabel}` : ''}
+            </span>
+          </div>
+          <div className="fare-card-time">
+            <strong>{offer.arriveTime ?? '—'}</strong>
+            {toCode && <span>{toCode}</span>}
+          </div>
+        </div>
+        <div className="fare-card-price">
+          <strong>${offer.price.toLocaleString()}</strong>
+          {perPerson !== null && (
+            <span>
+              ${perPerson.toLocaleString()} per traveler · {travelers} travelers
+            </span>
+          )}
+        </div>
+      </div>
+      {offer.bags && (
+        <p className="fare-card-bags">
+          <Icon name="luggage" size={16} /> {offer.bags}
+        </p>
+      )}
+      {segs.length > 0 && (
+        <div>
+          <button
+            type="button"
+            className="fare-card-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? 'Hide details' : 'Flight details'}
+            <Icon name="chevronDown" size={16} className={open ? 'fare-card-chevron open' : 'fare-card-chevron'} />
+          </button>
+          {open && (
+            <ol className="fare-card-segments fare-card-details">
+              {segs.map((s, i) => (
+                <li key={`${s.flightNumber ?? s.carrierName}-${s.from}-${s.to}-${i}`}>
+                  <div className="fare-card-segment">
+                    <strong>{s.flightNumber ?? s.carrierName}</strong>
+                    <span>
+                      {s.from || '?'} → {s.to || '?'}
+                    </span>
+                    <span>
+                      {s.departTime ?? '—'}
+                      {s.arriveTime ? ` – ${s.arriveTime}` : ''}
+                    </span>
+                    {s.duration && <span>{s.duration}</span>}
+                    {s.aircraft && <span>{s.aircraft}</span>}
+                  </div>
+                  {i < layovers.length && (
+                    <p className="fare-card-layover">
+                      Layover in {layovers[i].airport}
+                      {layovers[i].minutes !== undefined ? ` · ${formatMinutes(layovers[i].minutes)}` : ''}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
     </li>
   );
 }
@@ -384,7 +485,14 @@ function FlightResults({
               )}
               <h5>Outbound — {fares.data.departDate}</h5>
               <ul className="fare-list">
-                {out.map(fareRow)}
+                {out.map((o) => (
+                  <FareCard
+                    key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
+                    offer={o}
+                    travelers={query.travelers}
+                    cabin={query.cabin}
+                  />
+                ))}
                 {out.length === 0 && (
                   <li className="plan-muted">
                     No outbound fares match the filters.{' '}
@@ -397,7 +505,7 @@ function FlightResults({
               {cheapestOneWayTotal(out) > 0 && (
                 <p className="fare-total">
                   Cheapest one-way: <strong>${cheapestOneWayTotal(out).toLocaleString()}</strong> for {query.travelers} traveler
-                  {query.travelers > 1 ? 's' : ''}.
+                  {query.travelers > 1 ? 's' : ''} · + ${serviceFee(cheapestOneWayTotal(out)).toLocaleString()} service fee per flight order.
                 </p>
               )}
               <p>
@@ -423,7 +531,14 @@ function FlightResults({
                     </p>
                   )}
                   <ul className="fare-list">
-                    {leg.offers.map(fareRow)}
+                    {leg.offers.map((o) => (
+                      <FareCard
+                        key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
+                        offer={o}
+                        travelers={query.travelers}
+                        cabin={query.cabin}
+                      />
+                    ))}
                     {leg.offers.length === 0 && (
                       <li className="plan-muted">
                         {leg.out.length === 0
@@ -442,7 +557,7 @@ function FlightResults({
               {cheapestMultiCityTotal(legLists) > 0 && (
                 <p className="fare-total">
                   Cheapest all legs: <strong>${cheapestMultiCityTotal(legLists).toLocaleString()}</strong> for {query.travelers} traveler
-                  {query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed.
+                  {query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed · + ${serviceFee(cheapestMultiCityTotal(legLists)).toLocaleString()} service fee per flight order.
                 </p>
               )}
               <p>
@@ -464,7 +579,14 @@ function FlightResults({
               )}
               <h5>Outbound — {fares.data.departDate}</h5>
               <ul className="fare-list">
-                {out.map(fareRow)}
+                {out.map((o) => (
+                  <FareCard
+                    key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
+                    offer={o}
+                    travelers={query.travelers}
+                    cabin={query.cabin}
+                  />
+                ))}
                 {out.length === 0 && (
                   <li className="plan-muted">
                     No outbound fares match the filters.{' '}
@@ -476,7 +598,14 @@ function FlightResults({
               </ul>
               <h5>Return — {fares.data.returnDate}</h5>
               <ul className="fare-list">
-                {back.map(fareRow)}
+                {back.map((o) => (
+                  <FareCard
+                    key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
+                    offer={o}
+                    travelers={query.travelers}
+                    cabin={query.cabin}
+                  />
+                ))}
                 {back.length === 0 && (
                   <li className="plan-muted">
                     No return fares match the filters.{' '}
@@ -489,7 +618,7 @@ function FlightResults({
               {cheapestOutBackTotal(out, back) > 0 && (
                 <p className="fare-total">
                   Cheapest out + back: <strong>${cheapestOutBackTotal(out, back).toLocaleString()}</strong> for {query.travelers} traveler
-                  {query.travelers > 1 ? 's' : ''}.
+                  {query.travelers > 1 ? 's' : ''} · + ${serviceFee(cheapestOutBackTotal(out, back)).toLocaleString()} service fee per flight order.
                 </p>
               )}
               {/* The "Book-now read" line is NOT rendered here (defect,
