@@ -101,6 +101,25 @@ export function __clearPlaceSuggestionCache(): void {
   clientCache.clear();
 }
 
+// The listbox meta line for one suggestion — the kind word, the
+// country and the IATA code. An airport whose name already ends
+// with "Airport" (Travelpayouts returns "London Heathrow Airport")
+// does NOT get the kind word again: "London Heathrow Airport
+// Airport" (defect, Nov 15 2026) is the kind of unprofessional
+// label a traveler notices immediately. The check is
+// case-insensitive and trailing-space tolerant.
+export function suggestionKindLabel(s: PlaceSuggestion): string {
+  if (s.kind === 'airport' && /airport$/i.test(s.name.trim())) return '';
+  return s.kind === 'airport' ? 'Airport' : s.kind === 'region' ? 'Region' : 'City';
+}
+
+export function suggestionMeta(s: PlaceSuggestion): string {
+  const parts = [suggestionKindLabel(s), s.country].filter((p): p is string => Boolean(p));
+  let meta = parts.join(' · ');
+  if (s.iata) meta += `${meta ? ' ' : ''}(${s.iata})`;
+  return meta;
+}
+
 // Fetch suggestions for a typed prefix from /api/places. Any failure
 // (network, bad JSON, server error) is an honest empty list — the field
 // stays usable as a plain input and the known-list fallback already ran

@@ -156,10 +156,16 @@ export function duffelFareLabel(mode: string | undefined): string {
 
 // The honest line when /api/price-check has no live fare: the reason
 // is named, the plan's own flight budget stands in — never a fake fare.
-export function noFareMessage(reason: string | undefined, plannerFlight: number): string {
+// The qualifier names the estimate: 'planning estimate' for economy,
+// 'economy planning estimate' when the traveler searched a higher
+// cabin — the budget is an economy figure (see flightBudgetCopy in
+// lib/searchPlaces.ts; homeTabs cannot import it, searchPlaces
+// already imports homeTabs, so the qualifier arrives as a plain
+// string from the caller).
+export function noFareMessage(reason: string | undefined, plannerFlight: number, qualifier = 'planning estimate'): string {
   const budget =
     plannerFlight > 0
-      ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (planning estimate).`
+      ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (${qualifier}).`
       : '';
   if (reason === 'no_airport_code')
     return `No live fare was looked up — the departure city or the destination has no airport code on file (codes are never guessed).${budget}`;

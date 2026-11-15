@@ -121,4 +121,12 @@ test('labels: the Duffel test label and the no-fare lines never promise a live p
     assert.ok(line.includes('$1,512'), `no-fare line for ${reason} keeps the plan flight budget`);
   }
   assert.ok(noFareMessage('no_airport_code', 1512).includes('no airport code'), 'the airport-code gap is named');
+  // The budget is an economy figure: a Business search passes the
+  // economy qualifier through (defect, Nov 15 2026), the default
+  // stays the plain planning estimate for economy searches.
+  assert.ok(
+    noFareMessage('no_offers', 1512, 'economy planning estimate').includes('(economy planning estimate)'),
+    'a non-economy search names the economy estimate in the no-fare line'
+  );
+  assert.ok(noFareMessage('no_offers', 1512).includes('(planning estimate)'), 'economy keeps the plain estimate');
 });

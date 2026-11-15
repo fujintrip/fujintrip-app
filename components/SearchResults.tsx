@@ -22,6 +22,7 @@ import {
 } from '../lib/homeTabs';
 import {
   destinationPhoto,
+  flightBudgetCopy,
   flightContextFromSearch,
   isKnownPlace,
   rowIncludesPlace,
@@ -141,6 +142,12 @@ function FlightResults({
   const departIso = ctx.depart;
   const returnIso = ctx.return;
   const plannerFlight = known ? comparisonFor(ctx.destination, query.travelers).best.flight : 0;
+  // The planner budget is an economy figure (see flightBudgetCopy):
+  // on a Business/First search the line says so instead of printing
+  // a $630 economy budget next to business fares (defect, Nov 15
+  // 2026). No cabin multiplier is invented — the figure stays the
+  // economy estimate and the label says so.
+  const budget = flightBudgetCopy(query.cabin);
   const rows = useMemo(() => {
     const all = tabRowsFor('flights', query.travelers);
     const sorted = sortTabRows(all, sort);
@@ -253,18 +260,18 @@ function FlightResults({
         </div>
       )}
       {fares.status === 'done' && fares.data && !fares.data.live && (
-        <p>{noFareMessage(fares.data.reason, plannerFlight)}</p>
+        <p>{noFareMessage(fares.data.reason, plannerFlight, budget.qualifier)}</p>
       )}
       {fares.status === 'done' && !fares.data && (
         <p>
           Could not check live fares right now.
-          {known ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (planning estimate).` : ''}
+          {known ? ` The plan's flight budget for this trip is $${plannerFlight.toLocaleString()} (${budget.qualifier}).` : ''}
         </p>
       )}
       {known && (
         <p>
-          Plan flight budget: <strong>${plannerFlight.toLocaleString()}</strong> · {query.travelers} traveler
-          {query.travelers > 1 ? 's' : ''} · planning estimate
+          {budget.label}: <strong>${plannerFlight.toLocaleString()}</strong> · {query.travelers} traveler
+          {query.travelers > 1 ? 's' : ''} · {budget.qualifier}
         </p>
       )}
       {competitor.status === 'loading' && <p>Checking other sites…</p>}

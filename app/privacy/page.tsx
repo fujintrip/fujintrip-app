@@ -38,7 +38,7 @@ export default function Privacy() {
           <p>If we start collecting anything new — for example, accounts, payments or analytics — we will update this page and change the date above before it takes effect.</p>
 
           <h2 style={{ marginTop: 28 }}>Contact</h2>
-          <p>FujinTrip — fujintrip.com. Contact details will be added here once booking is live.</p>
+          <p>FujinTrip — fujintrip.com. Contact us at <a href="mailto:fujintrip@gmail.com">fujintrip@gmail.com</a> — see also our <a href="/contact">contact page</a>.</p>
         </section>
       </main>
       <footer>

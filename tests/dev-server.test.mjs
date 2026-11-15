@@ -139,6 +139,30 @@ test('homepage hero is white: no background photo, no rotation, headline + sub +
   assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto card photo still renders');
 });
 
+test('footer pages: /about, /faq and /contact are real pages, and the footer links to them (defect, Nov 15 2026)', async () => {
+  const home = await (await fetch(`${BASE}/`)).text();
+  for (const href of ['href="/about"', 'href="/contact"', 'href="/faq"', 'href="/faq#cancellation"']) {
+    assert.ok(home.includes(href), `homepage footer links ${href}`);
+  }
+  const about = await fetch(`${BASE}/about`);
+  assert.equal(about.status, 200);
+  const aboutHtml = await about.text();
+  assert.ok(aboutHtml.includes('About FujinTrip'), 'About page renders');
+  assert.ok(aboutHtml.includes('one-stop travel platform'), 'About says what FujinTrip is');
+  const faq = await fetch(`${BASE}/faq`);
+  assert.equal(faq.status, 200);
+  const faqHtml = (await faq.text()).replace(/&#x27;/g, "'");
+  assert.ok(faqHtml.includes('Frequently asked questions'), 'FAQ page renders');
+  assert.ok(faqHtml.includes('id="cancellation"'), 'FAQ has the cancellation anchor the footer links to');
+  assert.ok(faqHtml.includes('take bookings yet'), 'cancellation answer is honest — no bookings yet');
+  assert.ok(faqHtml.includes('fujintrip@gmail.com'), 'FAQ points at the real mailbox');
+  const contact = await fetch(`${BASE}/contact`);
+  assert.equal(contact.status, 200);
+  const contactHtml = await contact.text();
+  assert.ok(contactHtml.includes('Contact us'), 'Contact page renders');
+  assert.ok(contactHtml.includes('mailto:fujintrip@gmail.com'), 'Contact links the real mailbox');
+});
+
 test('tabs: ?tab=flights shows the Flights form, still no results before a search', async () => {
   const r = await fetch(`${BASE}/?tab=flights`);
   assert.equal(r.status, 200);
@@ -166,6 +190,17 @@ test('search deep link: flights with dates renders the results shell — budget,
   assert.ok(html.includes('planning estimate'), 'the estimates are labeled');
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
   assert.ok(!html.includes('Book now'), 'no Book now in the results');
+});
+
+test('search deep link: a Business-cabin flight search labels the planner budget as the economy estimate (defect, Nov 15 2026)', async () => {
+  // The planner budget is an economy figure — on a Business search
+  // the line must say so instead of printing a $630 economy budget
+  // next to business fares. The figure itself is unchanged.
+  const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2&cabin=Business`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Plan flight budget (economy estimate)'), 'the Business search names the economy estimate');
+  assert.ok(html.includes('$1,512'), 'the figure is still the economy budget');
 });
 
 test('search deep link: stays with dates renders per-destination rows with Best value labels and the map toggle', async () => {

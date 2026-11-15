@@ -709,15 +709,23 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             <div className="footer-col">
               <h3>Company</h3>
               <ul>
-                <li>About</li>
-                <li>Contact</li>
+                <li>
+                  <a href="/about">About</a>
+                </li>
+                <li>
+                  <a href="/contact">Contact</a>
+                </li>
               </ul>
             </div>
             <div className="footer-col">
               <h3>Help</h3>
               <ul>
-                <li>FAQ</li>
-                <li>Cancellation</li>
+                <li>
+                  <a href="/faq">FAQ</a>
+                </li>
+                <li>
+                  <a href="/faq#cancellation">Cancellation</a>
+                </li>
                 <li>
                   <a href="/privacy">Privacy Policy</a>
                 </li>

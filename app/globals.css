@@ -728,6 +728,11 @@ html{scroll-padding-bottom:96px}
 .filter-group h3{font-size:13px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .filter-group select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink)}
 .filter-check{display:flex;align-items:center;gap:8px;font-size:14px;padding:4px 0;cursor:pointer}
+/* The global input rule above (input,select{flex:1}) would stretch a
+   filter checkbox across the whole row and push its label to the
+   column's far right edge (defect, Nov 15 2026). A filter checkbox
+   keeps its natural size, so the label sits right next to it. */
+.filter-check input{flex:none;width:auto;padding:0}
 .filters-open-row{display:none}
 .result-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
 .result-card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}

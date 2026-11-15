@@ -87,6 +87,19 @@ export type SearchQuery = {
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
 
+// The planner's flight budget is built from economy fares, so on a
+// non-economy search the figure must say so: a $630 economy budget
+// printed next to $2,609 of Business fares reads as a contradiction
+// (defect, Nov 15 2026). No cabin multiplier is invented here — the
+// figure stays the economy estimate and the label says so.
+export function flightBudgetCopy(cabin: string | undefined): { label: string; qualifier: string } {
+  const economy = !cabin || cabin === 'Economy';
+  return {
+    label: economy ? 'Plan flight budget' : 'Plan flight budget (economy estimate)',
+    qualifier: economy ? 'planning estimate' : 'economy planning estimate',
+  };
+}
+
 export function emptySearchQuery(tab: HomeTabId): SearchQuery {
   return {
     tab,

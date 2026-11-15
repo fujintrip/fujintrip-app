@@ -6,7 +6,10 @@
 // Behavior:
 // - Suggestions appear as the traveler types (debounced ~250ms, short
 //   client cache), from GET /api/places — Travelpayouts autocomplete,
-//   then Nominatim, then the known list (see lib/places.ts).
+//   then Nominatim, then the known list (see lib/places.ts). Pasting
+//   text fires the same debounced fetch as typing: the component
+//   drives the paste itself (onPaste below) because a paste does not
+//   always deliver a usable change event.
 // - Keyboard: ArrowDown/ArrowUp cycle, Enter selects the highlighted
 //   suggestion, Escape closes. Mouse: click (mousedown) selects.
 // - ARIA: combobox on the input, listbox/option on the suggestions,
@@ -18,21 +21,19 @@
 //   (for an airport, the city it serves) and the existing submit flow
 //   resolves it exactly as a typed place today. Values set by selection
 //   or by a destination-card prefill do NOT trigger a fetch — only
-//   typing does.
+//   typing (and pasting) does. A selection closes the listbox for
+//   good: the value change it causes must not re-open it.
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import {
   autocompleteKeyDown,
   fetchPlaceSuggestions,
+  suggestionMeta,
   type PlaceSuggestion,
 } from '../lib/places';
 
 const DEBOUNCE_MS = 250;
 const MIN_CHARS = 2;
-
-function kindLabel(kind: PlaceSuggestion['kind']): string {
-  return kind === 'airport' ? 'Airport' : kind === 'region' ? 'Region' : 'City';
-}
 
 export default function PlaceField({
   id,
@@ -53,17 +54,20 @@ export default function PlaceField({
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  // True only when the last value change came from typing in this
-  // field — selection and destination-card prefill set the value
-  // without typing, and must not pop the listbox open.
+  // True only when the last value change came from typing or pasting
+  // in this field — selection and destination-card prefill set the
+  // value without typing, and must not pop the listbox open.
   const typedRef = useRef(false);
   const seqRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    // Any value change invalidates a pending debounced fetch.
+  // One debounced fetch for a typed or pasted value. The seq guard
+  // drops whichever call is stale when a paste and a keystroke (or
+  // two schedules of the same value) overlap.
+  const scheduleFetch = (q: string) => {
     const seq = ++seqRef.current;
-    if (!typedRef.current) return;
-    if (value.trim().length < MIN_CHARS) {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (q.trim().length < MIN_CHARS) {
       setSuggestions([]);
       setOpen(false);
       setActive(-1);
@@ -72,8 +76,8 @@ export default function PlaceField({
       return;
     }
     setLoading(true);
-    const t = setTimeout(async () => {
-      const places = await fetchPlaceSuggestions(value);
+    timerRef.current = setTimeout(async () => {
+      const places = await fetchPlaceSuggestions(q);
       if (seq !== seqRef.current) return; // a newer keystroke won
       setSuggestions(places);
       setSearched(true);
@@ -81,15 +85,51 @@ export default function PlaceField({
       setOpen(true);
       setActive(-1);
     }, DEBOUNCE_MS);
-    return () => clearTimeout(t);
+  };
+
+  useEffect(() => {
+    // Any value change invalidates a pending debounced fetch.
+    if (!typedRef.current) return;
+    scheduleFetch(value);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [value]);
 
   const select = (s: PlaceSuggestion) => {
+    // The value change below must NOT re-trigger the fetch: the
+    // traveler picked a place, they are done typing. typedRef is
+    // cleared first, so the value effect returns early and the
+    // listbox stays closed (defect, Nov 15 2026: the dropdown
+    // reopened ~250ms after a selection and covered the "All-in
+    // prices…" disclaimer under the search card).
+    typedRef.current = false;
+    if (timerRef.current) clearTimeout(timerRef.current);
     onChange(s.value);
     setOpen(false);
     setActive(-1);
     setSuggestions([]);
     setSearched(false);
+    setLoading(false);
+  };
+
+  const onPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    // Paste fires the same debounced fetch as typing. The component
+    // drives the paste itself — prevent the native insert, compute
+    // the pasted value, push it through the normal onChange path —
+    // because some paste paths (context-menu paste, browser
+    // extensions, automation) do not deliver a usable change event,
+    // and a paste that never fetches looks broken (defect, Nov 15
+    // 2026: pasting never opened suggestions).
+    e.preventDefault();
+    typedRef.current = true;
+    const pasted = e.clipboardData.getData('text');
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const next = el.value.slice(0, start) + pasted + el.value.slice(end);
+    onChange(next);
+    scheduleFetch(next);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -115,6 +155,7 @@ export default function PlaceField({
           typedRef.current = true;
           onChange(e.target.value);
         }}
+        onPaste={onPaste}
         onFocus={() => {
           if (suggestions.length > 0) setOpen(true);
         }}
@@ -156,11 +197,7 @@ export default function PlaceField({
                   }}
                 >
                   <span className="sw-sug-name">{s.name}</span>
-                  <span className="sw-sug-meta">
-                    {kindLabel(s.kind)}
-                    {s.country ? ` · ${s.country}` : ''}
-                    {s.iata ? ` (${s.iata})` : ''}
-                  </span>
+                  <span className="sw-sug-meta">{suggestionMeta(s)}</span>
                 </li>
               ))}
             </ul>

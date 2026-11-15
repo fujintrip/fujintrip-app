@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import {
   destinationPhoto,
   emptySearchQuery,
+  flightBudgetCopy,
   flightContextFromSearch,
   isKnownPlace,
   knownPlaceNames,
@@ -33,6 +34,17 @@ test('knownPlaceNames: every place the app knows, sorted, no duplicates', () => 
   const sorted = [...names].sort((a, b) => a.localeCompare(b));
   assert.deepEqual(names, sorted, 'sorted for the datalist');
   assert.ok(names.every((n) => n.length > 0), 'no empty names');
+});
+
+test('flightBudgetCopy: the planner budget is an economy figure — a non-economy cabin says so', () => {
+  assert.deepEqual(flightBudgetCopy('Economy'), { label: 'Plan flight budget', qualifier: 'planning estimate' });
+  assert.deepEqual(flightBudgetCopy(undefined), { label: 'Plan flight budget', qualifier: 'planning estimate' });
+  assert.deepEqual(flightBudgetCopy('Business'), {
+    label: 'Plan flight budget (economy estimate)',
+    qualifier: 'economy planning estimate',
+  });
+  assert.deepEqual(flightBudgetCopy('First').label, 'Plan flight budget (economy estimate)');
+  assert.deepEqual(flightBudgetCopy('Premium economy').label, 'Plan flight budget (economy estimate)');
 });
 
 test('isKnownPlace: exact match only, case-insensitive', () => {

@@ -12,6 +12,8 @@ import {
   fetchPlaceSuggestions,
   normalizePlaceQuery,
   searchPlaces,
+  suggestionKindLabel,
+  suggestionMeta,
 } from '../lib/places.ts';
 
 beforeEach(() => {
@@ -77,6 +79,20 @@ const cannedNominatim = [
 function okJson(data) {
   return async () => ({ ok: true, json: async () => data });
 }
+
+test('suggestionKindLabel: a name already ending in "Airport" drops the kind word — no "Airport Airport"', () => {
+  const heathrow = { name: 'London Heathrow Airport', value: 'London', kind: 'airport', country: 'United Kingdom', iata: 'LHR' };
+  assert.equal(suggestionKindLabel(heathrow), '', 'the name already says Airport');
+  assert.equal(suggestionMeta(heathrow), 'United Kingdom (LHR)', 'the meta line carries country + IATA only');
+  const bare = { name: 'Heathrow', value: 'London', kind: 'airport', country: 'United Kingdom', iata: 'LHR' };
+  assert.equal(suggestionKindLabel(bare), 'Airport', 'a name without Airport still gets the kind word');
+  assert.equal(suggestionMeta(bare), 'Airport · United Kingdom (LHR)');
+  const lower = { name: 'London City airport', value: 'London', kind: 'airport' };
+  assert.equal(suggestionKindLabel(lower), '', 'the check is case-insensitive');
+  assert.equal(suggestionKindLabel({ name: 'London', value: 'London', kind: 'city', iata: 'LON' }), 'City');
+  assert.equal(suggestionKindLabel({ name: 'Central Europe', value: 'Central Europe', kind: 'region' }), 'Region');
+  assert.equal(suggestionMeta({ name: 'Paris Orly Airport', value: 'Paris', kind: 'airport', iata: 'ORY' }), '(ORY)', 'kind word dropped, no country, IATA stands alone');
+});
 
 test('normalizePlaceQuery: trims, collapses spaces, caps length, non-string is empty', () => {
   assert.equal(normalizePlaceQuery('  New   York  '), 'New York');
