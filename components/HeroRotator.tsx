@@ -2,8 +2,8 @@
 // photo at a time, crossfading every ~7s. Only photos already in the
 // codebase and verified (lib/heroRotation.ts).
 //
-// - The first photo is the Kyoto torii, rendered eagerly exactly as
-//   before — rotation starts after hydration, so the server HTML is
+// - The first photo is the Kyoto Yasaka pagoda street at sunset,
+//   rendered eagerly exactly as before — rotation starts after hydration, so the server HTML is
 //   unchanged for the first paint.
 // - The next photo is preloaded, so the fade never shows a blank or
 //   a grey placeholder.

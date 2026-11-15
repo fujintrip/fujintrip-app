@@ -142,9 +142,10 @@ type FlightStatusData = {
 // that name), so the portrait never loaded. Served locally now; credit stays
 // in the footer.
 export const FUJIN_IMG = '/images/fujin-wind-god.jpg';
-// Hero photo (first-screen rebuild, Nov 13): Kyoto's torii gates —
-// the Kyoto template photo already in lib/data.ts, same photo ID,
-// portrait crop for the tall hero frame. Never a new stock photo.
+// Hero photo (first-screen rebuild, Nov 13): Kyoto's Yasaka pagoda
+// street at sunset — the Kyoto template photo already in lib/data.ts,
+// same photo ID, portrait crop for the tall hero frame. Never a new
+// stock photo.
 export const HERO_PHOTO = 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=900&h=1200&q=70';
 
 // Image with a graceful fallback: a failed image never shows a broken
@@ -2288,13 +2289,13 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
         </div>
         {/* Hero photo (first-screen rebuild, Nov 13): at S0 on a wide
             screen the chat shares the first viewport with one tall
-            destination photo — Kyoto's torii gates — like Layla's
-            cherry blossoms. It is decoration, never interactive, and
+            destination photo — Kyoto's Yasaka pagoda street at
+            sunset — like Layla's cherry blossoms. It is decoration, never interactive, and
             it is gone below 1200px so the chat keeps the whole width
             on a tablet or phone. */}
         {uiState === 'S0' && (
           <figure className="hero-photo">
-            <SafeImg src={HERO_PHOTO} alt="Vermilion torii gates at Fushimi Inari shrine, Kyoto" label="Kyoto" className="hero-photo-img" loading="eager" />
+            <SafeImg src={HERO_PHOTO} alt="Yasaka pagoda street at sunset, Kyoto" label="Kyoto" className="hero-photo-img" loading="eager" />
           </figure>
         )}
         {/* Live trip panel (app shell + interface round §5, M1): the

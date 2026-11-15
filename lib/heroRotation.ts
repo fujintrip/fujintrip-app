@@ -1,18 +1,18 @@
 // Rotating homepage hero background (Nov 14, 2026): the hero cycles
 // through destination photos already in the codebase and verified —
-// the Kyoto torii hero photo, the 12 CITY_PHOTOS, and the 3 hidden-gem
-// photos. Never invent a photo URL: every slide is built from
-// lib/data.ts (GLOBAL_DESTINATIONS / CITY_PHOTOS / HIDDEN_GEMS), plus
-// the hero torii URL itself — it must stay identical to HERO_PHOTO
-// in components/FujinChat.tsx (same photo ID, portrait crop
+// the Kyoto Yasaka pagoda hero photo, the 12 CITY_PHOTOS, and the 3
+// hidden-gem photos. Never invent a photo URL: every slide is built
+// from lib/data.ts (GLOBAL_DESTINATIONS / CITY_PHOTOS / HIDDEN_GEMS),
+// plus the hero Yasaka pagoda URL itself — it must stay identical to
+// HERO_PHOTO in components/FujinChat.tsx (same photo ID, portrait crop
 // w=900&h=1200 — the Kyoto template photo in GLOBAL_DESTINATIONS is
 // the same photo with a landscape crop, so it is NOT the same URL).
 // The unit test pins the two equal.
 import { CITY_PHOTOS, HIDDEN_GEMS } from './data';
 
-// The hero torii photo, exactly as the hero rendered it before
+// The hero Yasaka pagoda photo, exactly as the hero rendered it before
 // rotation — first slide, rendered eagerly.
-const HERO_TORII = 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=900&h=1200&q=70';
+const HERO_KYOTO = 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=900&h=1200&q=70';
 
 export type HeroSlide = { src: string; alt: string; label: string };
 
@@ -35,10 +35,12 @@ const CITY_ALT: Record<string, string> = {
   'New York': 'Lower Manhattan skyline in New York',
 };
 
-// First slide is the Kyoto torii — the same photo the hero rendered
-// before rotation (HERO_PHOTO in components/FujinChat.tsx).
+// First slide is the Kyoto hero photo — the Yasaka pagoda street at
+// sunset (Unsplash photo-1493976040374-85c8e12f0c0e). The alt used to
+// say "Torii gates at Fushimi Inari" — wrong subject (defect, Nov 14
+// 2026); the photo shows the pagoda street, not the torii gates.
 export const HERO_SLIDES: HeroSlide[] = [
-  { src: HERO_TORII, alt: 'Torii gates at Fushimi Inari, Kyoto', label: 'Kyoto' },
+  { src: HERO_KYOTO, alt: 'Yasaka pagoda street at sunset, Kyoto', label: 'Kyoto' },
   ...Object.entries(CITY_PHOTOS).map(([city, src]) => ({
     src,
     alt: CITY_ALT[city] ?? city,

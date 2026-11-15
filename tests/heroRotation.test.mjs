@@ -41,12 +41,17 @@ test('hero rotation: slides are only verified photos already in the codebase', (
   }
 });
 
-test('hero rotation: first slide is the Kyoto torii hero', () => {
+test('hero rotation: first slide is the Kyoto Yasaka pagoda hero', () => {
   assert.equal(HERO_SLIDES[0].src, heroPhotoUrl(), 'first slide is HERO_PHOTO');
   assert.equal(HERO_SLIDES[0].label, 'Kyoto');
   // Same photo ID as the Kyoto template photo in GLOBAL_DESTINATIONS,
   // portrait crop (w=900&h=1200) rather than its landscape crop.
-  assert.ok(HERO_SLIDES[0].src.includes('photo-1493976040374-85c8e12f0c0e'), 'first slide is the torii photo');
+  assert.ok(HERO_SLIDES[0].src.includes('photo-1493976040374-85c8e12f0c0e'), 'first slide is the Yasaka pagoda photo');
+  // The photo is the Yasaka pagoda street at sunset — the old alt said
+  // "Torii gates at Fushimi Inari", the wrong subject (defect, Nov 14
+  // 2026). The alt must describe the actual photo, never the torii.
+  assert.equal(HERO_SLIDES[0].alt, 'Yasaka pagoda street at sunset, Kyoto');
+  assert.ok(!/torii/i.test(HERO_SLIDES[0].alt), 'hero alt never mentions torii gates');
 });
 
 test('hero rotation: every CITY_PHOTOS city and every hidden gem is in the rotation', () => {
