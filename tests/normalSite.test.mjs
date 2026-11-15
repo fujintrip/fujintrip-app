@@ -199,6 +199,25 @@ test('results heading clears the sticky bar (defect, Nov 14 2026)', () => {
   assert.ok(Number(m[1]) >= 120, `scroll-margin-top clears header + bar, got ${m[1]}px`);
 });
 
+test('results map stays below the sticky bar (defect, Nov 14 2026)', () => {
+  // While scrolling with the results map open, Leaflet map layers
+  // rendered OVER the sticky search-summary bar: Leaflet panes sit at
+  // z-index 200–1000, the bar at 40. The fix is stacking only — the
+  // map container (.discover-map) is its own stacking context at
+  // z-index 0, so every map layer (Leaflet panes and MapLibre
+  // markers alike) paints below the sticky results bar (40) and the
+  // sticky site header (60). The map itself is untouched.
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const m = css.match(/\.discover-map\{[^}]*z-index:\s*(\d+)/);
+  assert.ok(m, '.discover-map has a z-index rule');
+  assert.equal(Number(m[1]), 0, 'the map container sits at z-index 0');
+  assert.ok(/\.discover-map\{[^}]*position:\s*relative/.test(css), '.discover-map is positioned (so z-index applies)');
+  const bar = css.match(/\.results-bar\{[^}]*z-index:\s*(\d+)/);
+  assert.ok(bar && Number(bar[1]) > Number(m[1]), 'the sticky results bar paints above the map container');
+  const header = css.match(/\.site-header\{[^}]*z-index:\s*(\d+)/);
+  assert.ok(header && Number(header[1]) > Number(m[1]), 'the sticky site header paints above the map container');
+});
+
 test('sortTabRows: best value keeps the planner order, cheapest sorts by price', () => {
   const rows = tabRowsFor('hotels', 2);
   assert.deepEqual(sortTabRows(rows, 'best'), rows, 'best value is the discovery order');

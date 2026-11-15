@@ -518,7 +518,13 @@ html{scroll-padding-bottom:96px}
    bubbles. The selected chip reads as pressed (border + background,
    never color alone). */
 .discover{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:stretch}
-.discover-map{height:480px}
+/* The results map must never paint over the sticky bar: the map
+   container is its own stacking context at z-index 0, so the Leaflet
+   panes (z-index 200–1000 inside the map) and the MapLibre markers
+   all stay below the sticky results bar (z-index 40) and the sticky
+   site header (z-index 60) while scrolling (defect, Nov 14 2026).
+   Stacking only — the map itself is untouched. */
+.discover-map{position:relative;z-index:0;height:480px}
 .discover-panel{height:100%}
 @media(max-width:900px){.discover{grid-template-columns:1fr}.discover-map{height:380px}}
 
