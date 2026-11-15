@@ -153,6 +153,19 @@ test('search deep link: stays with dates renders per-destination rows with Best 
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
 });
 
+test('search deep link: flights with off-suggested dates shows the SEARCHED dates in the heading (live defect, Nov 14 2026)', async () => {
+  // The live check searched Jan 15–22 and got a heading dated Jan 4–11
+  // — the planner's suggested start — because the heading derived its
+  // dates from suggestedStart instead of the search. The heading must
+  // carry the searched dates.
+  const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=Central%20Europe&depart=2027-01-15&return=2027-01-22&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('2027-01-15 – 2027-01-22'), 'the heading shows the searched Jan 15–22 dates');
+  assert.ok(!html.includes('2027-01-04 – 2027-01-11'), 'the heading never shows the suggested Jan 4–11 dates for this search');
+  assert.ok(html.includes('Plan flight budget'), 'the planner flight budget line still renders');
+});
+
 test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {
   const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=1&travelers=2`);
   assert.equal(r.status, 200);
@@ -195,6 +208,29 @@ test('tabs: price-check without a key is honestly empty (the API the Flights tab
   assert.equal(j.destCity, 'Prague');
   assert.equal(j.departDate, '2027-01-04');
   assert.equal(j.returnDate, '2027-01-17');
+});
+
+test('tabs: price-check with explicit searched dates checks THOSE dates, not the planner suggestion', async () => {
+  const r = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 8, depart: '2027-01-15', return: '2027-01-22' }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.live, false);
+  assert.equal(j.departDate, '2027-01-15', 'the checked depart is the searched date');
+  assert.equal(j.returnDate, '2027-01-22', 'the checked return is the searched date');
+  // Junk dates fall back to the planner suggestion, never crash.
+  const bad = await fetch(`${BASE}/api/price-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ origin: 'New York', destination: 'Central Europe', travelers: 2, month: 1, durationDays: 14, depart: 'soon', return: 'later' }),
+  });
+  assert.equal(bad.status, 200);
+  const bj = await bad.json();
+  assert.equal(bj.departDate, '2027-01-04');
+  assert.equal(bj.returnDate, '2027-01-17');
 });
 
 test('service worker serves with the cache version', async () => {

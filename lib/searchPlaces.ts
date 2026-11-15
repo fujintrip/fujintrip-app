@@ -8,7 +8,7 @@
 // (empty state / no live fare), never invented.
 import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from './data';
 import { discoveryDestinations } from './discovery';
-import { CITY_INFO } from './tripCard';
+import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
@@ -181,13 +181,22 @@ export function searchQueryToParams(q: SearchQuery): string {
 // the destination, the month and the length. The traveler's dates map
 // to those (depart month, return − depart + 1 days, clamped to the
 // planner's 2–30 window); with no dates the planner's best month and
-// default 14 days stand in. The response carries the actual checked
-// dates — the UI shows those, never the traveler's dates as checked.
+// default 14 days stand in. The context ALSO carries the checked
+// dates themselves — the searched dates when the traveler gave them,
+// else the planner's suggested start + length (defect, Nov 14 2026:
+// results showed the planner's suggested dates — Jan 4–11 — for a
+// Jan 15–22 search, because the UI derived its heading from
+// suggestedStart instead of the search). The response carries the
+// actual checked dates — the UI shows those, and after this fix the
+// checked dates are the searched dates whenever the traveler gave
+// them, never the planner's suggestion standing in for them.
 export function flightContextFromSearch(q: SearchQuery): {
   origin: string;
   destination: string;
   month: number;
   durationDays: number;
+  depart: string;
+  return: string;
 } {
   const destination = q.to || q.dest || 'Central Europe';
   const origin = q.from || 'New York';
@@ -205,7 +214,19 @@ export function flightContextFromSearch(q: SearchQuery): {
     }
   }
   if (!month) month = bestTimeFor(destination).bestMonth;
-  return { origin, destination, month, durationDays };
+  const depart = q.depart || isoDate(suggestedStart(month));
+  // A return only counts when a departure anchors it — a lone return
+  // with no departure is dropped, never trusted as the trip's end.
+  const ret =
+    q.depart && q.ret && q.ret >= depart
+      ? q.ret
+      : isoDate(addDays(new Date(`${depart}T00:00:00Z`), durationDays - 1));
+  return { origin, destination, month, durationDays, depart, return: ret };
+}
+
+function isoDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 // The search button's verb, per category (spec §1b).

@@ -119,15 +119,59 @@ test('flightContextFromSearch: dates map to month + length, else the planner def
     depart: '2027-01-04',
     ret: '2027-01-17',
   });
-  assert.deepEqual(withDates, { origin: 'New York', destination: 'Central Europe', month: 1, durationDays: 14 });
-  // No dates: the destination's best month + the default 14 days.
-  const noDates = flightContextFromSearch({ ...emptySearchQuery('flights'), from: 'Los Angeles', to: 'Japan' });
-  assert.deepEqual(noDates, {
-    origin: 'Los Angeles',
-    destination: 'Japan',
-    month: bestTimeFor('Japan').bestMonth,
+  assert.deepEqual(withDates, {
+    origin: 'New York',
+    destination: 'Central Europe',
+    month: 1,
     durationDays: 14,
+    depart: '2027-01-04',
+    return: '2027-01-17',
   });
+  // The live defect (Nov 14 2026): a Jan 15–22 search showed Jan 4–11
+  // because the heading used the planner's suggested start. The
+  // checked dates are the searched dates now — a second pair, in a
+  // different month, pins that the dates travel through, not just the
+  // month.
+  const offSuggested = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Central Europe',
+    depart: '2027-01-15',
+    ret: '2027-01-22',
+  });
+  assert.equal(offSuggested.month, 1);
+  assert.equal(offSuggested.durationDays, 8);
+  assert.equal(offSuggested.depart, '2027-01-15');
+  assert.equal(offSuggested.return, '2027-01-22');
+  const march = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Japan',
+    depart: '2027-03-10',
+    ret: '2027-03-12',
+  });
+  assert.deepEqual(
+    { month: march.month, durationDays: march.durationDays, depart: march.depart, return: march.return },
+    { month: 3, durationDays: 3, depart: '2027-03-10', return: '2027-03-12' }
+  );
+  // No dates: the destination's best month + the default 14 days, and
+  // the checked dates fall back to the planner's suggested start.
+  const noDates = flightContextFromSearch({ ...emptySearchQuery('flights'), from: 'Los Angeles', to: 'Japan' });
+  assert.deepEqual(
+    { origin: noDates.origin, destination: noDates.destination, month: noDates.month, durationDays: noDates.durationDays },
+    {
+      origin: 'Los Angeles',
+      destination: 'Japan',
+      month: bestTimeFor('Japan').bestMonth,
+      durationDays: 14,
+    }
+  );
+  assert.match(noDates.depart, /^\d{4}-\d{2}-\d{2}$/, 'a suggested depart date stands in');
+  assert.equal(
+    Math.round((new Date(`${noDates.return}T00:00:00Z`).getTime() - new Date(`${noDates.depart}T00:00:00Z`).getTime()) / 86400000) + 1,
+    14,
+    'the fallback return is 14 days out'
+  );
   // A one-day trip clamps to the planner's 2-day minimum.
   const oneDay = flightContextFromSearch({
     ...emptySearchQuery('flights'),

@@ -7,7 +7,7 @@ import { suggestedStart } from '../../../lib/tripCard';
  * POST /api/price-check — the whole-trip price check (competitor
  * learning, Nov 11 #4: Mindtrip / Kayak).
  *
- * Body: { origin, destination, travelers, month, durationDays, history? }.
+ * Body: { origin, destination, travelers, month, durationDays, history?, depart?, return? }.
  * Asks Duffel for the live fares for the exact trip (same dates the
  * trip card uses), compares the cheapest out+back total with the
  * plan's Best-value flight leg, and returns the honest "book now or
@@ -15,6 +15,13 @@ import { suggestedStart } from '../../../lib/tripCard';
  * a forecast. When Duffel has no fare (no key, no airport code, no
  * offers), live is false and the response still carries the plan's
  * flight budget, so the UI can say what it knows instead of faking it.
+ *
+ * depart / return (optional, Nov 14 2026): the searched dates as
+ * YYYY-MM-DD. When valid they are the Duffel slices — the checked
+ * dates are the traveler's dates, never the planner's suggested start
+ * standing in for them. When absent or invalid, the old behavior
+ * stands: suggestedStart(month) + durationDays (the chat's callers
+ * send month/durationDays only).
  *
  * history (optional, round 2 #3): the watch's own past observations
  * [{ at, total }] — the fresh check is appended (deduped) before the
@@ -34,6 +41,19 @@ export async function POST(req: NextRequest) {
   const travelers = typeof raw.travelers === 'number' && raw.travelers >= 1 && raw.travelers <= 9 ? raw.travelers : 2;
   const month = typeof raw.month === 'number' && raw.month >= 1 && raw.month <= 12 ? raw.month : 0;
   const durationDays = typeof raw.durationDays === 'number' && raw.durationDays >= 2 ? raw.durationDays : 0;
+  // The searched dates, when the caller gives them — strictly
+  // validated (YYYY-MM-DD that round-trips), never trusted blindly.
+  // A return only counts when a departure anchors it and it is not
+  // before the departure.
+  const validIso = (v: unknown): v is string => {
+    if (typeof v !== 'string') return false;
+    const m = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return false;
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v.trim();
+  };
+  const departRaw = typeof raw.depart === 'string' ? raw.depart.trim() : '';
+  const returnRaw = typeof raw.return === 'string' ? raw.return.trim() : '';
 
   const plannerFlight = destination ? comparisonFor(destination, travelers).best.flight : 0;
   // The watch's own past checks, validated and capped — arbitrary
@@ -49,9 +69,17 @@ export async function POST(req: NextRequest) {
 
   const routeKey = destination ? routeKeyForDestination(destination) : '';
   const fareDestCity = routeKey ? ROUTE_STOPS[routeKey][0].city : destination;
-  const departDate = month ? suggestedStart(month) : null;
+  const departDate = validIso(departRaw)
+    ? new Date(`${departRaw}T00:00:00Z`)
+    : month
+      ? suggestedStart(month)
+      : null;
   const returnDate =
-    departDate && durationDays >= 2 ? new Date(departDate.getTime() + (durationDays - 1) * 86400000) : null;
+    validIso(returnRaw) && departDate && returnRaw >= departRaw
+      ? new Date(`${returnRaw}T00:00:00Z`)
+      : departDate && durationDays >= 2
+        ? new Date(departDate.getTime() + (durationDays - 1) * 86400000)
+        : null;
 
   if (!origin || !fareDestCity || !departDate || !returnDate) {
     return NextResponse.json({

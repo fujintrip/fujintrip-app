@@ -11,7 +11,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../lib/planner';
-import { addDays, suggestedStart } from '../lib/tripCard';
 import { discoveryDestinations, type DiscoveryEntry } from '../lib/discovery';
 import {
   DUFFEL_TEST_LABEL,
@@ -62,11 +61,6 @@ type PriceCheckResponse = {
   plannerFlight: number;
   line: string;
 };
-
-function isoDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 // The first city of the route — the fare destination, the same city
 // the chat's live fares use.
@@ -137,10 +131,13 @@ function FlightResults({
   const ctx = useMemo(() => flightContextFromSearch(query), [query]);
   const known = isKnownPlace(ctx.destination);
   const destCity = destCityFor(ctx.destination);
-  const depart = suggestedStart(ctx.month);
-  const ret = addDays(depart, ctx.durationDays - 1);
-  const departIso = isoDate(depart);
-  const returnIso = isoDate(ret);
+  // The heading and the fare lookup use the SEARCHED dates (defect,
+  // Nov 14 2026: a Jan 15–22 search showed Jan 4–11 — the planner's
+  // suggested start — because the dates came from suggestedStart
+  // instead of the search). ctx carries the searched dates when the
+  // traveler gave them, else the planner's suggestion.
+  const departIso = ctx.depart;
+  const returnIso = ctx.return;
   const plannerFlight = known ? comparisonFor(ctx.destination, query.travelers).best.flight : 0;
   const rows = useMemo(() => {
     const all = tabRowsFor('flights', query.travelers);
@@ -157,7 +154,7 @@ function FlightResults({
     data: null,
   });
   const fetchedKeyRef = useRef('');
-  const ctxKey = `${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}`;
+  const ctxKey = `${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}`;
 
   useEffect(() => {
     if (fetchedKeyRef.current === ctxKey) return;
@@ -172,7 +169,7 @@ function FlightResults({
         const r = await fetch('/api/price-check', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ origin: ctx.origin, destination: ctx.destination, travelers: query.travelers, month: ctx.month, durationDays: ctx.durationDays }),
+          body: JSON.stringify({ origin: ctx.origin, destination: ctx.destination, travelers: query.travelers, month: ctx.month, durationDays: ctx.durationDays, depart: ctx.depart, return: ctx.return }),
         });
         pc = (await r.json()) as PriceCheckResponse;
       } catch {
