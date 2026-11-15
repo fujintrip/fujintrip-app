@@ -2,7 +2,7 @@ import FujinApp from '../components/FujinApp';
 import { homeTabIdFromQuery } from '../lib/homeTabs';
 import { searchQueryFromParams } from '../lib/searchPlaces';
 
-// The homepage tabs are deep-linkable (?tab=hotels): the server reads
+// The homepage tabs are deep-linkable (?tab=flights): the server reads
 // the param so a shared link — and the tests — land on the right tab.
 // A full search deep link (?tab=flights&from=...&to=...&depart=...&return=...)
 // also carries the search itself: the widget auto-submits it on mount

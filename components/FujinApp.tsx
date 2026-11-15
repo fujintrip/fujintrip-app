@@ -210,7 +210,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // destination card prefills the widget. The homepage no longer
   // seeds the chat — the chat lives at /chat behind the header
   // button, and the homepage never writes the seed keys.
-  const [widgetTab, setWidgetTab] = useState<HomeTabId>(initialTab ?? 'hotels');
+  const [widgetTab, setWidgetTab] = useState<HomeTabId>(initialTab ?? 'flights');
   const [search, setSearch] = useState<SearchQuery | null>(initialSearch ?? null);
   const [prefill, setPrefill] = useState<{ destination: string; nonce: number } | null>(null);
   const [showAllDestinations, setShowAllDestinations] = useState(false);

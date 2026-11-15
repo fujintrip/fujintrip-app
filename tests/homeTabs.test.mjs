@@ -8,8 +8,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DUFFEL_LIVE_LABEL,
   DUFFEL_TEST_LABEL,
   HOME_TABS,
+  DEFAULT_HOME_TAB,
+  duffelFareLabel,
   flightContextFor,
   homeTabIdFromQuery,
   noFareMessage,
@@ -20,18 +23,20 @@ import { comparisonFor } from '../lib/planner.ts';
 import { discoveryDestinations } from '../lib/discovery.ts';
 import { bestTimeFor } from '../lib/bestTime.ts';
 
-test('homeTabIdFromQuery: real tab ids pass, anything else is Stays', () => {
+test('homeTabIdFromQuery: real tab ids pass, anything else is Flights', () => {
   assert.equal(homeTabIdFromQuery('hotels'), 'hotels');
   assert.equal(homeTabIdFromQuery('tours'), 'tours');
-  assert.equal(homeTabIdFromQuery(null), 'hotels');
-  assert.equal(homeTabIdFromQuery(undefined), 'hotels');
-  assert.equal(homeTabIdFromQuery('bogus'), 'hotels');
+  assert.equal(homeTabIdFromQuery(null), 'flights');
+  assert.equal(homeTabIdFromQuery(undefined), 'flights');
+  assert.equal(homeTabIdFromQuery('bogus'), 'flights');
   assert.equal(homeTabIdFromQuery(['cars', 'hotels']), 'cars');
   assert.equal(HOME_TABS.length, 7, 'seven tabs');
-  // Direction v3 order + labels: Stays first (Booking's default).
+  // Direction v3 order + labels, Nov 15 2026: Flights first — airline
+  // booking is the first window — then Stays, Car rental, Attractions,
+  // Cruises, Buses, Taxis.
   assert.deepEqual(
     HOME_TABS.map((t) => t.label),
-    ['Stays', 'Flights', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']
+    ['Flights', 'Stays', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']
   );
 });
 
@@ -102,8 +107,14 @@ test('flightContextFor: the persisted trip wins, else the Central Europe default
 });
 
 test('labels: the Duffel test label and the no-fare lines never promise a live price', () => {
+  assert.equal(DEFAULT_HOME_TAB, 'flights', 'Flights is the default tab');
   assert.ok(DUFFEL_TEST_LABEL.includes('Duffel test fare'), 'test fare is named');
   assert.ok(DUFFEL_TEST_LABEL.includes('not a live bookable quote'), 'not bookable is named');
+  assert.ok(DUFFEL_LIVE_LABEL.includes('Live Duffel fare'), 'live fare is named');
+  assert.ok(DUFFEL_LIVE_LABEL.includes('checkout is ready'), 'live label never promises a booking today');
+  assert.equal(duffelFareLabel('live'), DUFFEL_LIVE_LABEL, 'a live key gets the live label');
+  assert.equal(duffelFareLabel('test'), DUFFEL_TEST_LABEL, 'a test key gets the test label');
+  assert.equal(duffelFareLabel(undefined), DUFFEL_TEST_LABEL, 'no mode falls back to the test label');
   for (const reason of ['no_key', 'no_airport_code', 'no_offers', 'missing_slots', undefined]) {
     const line = noFareMessage(reason, 1512);
     assert.ok(!/live bookable|book now|from \$830|Estimate/.test(line), `no-fare line for ${reason} promises nothing live`);

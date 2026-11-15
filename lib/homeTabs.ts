@@ -1,10 +1,10 @@
 // Homepage tabs (direction v2, Nov 13, 2026; direction v3, Nov 14:
 // the tabs are now the SEARCH WIDGET's category switcher — Booking /
 // Expedia pattern. They switch the form; results appear only after a
-// search. The tab order and labels follow the spec: Stays first
-// (Booking's default), then Flights, Car rental, Attractions,
-// Cruises, Buses, Taxis. The ?tab= ids are unchanged, so old
-// deep links still land on the right tab.
+// search. The tab order and labels follow the spec: Flights first
+// (airline booking is the first window, Nov 15 2026), then Stays,
+// Car rental, Attractions, Cruises, Buses, Taxis. The ?tab= ids are
+// unchanged, so old deep links still land on the right tab.
 //
 // Every number here comes from an existing source and is labeled as
 // what it is:
@@ -32,8 +32,8 @@ import type { Tab } from './data';
 export type HomeTabId = 'tours' | 'flights' | 'hotels' | 'cars' | 'cruises' | 'buses' | 'taxis';
 
 export const HOME_TABS: { id: HomeTabId; label: string; icon: string; tab: Tab }[] = [
-  { id: 'hotels', label: 'Stays', icon: '🏨', tab: 'Hotels' },
   { id: 'flights', label: 'Flights', icon: '✈️', tab: 'Flights' },
+  { id: 'hotels', label: 'Stays', icon: '🏨', tab: 'Hotels' },
   { id: 'cars', label: 'Car rental', icon: '🚗', tab: 'Car rental' },
   { id: 'tours', label: 'Attractions', icon: '🎡', tab: 'Sightseeing' },
   { id: 'cruises', label: 'Cruises', icon: '🚢', tab: 'Cruises' },
@@ -41,10 +41,10 @@ export const HOME_TABS: { id: HomeTabId; label: string; icon: string; tab: Tab }
   { id: 'taxis', label: 'Taxis', icon: '🚕', tab: 'Taxis & transfers' },
 ];
 
-export const DEFAULT_HOME_TAB: HomeTabId = 'hotels';
+export const DEFAULT_HOME_TAB: HomeTabId = 'flights';
 
 // The ?tab= deep link: only a real tab id wins — anything else (or
-// nothing) is the Stays default, so a bad link never renders an
+// nothing) is the Flights default, so a bad link never renders an
 // empty panel.
 export function homeTabIdFromQuery(q: string | string[] | null | undefined): HomeTabId {
   const raw = Array.isArray(q) ? q[0] : q;
@@ -141,6 +141,18 @@ export function flightContextFor(
 // never a live bookable quote.
 export const DUFFEL_TEST_LABEL =
   'Duffel test fare — test mode, not a live bookable quote. Real bookable fares need Duffel live mode.';
+
+// The label once the live key is in (DUFFEL_API_KEY = duffel_live_…):
+// a real-time price — but booking through FujinTrip still opens only
+// once checkout is built, so it never promises a booking today.
+export const DUFFEL_LIVE_LABEL =
+  'Live Duffel fare — a real-time price. Booking through FujinTrip opens once checkout is ready.';
+
+// The fare label follows the configured key (see duffelMode in
+// lib/duffel.ts), so swapping test → live needs no code change.
+export function duffelFareLabel(mode: string | undefined): string {
+  return mode === 'live' ? DUFFEL_LIVE_LABEL : DUFFEL_TEST_LABEL;
+}
 
 // The honest line when /api/price-check has no live fare: the reason
 // is named, the plan's own flight budget stands in — never a fake fare.

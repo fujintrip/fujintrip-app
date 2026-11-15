@@ -90,7 +90,7 @@ test('searchQueryFromParams: a full deep link round-trips, junk drops', () => {
   // A bare ?tab= is a tab, not a search.
   assert.equal(searchQueryFromParams({ tab: 'hotels' }), null);
   assert.equal(searchQueryFromParams({}), null);
-  // A bad tab falls back to Stays; a bad date drops; a bad cabin
+  // A bad tab falls back to Flights; a bad date drops; a bad cabin
   // falls back to Economy; a bad traveler count falls back to 2.
   const junk = searchQueryFromParams({
     tab: 'bogus',
@@ -100,7 +100,7 @@ test('searchQueryFromParams: a full deep link round-trips, junk drops', () => {
     travelers: '99',
     cabin: 'Rocket',
   });
-  assert.equal(junk?.tab, 'hotels');
+  assert.equal(junk?.tab, 'flights');
   assert.equal(junk?.dest, 'Kyoto');
   assert.equal(junk?.depart, '');
   assert.equal(junk?.ret, '');
@@ -127,6 +127,7 @@ test('flightContextFromSearch: dates map to month + length, else the planner def
     durationDays: 14,
     depart: '2027-01-04',
     return: '2027-01-17',
+    cabin: 'economy',
   });
   // The live defect (Nov 14 2026): a Jan 15–22 search showed Jan 4–11
   // because the heading used the planner's suggested start. The
@@ -186,6 +187,43 @@ test('flightContextFromSearch: dates map to month + length, else the planner def
   const bare = flightContextFromSearch(emptySearchQuery('flights'));
   assert.equal(bare.destination, 'Central Europe');
   assert.equal(bare.origin, 'New York');
+});
+
+test('flightContextFromSearch: the picked cabin travels through, in Duffel vocabulary', () => {
+  // Before this round the Offer Request always asked for economy,
+  // whatever the traveler picked in the Cabin select — a Business
+  // search returned economy fares. The context now carries the cabin
+  // the price-check call asks Duffel for.
+  const business = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Central Europe',
+    depart: '2027-01-04',
+    ret: '2027-01-17',
+    cabin: 'Business',
+  });
+  assert.equal(business.cabin, 'business');
+  const premium = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Japan',
+    cabin: 'Premium economy',
+  });
+  assert.equal(premium.cabin, 'premium_economy');
+  const first = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Japan',
+    cabin: 'First',
+  });
+  assert.equal(first.cabin, 'first');
+  const junk = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'Japan',
+    cabin: 'Rocket',
+  });
+  assert.equal(junk.cabin, 'economy', 'a junk cabin falls back to economy');
 });
 
 test('results heading clears the sticky bar (defect, Nov 14 2026)', () => {
