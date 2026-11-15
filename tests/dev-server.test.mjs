@@ -164,6 +164,9 @@ test('search deep link: flights with off-suggested dates shows the SEARCHED date
   assert.ok(html.includes('2027-01-15 – 2027-01-22'), 'the heading shows the searched Jan 15–22 dates');
   assert.ok(!html.includes('2027-01-04 – 2027-01-11'), 'the heading never shows the suggested Jan 4–11 dates for this search');
   assert.ok(html.includes('Plan flight budget'), 'the planner flight budget line still renders');
+  // The map toggle (defect, Nov 14 2026): the live flights results
+  // page had no "map" at all — the toggle existed only on Stays.
+  assert.ok(html.includes('Show on map'), 'the flights results keep the map toggle, like Stays');
 });
 
 test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {

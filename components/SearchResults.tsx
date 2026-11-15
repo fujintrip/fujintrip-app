@@ -340,13 +340,11 @@ function CategoryResults({
   query,
   sort,
   maxPrice,
-  dark,
   onSave,
 }: {
   query: SearchQuery;
   sort: RowSort;
   maxPrice: number | null;
-  dark: boolean;
   onSave: (label: string) => void;
 }) {
   const rows = useMemo(() => {
@@ -365,49 +363,11 @@ function CategoryResults({
         : query.tab === 'tours'
           ? 'Live tours arrive when Viator / GetYourGuide / Klook connect.'
           : null;
-  const discovery = useMemo(() => discoveryDestinations(), []);
-  const [showMap, setShowMap] = useState(false);
-  const [selectedPin, setSelectedPin] = useState<string | null>(null);
-  const selectedDiscovery: DiscoveryEntry | null =
-    discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
 
   return (
     <div aria-label={`${label} results`}>
       {note && <p className="results-note">{note}</p>}
       {listNote && <p className="plan-muted">{listNote}</p>}
-      {query.tab === 'hotels' && (
-        <p>
-          <button type="button" className="ghost" aria-expanded={showMap} onClick={() => setShowMap((s) => !s)}>
-            {showMap ? 'Hide map' : 'Show on map'}
-          </button>
-        </p>
-      )}
-      {query.tab === 'hotels' && showMap && (
-        <div className="discover" style={{ marginBottom: 20 }}>
-          <div className="discover-map">
-            <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setSelectedPin(e.key)} dark={dark} />
-          </div>
-          {selectedDiscovery && (
-            <article className="card discover-panel">
-              <div className="body">
-                <span className="pill">{selectedDiscovery.tag}</span>
-                <h3>{selectedDiscovery.destination}</h3>
-                <p>
-                  {selectedDiscovery.days} days · {selectedDiscovery.nights} nights · Best value · 2 travelers · planning estimate
-                </p>
-                {selectedDiscovery.price !== null && <p className="price">from ${selectedDiscovery.price.toLocaleString()} total</p>}
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => onSave(searchRequestLabel(query, selectedDiscovery.destination))}
-                >
-                  Save this search
-                </button>
-              </div>
-            </article>
-          )}
-        </div>
-      )}
       {rows.length === 0 ? (
         <p className="plan-muted">No destinations under that price — raise the max price or clear it.</p>
       ) : (
@@ -449,6 +409,16 @@ export default function SearchResults({
   const [stopsFilter, setStopsFilter] = useState<number[]>([]);
   const [airlinesFilter, setAirlinesFilter] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // The map toggle (defect, Nov 14 2026: the live flights results
+  // page had no "map" at all — the toggle existed only on Stays). It
+  // lives here now, shared by Flights and Stays: the discovery pins
+  // are destinations with trip totals, which is what both tabs show.
+  const [showMap, setShowMap] = useState(false);
+  const [selectedPin, setSelectedPin] = useState<string | null>(null);
+  const discovery = useMemo(() => discoveryDestinations(), []);
+  const selectedDiscovery: DiscoveryEntry | null =
+    discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
+  const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
   const queryKey = `${query.tab}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
@@ -548,6 +518,39 @@ export default function SearchResults({
                 Filters
               </button>
             </p>
+            {showMapToggle && (
+              <p>
+                <button type="button" className="ghost" aria-expanded={showMap} onClick={() => setShowMap((s) => !s)}>
+                  {showMap ? 'Hide map' : 'Show on map'}
+                </button>
+              </p>
+            )}
+            {showMapToggle && showMap && (
+              <div className="discover" style={{ marginBottom: 20 }}>
+                <div className="discover-map">
+                  <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setSelectedPin(e.key)} dark={dark} />
+                </div>
+                {selectedDiscovery && (
+                  <article className="card discover-panel">
+                    <div className="body">
+                      <span className="pill">{selectedDiscovery.tag}</span>
+                      <h3>{selectedDiscovery.destination}</h3>
+                      <p>
+                        {selectedDiscovery.days} days · {selectedDiscovery.nights} nights · Best value · 2 travelers · planning estimate
+                      </p>
+                      {selectedDiscovery.price !== null && <p className="price">from ${selectedDiscovery.price.toLocaleString()} total</p>}
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => onSaveSearch(searchRequestLabel(query, selectedDiscovery.destination))}
+                      >
+                        Save this search
+                      </button>
+                    </div>
+                  </article>
+                )}
+              </div>
+            )}
             {query.tab === 'flights' ? (
               <FlightResults
                 query={query}
@@ -559,7 +562,7 @@ export default function SearchResults({
                 onSave={onSaveSearch}
               />
             ) : (
-              <CategoryResults query={query} sort={sort} maxPrice={maxPrice} dark={dark} onSave={onSaveSearch} />
+              <CategoryResults query={query} sort={sort} maxPrice={maxPrice} onSave={onSaveSearch} />
             )}
           </div>
         </div>
