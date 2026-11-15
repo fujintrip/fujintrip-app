@@ -217,11 +217,23 @@ export function flightContextFromSearch(q: SearchQuery): {
   const depart = q.depart || isoDate(suggestedStart(month));
   // A return only counts when a departure anchors it — a lone return
   // with no departure is dropped, never trusted as the trip's end.
+  // The fallback builds from the depart string as a LOCAL date: parsing
+  // it as UTC midnight and then adding days with local getters loses a
+  // day in any timezone behind UTC (the fallback return came back 13
+  // days out instead of 14 under America/New_York).
   const ret =
     q.depart && q.ret && q.ret >= depart
       ? q.ret
-      : isoDate(addDays(new Date(`${depart}T00:00:00Z`), durationDays - 1));
+      : isoDate(addDays(parseLocalDate(depart), durationDays - 1));
   return { origin, destination, month, durationDays, depart, return: ret };
+}
+
+// Parse a YYYY-MM-DD string as a local-midnight Date, matching the
+// local getters isoDate() reads. (A UTC-midnight parse is a different
+// calendar day in western timezones.)
+function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 function isoDate(d: Date): string {
