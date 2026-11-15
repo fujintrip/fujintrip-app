@@ -51,6 +51,32 @@ export const GLOBAL_DESTINATIONS: Destination[] = [
   { name: 'Paris', country: 'France', tag: 'City', blurb: 'Museums, cafés and long riverside walks.', trend: 'City break', priceFrom: 'from $130 / night', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=900&q=70', itinerary: ['Day 1 — Louvre and Seine walk', 'Day 2 — Montmartre', 'Day 3 — Markets and cafés'] },
 ];
 
+// Per-city photos for the discovery routes' first-stop cities (defect,
+// Nov 14 2026: 11 of the 26 Popular destinations had no photo at all —
+// the image map only covered the 6 global destinations + 3 hidden
+// gems, so routes like Central Europe rendered the grey fallback with
+// no <img> ever in the DOM). Wikimedia Commons thumbnails, 960px,
+// freely licensed, hotlinkable. Every URL below was verified Nov 14,
+// 2026: HTTP 200, image/jpeg, 100–250KB, and the subject viewed —
+// Prague Old Town Square, Lisbon Tram 28, Giza pyramids, Colosseum,
+// Sagrada Familia spires, Wat Arun, Hagia Sophia, Koutoubia minaret,
+// India Gate, Big Ben, Mexico City Zocalo, Lower Manhattan skyline.
+// A new route city needs an entry here or its card falls back.
+export const CITY_PHOTOS: Record<string, string> = {
+  Prague: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Prague_07-2016_View_from_Old_Town_Hall_Tower_img3.jpg/960px-Prague_07-2016_View_from_Old_Town_Hall_Tower_img3.jpg',
+  Lisbon: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Le_tram_28.jpg/960px-Le_tram_28.jpg',
+  Cairo: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/a/af/All_Gizah_Pyramids.jpg/960px-All_Gizah_Pyramids.jpg',
+  Rome: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Colosseum_in_Rome%2C_Italy_-_April_2007.jpg/960px-Colosseum_in_Rome%2C_Italy_-_April_2007.jpg',
+  Barcelona: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Sagrada_Familia_Barcelona_2.jpg/960px-Sagrada_Familia_Barcelona_2.jpg',
+  Bangkok: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b3/Templo_Wat_Arun%2C_Bangkok%2C_Tailandia%2C_2013-08-22%2C_DD_30.jpg/960px-Templo_Wat_Arun%2C_Bangkok%2C_Tailandia%2C_2013-08-22%2C_DD_30.jpg',
+  Istanbul: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/Hagia_Sophia_Mars_2013.jpg/960px-Hagia_Sophia_Mars_2013.jpg',
+  Marrakech: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/10/Koutoubia_minaret_from_the_city.JPG/960px-Koutoubia_minaret_from_the_city.JPG',
+  Delhi: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/50/India_Gate_-_Delhi_%2837282946605%29.jpg/960px-India_Gate_-_Delhi_%2837282946605%29.jpg',
+  London: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Big_Ben_at_sunset_-_2014-10-27_17-30.jpg/960px-Big_Ben_at_sunset_-_2014-10-27_17-30.jpg',
+  'Mexico City': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c3/Plaza_de_la_Constituci%C3%B3n_-_Z%C3%B3calo_de_la_Ciudad_de_M%C3%A9xico_-_6.jpg/960px-Plaza_de_la_Constituci%C3%B3n_-_Z%C3%B3calo_de_la_Ciudad_de_M%C3%A9xico_-_6.jpg',
+  'New York': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Lower_Manhattan%2C_New_York_skyline_from_Liberty_Island_2021.jpg/960px-Lower_Manhattan%2C_New_York_skyline_from_Liberty_Island_2021.jpg',
+};
+
 export const LOCAL_TRIPS: Record<string, { name: string; distance: string; price: string; activity: string }[]> = {
   default: [
     { name: 'Riverside walk + local market', distance: 'Near you', price: 'from $12', activity: 'A slow morning, local food and a park picnic' },

@@ -6,12 +6,24 @@
 // numbered buttons from ReelCard; the counter is a badge on the photo.
 // A failed photo falls back to the gradient, like SafeImg.
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function PhotoCarousel({ photos, alt }: { photos: string[]; alt: string }) {
   const [idx, setIdx] = useState(0);
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  // Same pre-hydration race as SafeImg (defect, Nov 14 2026): an image
+  // that finishes loading before React attaches onLoad — cached from
+  // an earlier page in the same session — would sit at opacity 0
+  // forever behind its shimmer. If the img is already complete when
+  // this mounts, trust its naturalWidth.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || !img.complete) return;
+    if (img.naturalWidth > 0) setLoaded(true);
+    else setFailed(true);
+  }, []);
   if (photos.length === 0 || failed) {
     return (
       <div className="img-fallback" role="img" aria-label={alt}>
@@ -34,7 +46,7 @@ export default function PhotoCarousel({ photos, alt }: { photos: string[]; alt: 
             2026 — the template cards' photos never decoded). The
             image stays in flow at opacity 0; the shimmer overlays
             its box. .photocarousel-media is already position:relative. */}
-        <img src={src} alt={alt} loading="lazy" style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+        <img ref={imgRef} src={src} alt={alt} loading="lazy" style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
         {photos.length > 1 && (
           <span className="photocarousel-count" aria-label={`Photo ${idx + 1} of ${photos.length}`}>
             {idx + 1} / {photos.length}

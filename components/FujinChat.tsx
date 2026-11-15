@@ -161,9 +161,24 @@ export const HERO_PHOTO = 'https://images.unsplash.com/photo-1493976040374-85c8e
 // decoded images on the homepage while the chat page's eager hero
 // decoded fine). The shimmer is absolutely positioned over the
 // image's own box, so nothing jumps when the image arrives.
+//
+// Second defect, same symptom (Nov 14 2026, live check): an image that
+// finishes loading BEFORE hydration — the eager hero, or any image the
+// browser already cached from an earlier page in the same session —
+// fires its load event before React attaches onLoad, so `loaded` stays
+// false and the image sits at opacity 0 forever behind its shimmer,
+// even though the bytes decoded. The mount effect below closes that
+// race: if the img is already complete, trust its naturalWidth.
 export function SafeImg({ src, alt, label, className, loading }: { src: string; alt: string; label: string; className?: string; loading?: 'lazy' | 'eager' }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || !img.complete) return;
+    if (img.naturalWidth > 0) setLoaded(true);
+    else setFailed(true);
+  }, []);
   if (failed) {
     return (
       <div className={`img-fallback ${className ?? ''}`} role="img" aria-label={alt}>
@@ -178,7 +193,7 @@ export function SafeImg({ src, alt, label, className, loading }: { src: string; 
           <span>{label}</span>
         </div>
       )}
-      <img src={src} alt={alt} loading={loading ?? 'lazy'} className={className} style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+      <img ref={imgRef} src={src} alt={alt} loading={loading ?? 'lazy'} className={className} style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
     </div>
   );
 }

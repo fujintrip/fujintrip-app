@@ -47,9 +47,11 @@ test('destinationPhoto: a photo where one exists on file, null otherwise', () =>
   assert.ok(destinationPhoto('Bali')?.includes('photo-1537996194471'), 'Bali has a photo');
   // Japan's stops include Kyoto, so the route resolves to Kyoto's photo.
   assert.ok(destinationPhoto('Japan')?.includes('photo-1493976040374-85c8e12f0c0e'), 'Japan resolves to a stop photo');
-  // Central Europe's stops (Prague, Vienna, Budapest) have no photo on
-  // file — null, never a placeholder.
-  assert.equal(destinationPhoto('Central Europe'), null);
+  // Central Europe's first stop is Prague, which has a per-city photo
+  // (CITY_PHOTOS, Nov 14 2026) — the route resolves to it now.
+  assert.ok(destinationPhoto('Central Europe')?.includes('Prague_07-2016'), 'Central Europe resolves to the Prague photo');
+  assert.ok(destinationPhoto('Portugal')?.includes('Le_tram_28'), 'Portugal resolves to the Lisbon tram photo');
+  assert.ok(destinationPhoto('Egypt')?.includes('All_Gizah_Pyramids'), 'Egypt resolves to the Giza photo');
   assert.equal(destinationPhoto('Atlantis'), null);
 });
 

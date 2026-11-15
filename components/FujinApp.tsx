@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS } from '../lib/data';
+import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS } from '../lib/data';
 import { discoveryDestinations } from '../lib/discovery';
 import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
@@ -351,6 +351,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
     const imageByName = new Map<string, string>([
       ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
       ...HIDDEN_GEMS.map((d) => [d.name, d.image] as const),
+      ...Object.entries(CITY_PHOTOS),
     ]);
     const entries: LibraryEntry[] = [];
     for (const e of discovery) {
