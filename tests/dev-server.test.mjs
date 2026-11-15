@@ -653,6 +653,64 @@ test('competitor fares: without a token the route stays honestly empty', async (
   assert.equal((await bad.json()).available, false);
 });
 
+test('places endpoint: live suggestions for a prefix, honest empties for short and junk queries', async () => {
+  // GET /api/places (API phase round 1): Travelpayouts autocomplete,
+  // then Nominatim, then the known list. Any source may answer here —
+  // what is pinned is the shape and the honesty, not the source.
+  const r = await fetch(`${BASE}/api/places?q=lon`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(Array.isArray(j.places), 'places is an array');
+  assert.ok(j.places.length > 0, 'a real prefix suggests something');
+  assert.ok(j.places.some((p) => p.name === 'London'), 'London suggests for "lon"');
+  for (const p of j.places) {
+    assert.equal(typeof p.name, 'string');
+    assert.equal(typeof p.value, 'string');
+    assert.ok(['city', 'airport', 'region'].includes(p.kind), `kind is one of city/airport/region, got ${p.kind}`);
+    if (p.iata !== undefined) assert.match(p.iata, /^[A-Z]{3}$/, 'an IATA code is only ever a real 3-letter code');
+  }
+  assert.ok(['travelpayouts', 'nominatim', 'known'].includes(j.source), `a source is named, got ${j.source}`);
+  assert.ok(!('token' in j), 'no token ever leaks into the reply');
+  // A route display name suggests from the known list even though no
+  // live gazetteer knows "Central Europe" as a place.
+  const central = await fetch(`${BASE}/api/places?q=Central%20Europe`);
+  const cj = await central.json();
+  assert.ok(cj.places.some((p) => p.name === 'Central Europe'), 'Central Europe suggests');
+  // Short query: honest empty, no guessing from one letter.
+  const short = await fetch(`${BASE}/api/places?q=x`);
+  const sj = await short.json();
+  assert.deepEqual(sj.places, []);
+  assert.equal(sj.reason, 'type-more');
+  const empty = await fetch(`${BASE}/api/places?q=`);
+  assert.equal((await empty.json()).reason, 'type-more');
+  // Junk: honest empty, never an invented place.
+  const junk = await fetch(`${BASE}/api/places?q=Zzzqxwv`);
+  const jj = await junk.json();
+  assert.deepEqual(jj.places, []);
+  assert.equal(jj.source, 'none');
+  assert.equal(jj.reason, 'no-matches');
+});
+
+test('search widget: place fields are combobox type-aheads, the datalist is gone', async () => {
+  const home = await fetch(`${BASE}/`);
+  const html = await home.text();
+  assert.ok(!html.includes('fujin-places'), 'the hardcoded datalist is gone from the homepage');
+  assert.ok(!html.includes('<datalist'), 'no datalist anywhere on the homepage');
+  assert.ok(html.includes('role="combobox"'), 'place fields render as comboboxes');
+  const flights = await fetch(`${BASE}/?tab=flights`);
+  const fhtml = await flights.text();
+  assert.equal((fhtml.match(/role="combobox"/g) || []).length, 2, 'Flights has two place fields (From + To)');
+  assert.ok(fhtml.includes('aria-label="Flying from"'), 'From field is labelled');
+  assert.ok(fhtml.includes('aria-label="Flying to"'), 'To field is labelled');
+});
+
+test('hero alt: the first slide describes the Yasaka pagoda street, never torii gates', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Yasaka pagoda street at sunset, Kyoto'), 'hero alt describes the actual photo');
+  assert.ok(!html.includes('Torii gates'), 'no torii-gates alt anywhere on the homepage');
+});
+
 test('fujin: every reply carries liveFares (null here — no key, no trip slots), so the card can thread it', async () => {
   // No DUFFEL_API_KEY in this environment and no departure city in the
   // message, so no fares are fetched — but the key must be present in

@@ -1,8 +1,9 @@
 // Direction v3 search widget (Nov 14, 2026): the Booking-style
 // search card on the hero. Category tabs switch the FORM — nothing
 // else changes, and nothing searches until the traveler submits.
-// Place fields autocomplete ONLY from places the app already knows
-// (lib/searchPlaces.ts); a typed place it does not know is handled
+// Place fields are live type-aheads (components/PlaceField.tsx, backed
+// by GET /api/places) — Travelpayouts autocomplete, then Nominatim,
+// then the known list. A typed place the app does not know is handled
 // honestly by the results, never invented.
 'use client';
 import { useEffect, useRef, useState } from 'react';
@@ -11,12 +12,12 @@ import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
 import {
   CABINS,
   emptySearchQuery,
-  knownPlaceNames,
   searchButtonLabel,
   searchQueryToParams,
   type SearchQuery,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
+import PlaceField from './PlaceField';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -67,7 +68,6 @@ export default function SearchWidget({
   onSubmit: (q: SearchQuery) => void;
 }) {
   const router = useRouter();
-  const places = knownPlaceNames();
   // One shared destination value across tabs (spec §2: switching
   // tabs keeps the destination if it applies, resets nothing else).
   const [place, setPlace] = useState(initialSearch?.dest || initialSearch?.to || '');
@@ -170,7 +170,7 @@ export default function SearchWidget({
           {tab === 'hotels' && (
             <>
               <Field label="Destination">
-                <input value={place} onChange={(e) => setPlace(e.target.value)} list="fujin-places" placeholder="Where are you staying?" aria-label="Destination" autoComplete="off" />
+                <PlaceField id="hotels-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where are you staying?" />
               </Field>
               <Field label="Check-in">
                 <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Check-in date" />
@@ -201,10 +201,10 @@ export default function SearchWidget({
           {tab === 'flights' && (
             <>
               <Field label="From">
-                <input value={from} onChange={(e) => setFrom(e.target.value)} list="fujin-places" placeholder="Departure city" aria-label="Flying from" autoComplete="off" />
+                <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
               </Field>
               <Field label="To">
-                <input value={place} onChange={(e) => setPlace(e.target.value)} list="fujin-places" placeholder="Destination" aria-label="Flying to" autoComplete="off" />
+                <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
               </Field>
               <Field label="Depart">
                 <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
@@ -227,7 +227,7 @@ export default function SearchWidget({
           {tab === 'cars' && (
             <>
               <Field label="Pick-up location">
-                <input value={place} onChange={(e) => setPlace(e.target.value)} list="fujin-places" placeholder="City or airport" aria-label="Pick-up location" autoComplete="off" />
+                <PlaceField id="cars-pickup" label="Pick-up location" value={place} onChange={setPlace} placeholder="City or airport" />
               </Field>
               <Field label="Pick-up date">
                 <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Pick-up date" />
@@ -247,7 +247,7 @@ export default function SearchWidget({
               </label>
               {!sameLocation && (
                 <Field label="Drop-off location">
-                  <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} list="fujin-places" placeholder="Drop-off city" aria-label="Drop-off location" autoComplete="off" />
+                  <PlaceField id="cars-dropoff" label="Drop-off location" value={dropoff} onChange={setDropoff} placeholder="Drop-off city" />
                 </Field>
               )}
             </>
@@ -255,7 +255,7 @@ export default function SearchWidget({
           {tab === 'tours' && (
             <>
               <Field label="Destination">
-                <input value={place} onChange={(e) => setPlace(e.target.value)} list="fujin-places" placeholder="Where to?" aria-label="Destination" autoComplete="off" />
+                <PlaceField id="tours-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where to?" />
               </Field>
               <Field label="Date">
                 <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
@@ -266,7 +266,7 @@ export default function SearchWidget({
           {tab === 'cruises' && (
             <>
               <Field label="Departure region">
-                <input value={place} onChange={(e) => setPlace(e.target.value)} list="fujin-places" placeholder="Caribbean, Mediterranean…" aria-label="Departure region" autoComplete="off" />
+                <PlaceField id="cruises-region" label="Departure region" value={place} onChange={setPlace} placeholder="Caribbean, Mediterranean…" />
               </Field>
               <Field label="Departure month">
                 <select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Departure month">
@@ -284,10 +284,10 @@ export default function SearchWidget({
           {tab === 'buses' && (
             <>
               <Field label="From">
-                <input value={from} onChange={(e) => setFrom(e.target.value)} list="fujin-places" placeholder="Departure city" aria-label="Traveling from" autoComplete="off" />
+                <PlaceField id="buses-from" label="Traveling from" value={from} onChange={setFrom} placeholder="Departure city" />
               </Field>
               <Field label="To">
-                <input value={place} onChange={(e) => setPlace(e.target.value)} list="fujin-places" placeholder="Destination city" aria-label="Traveling to" autoComplete="off" />
+                <PlaceField id="buses-to" label="Traveling to" value={place} onChange={setPlace} placeholder="Destination city" />
               </Field>
               <Field label="Date">
                 <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
@@ -298,10 +298,10 @@ export default function SearchWidget({
           {tab === 'taxis' && (
             <>
               <Field label="Pick-up">
-                <input value={from} onChange={(e) => setFrom(e.target.value)} list="fujin-places" placeholder="Pick-up place" aria-label="Pick-up" autoComplete="off" />
+                <PlaceField id="taxis-pickup" label="Pick-up" value={from} onChange={setFrom} placeholder="Pick-up place" />
               </Field>
               <Field label="Drop-off">
-                <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} list="fujin-places" placeholder="Drop-off place" aria-label="Drop-off" autoComplete="off" />
+                <PlaceField id="taxis-dropoff" label="Drop-off" value={dropoff} onChange={setDropoff} placeholder="Drop-off place" />
               </Field>
               <Field label="Date">
                 <input type="date" value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
@@ -313,11 +313,6 @@ export default function SearchWidget({
             </>
           )}
         </div>
-        <datalist id="fujin-places">
-          {places.map((p) => (
-            <option key={p} value={p} />
-          ))}
-        </datalist>
         <button type="submit" className="primary sw-search">
           {searchButtonLabel(tab)}
         </button>
