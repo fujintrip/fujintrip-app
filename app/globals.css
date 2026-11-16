@@ -892,6 +892,29 @@ button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:no
 .result-body .primary{margin-top:auto;align-self:flex-start}
 .filters-sheet{display:none}
 
+/* Flight results, full screen (Nov 16, 2026): the flight page
+   breaks out of the capped .wrap so the results breathe across the
+   viewport (body has overflow-x:clip, so the viewport-width breakout
+   never scrolls sideways). The filter sidebar is gone — one
+   horizontal filter bar sits above the results. Duffel pairs and
+   Ignav trips share one merged card grid, sorted by the active sort,
+   each card a complete trip option with its own small source tag.
+   Other tabs keep the sidebar layout. */
+.results-section--flights{margin-left:calc(-50vw + 50%);margin-right:calc(-50vw + 50%);padding-left:20px;padding-right:20px}
+.flight-filter-bar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;border:1px solid var(--line);border-radius:20px;padding:14px 16px;margin:0 0 16px;background:var(--card)}
+.filter-bar-field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+.filter-bar-field select{border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink)}
+.filter-bar-group{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+.filter-bar-label{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.filter-bar-count{margin-left:auto;font-size:14px;color:var(--muted);align-self:center}
+.flight-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:16px;list-style:none;margin:0 0 16px;padding:0}
+.flight-card-grid > .fare-card{margin:0}
+.flight-option-card{border:1px solid var(--line);border-radius:20px;padding:14px 16px;background:var(--card);list-style:none}
+.flight-option-card .ignav-itinerary{border:0;padding:0;margin:0;background:transparent}
+.flight-option-price{margin:0 0 2px;font-size:15px}
+.flight-option-price strong{font-size:26px;font-variant-numeric:tabular-nums}
+.flight-option-fee{margin:0 0 4px;font-size:13px;color:var(--muted)}
+
 /* Footer columns (direction v3 §1h). */
 .footer-cols{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;padding:32px 0 8px}
 .footer-col h3{font-size:14px;margin:0 0 10px}

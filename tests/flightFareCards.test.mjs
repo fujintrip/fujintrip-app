@@ -294,11 +294,16 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   // All three trip types render the card — Duffel's fares and
   // Ignav's, one merged live list (Nov 15, 2026: the per-source
   // column headers are gone; each fare carries its own small tag).
+  // Nov 16, 2026: the merged grid shares one IgnavItineraryGroup
+  // for one-way and round-trip itineraries and one DuffelPairCard
+  // for the round-trip legs, so the count is 6, not 7 — the
+  // one-way Ignav block's separate FareCard is gone, its itineraries
+  // now render through the shared group.
   const cardUses = (src.match(/<FareCard/g) ?? []).length;
   assert.equal(
     cardUses,
-    7,
-    'Duffel: one-way, multi-city, round-trip out, round-trip back; Ignav: one-way, itinerary groups, per-leg multi-city'
+    6,
+    'Duffel: one-way, multi-city, pair out, pair back; Ignav: itinerary-group legs, per-leg multi-city'
   );
   assert.ok(src.includes('hidePrice'), 'Ignav itinerary groups hide the per-card price — the trip total shows once');
   assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');

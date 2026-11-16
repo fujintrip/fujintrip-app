@@ -1119,7 +1119,37 @@ export type LiveFilterOptions = {
   };
   shownCount: number;
   totalCount: number;
+  // The merged card-grid counts (Nov 16, 2026): how many complete
+  // trip OPTION cards the grid shows / holds — Duffel pairs +
+  // Ignav trips — as opposed to shownCount/totalCount, which count
+  // live fares (legs + itineraries). Set by the results component
+  // for round-trip and one-way, where the grid is the list; absent
+  // for multi-city, where the per-leg lists are the list and the
+  // fare counts are the honest ones.
+  shownOptions?: number;
+  totalOptions?: number;
 };
+
+export function flightFiltersActive(args: {
+  sort: RowSort;
+  maxPrice: number | null;
+  stopsFilter: number[];
+  airlinesFilter: string[];
+  timesFilter: string[];
+}): boolean {
+  // Whether any flight filter is active (Nov 16, 2026): the per-fare
+  // source tags hide while ANY filter is on — airline, stops,
+  // departure time, max price, or a sort other than the default Best
+  // value — and come back when every filter is cleared. The filter
+  // bar itself has no source facet either way.
+  return (
+    args.sort !== 'best' ||
+    args.maxPrice !== null ||
+    args.stopsFilter.length > 0 ||
+    args.airlinesFilter.length > 0 ||
+    args.timesFilter.length > 0
+  );
+}
 
 export function liveFilterOptions(args: {
   shownOffers: DuffelFareOffer[];

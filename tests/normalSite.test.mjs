@@ -473,10 +473,16 @@ test('flights: one merged live-fares list — no supplier column headers, a smal
   assert.ok(!src.includes('title="Ignav — live"'), 'no big Ignav header');
   // The per-fare tag is required — a test fare must never read as a
   // real bookable fare, and every fare is labelled with its source
-  // and when it was checked.
+  // and when it was checked — while NO filter is active. Nov 16,
+  // 2026 (user decision): any active filter hides the tag on every
+  // card; clearing every filter brings the tags back.
   assert.ok(src.includes('fare-card-source'), 'each fare carries its small source tag');
-  assert.ok(src.includes("sourceLabel={duffelTag}"), 'Duffel fares carry their tag');
-  assert.ok(src.includes("sourceLabel={ignavTag}"), 'Ignav fares carry their tag');
+  assert.ok(src.includes('sourceLabel={duffelTagShown}'), 'Duffel fares carry their tag when unfiltered');
+  assert.ok(src.includes('sourceLabel={ignavTagShown}'), 'Ignav fares carry their tag when unfiltered');
+  assert.ok(src.includes('hideSourceTags ? undefined : duffelTag'), 'a filtered view hides the Duffel tag');
+  assert.ok(src.includes('hideSourceTags ? undefined : ignavTag'), 'a filtered view hides the Ignav tag');
+  assert.ok(!src.includes('sourceLabel={duffelTag}'), 'no card passes the Duffel tag unconditionally');
+  assert.ok(!src.includes('sourceLabel={ignavTag}'), 'no card passes the Ignav tag unconditionally');
   assert.ok(src.includes("'Duffel · test fare'"), 'test fares are named as test fares on the card');
   assert.ok(src.includes('ignavSourceTag('), 'Ignav fares carry the checked time');
   // The cached comparison block stays, below the live list.

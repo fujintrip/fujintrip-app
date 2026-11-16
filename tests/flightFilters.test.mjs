@@ -19,7 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TIME_BUCKETS, timeBucketFor } from '../lib/duffel.ts';
-import { liveFilterOptions } from '../lib/searchPlaces.ts';
+import { flightFiltersActive, liveFilterOptions } from '../lib/searchPlaces.ts';
 
 const offer = (airline, stops, departMinutes, price) => ({
   airline,
@@ -233,20 +233,61 @@ test('filter system: the results wire every filter to the live offers', () => {
   assert.ok(!src.includes('title="Duffel"'), 'no big Duffel header');
   assert.ok(!src.includes('title="Ignav — live"'), 'no big Ignav header');
   assert.ok(src.includes('Other sites (cached)'), 'the cached comparison block stays');
-  // Every fare carries its own small source tag.
+  // Every fare carries its own small source tag — while no filter
+  // is active. Nov 16, 2026 (user decision): as soon as any filter
+  // is on, every card hides its tag; clearing every filter brings
+  // the tags back. The tag is passed as undefined when hidden, and
+  // the card renders the tag only when sourceLabel is set.
   assert.ok(src.includes('fare-card-source'), 'the per-fare source tag is styled');
-  assert.ok(src.includes("sourceLabel={duffelTag}"), 'Duffel fares carry their tag');
-  assert.ok(src.includes("sourceLabel={ignavTag}"), 'Ignav fares carry their tag');
+  assert.ok(src.includes('sourceLabel={duffelTagShown}'), 'Duffel fares carry their tag when unfiltered');
+  assert.ok(src.includes('sourceLabel={ignavTagShown}'), 'Ignav fares carry their tag when unfiltered');
+  assert.ok(src.includes('hideSourceTags ? undefined : duffelTag'), 'a filtered view hides the Duffel tag');
+  assert.ok(src.includes('hideSourceTags ? undefined : ignavTag'), 'a filtered view hides the Ignav tag');
+  assert.ok(!src.includes('sourceLabel={duffelTag}'), 'no card passes the tag unconditionally');
+  assert.ok(!src.includes('sourceLabel={ignavTag}'), 'no card passes the tag unconditionally');
+  assert.ok(src.includes('hideSourceTags={liveFiltersActive}'), 'the results hide their tags from the bar state');
+  assert.ok(src.includes('flightFiltersActive({'), 'one shared predicate decides "any filter active"');
+  assert.ok(src.includes("onClearSort={() => setSort('best')}"), 'clearing from the results restores Best value');
   assert.ok(src.includes("'Duffel · test fare'"), 'test fares are named as test fares on the card');
   assert.ok(src.includes('ignavSourceTag('), 'Ignav fares carry the checked time');
-  // The filter system: times state, max price on live offers, counts
-  // from the full live inventory, one summary line.
+  // The filter system (Nov 16, 2026): the filters sit in a top bar
+  // above the merged card grid, not a left sidebar. Times state,
+  // max price on live offers, counts from the full live inventory,
+  // one summary line — and the line now counts cards: the merged
+  // options for round-trip/one-way, live fares for multi-city, which
+  // has no merged grid.
   assert.ok(src.includes('timesFilter'), 'a departure-time filter exists');
-  assert.ok(src.includes('Departure time'), 'the panel offers departure times');
+  assert.ok(src.includes('Departure time'), 'the bar offers departure times');
   assert.ok(src.includes('liveFilterOptions({'), 'counts come from the live inventory');
   assert.ok(src.includes('travelers: query.travelers'), 'the price bands divide by travelers');
   assert.ok(src.includes('liveOptions.counts.prices[max]'), 'the price bands count live fares, not estimate rows');
   assert.ok(src.includes('LIVE_PRICE_BANDS.map'), 'the price bands are one shared list');
-  assert.ok(src.includes('Showing {liveOptionsValue.shownCount} of {liveOptionsValue.totalCount} live fares'), 'one summary line counts what is shown');
+  assert.ok(src.includes('flight-filter-bar'), 'the filters sit in a top bar, not a sidebar');
+  assert.ok(src.includes('Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options'), 'the bar counts the merged cards');
+  assert.ok(src.includes('Showing ${liveOptions.shownCount} of ${liveOptions.totalCount} live fares'), 'multi-city falls back to fare counts');
+  assert.ok(!src.includes('Showing {liveOptionsValue.shownCount} of {liveOptionsValue.totalCount} live fares'), 'the old sidebar summary line is gone');
   assert.ok(src.includes('clearAllLiveFilters'), 'clearing restores the full list');
+  assert.ok(src.includes('clearAllFlightFilters'), 'the top bar clears every flight filter');
+  assert.ok(src.includes("setSort('best')"), 'the top bar clear restores Best value, so the tags come back');
+});
+
+test('flightFiltersActive: any filter on hides the source tags, all clear brings them back', () => {
+  // Nov 16, 2026 (user decision): the small per-fare source +
+  // freshness tag shows only while NO filter is active. Any one of
+  // airline, stops, time, max price, or a sort change counts as
+  // filtered — the tag hides on every card until all of them clear.
+  const unfiltered = { sort: 'best', maxPrice: null, stopsFilter: [], airlinesFilter: [], timesFilter: [] };
+  assert.equal(flightFiltersActive(unfiltered), false, 'best sort, no filters: tags show');
+  assert.equal(flightFiltersActive({ ...unfiltered, airlinesFilter: ['British Airways'] }), true, 'an airline hides the tags');
+  assert.equal(flightFiltersActive({ ...unfiltered, stopsFilter: [0] }), true, 'a stops filter hides the tags');
+  assert.equal(flightFiltersActive({ ...unfiltered, timesFilter: ['morning'] }), true, 'a departure-time filter hides the tags');
+  assert.equal(flightFiltersActive({ ...unfiltered, maxPrice: 800 }), true, 'a max price hides the tags');
+  assert.equal(flightFiltersActive({ ...unfiltered, sort: 'cheapest' }), true, 'a sort change hides the tags');
+  assert.equal(flightFiltersActive({ ...unfiltered, sort: 'duration' }), true, 'shortest-first hides the tags');
+  assert.equal(flightFiltersActive({ ...unfiltered, sort: 'departure' }), true, 'earliest-departure hides the tags');
+  assert.equal(
+    flightFiltersActive({ sort: 'best', maxPrice: null, stopsFilter: [], airlinesFilter: [], timesFilter: [] }),
+    false,
+    'clearing every filter brings the tags back'
+  );
 });
