@@ -467,8 +467,8 @@ export function cabinClassFor(value: unknown): DuffelCabinClass {
 // Which Duffel mode the configured key is: a live key (duffel_live_…)
 // means real fares; anything else set — or no key at all — is test
 // mode. The fare label follows the key, so swapping test → live
-// needs no code change. (The chat's prompt block still says "test
-// fares" — a one-line follow-up when the live key goes in.)
+// needs no code change — and so do the prompt block and the summary
+// line below, which read the same mode.
 export function duffelMode(): 'test' | 'live' {
   return (process.env.DUFFEL_API_KEY ?? '').startsWith('duffel_live_') ? 'live' : 'test';
 }
@@ -594,17 +594,23 @@ export async function fetchOneWayFares(opts: {
 }
 
 // The text block the model gets in its prompt: exact dates, the
-// cheapest fares with airline names, and the test-mode label.
+// cheapest fares with airline names, and the mode label — test fares
+// in test mode, real bookable fares in live mode. The label follows
+// the key (duffelMode), so a live key never gets called test fares.
 export function faresPromptBlock(f: LiveFares): string {
   const line = (o: DuffelFareOffer, from: string, to: string, date: string) =>
     `${o.airline} $${o.price.toLocaleString()} ${o.currency} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.duration ? `, ${o.duration}` : ''}${o.bags ? `, ${o.bags}` : ''} (${from} → ${to}, ${date})`;
   const out = f.out.map((o) => line(o, f.origin, f.destCity, f.departDate)).join('; ');
   const back = f.back.map((o) => line(o, f.destCity, f.origin, f.returnDate)).join('; ');
+  const modeNote =
+    duffelMode() === 'live'
+      ? `These are real, bookable Duffel fares (live mode). `
+      : `These are Duffel test fares (test mode — one carrier may be the fictional 'Duffel Airways'; real bookable fares need Duffel live mode). `;
   return (
     `LIVE FARES — fetched just now from Duffel for this exact trip. ` +
     `Outbound: ${out || 'no live fares found'}. ` +
     `Return: ${back || 'no live fares found'}. ` +
-    `These are Duffel test fares (test mode — one carrier may be the fictional 'Duffel Airways'; real bookable fares need Duffel live mode). ` +
+    modeNote +
     `Quote them as the flight prices, with the airline name, and say they are live fares.`
   );
 }
@@ -621,7 +627,8 @@ export function faresSummaryLine(f: LiveFares): string {
     parts.push(`cheapest live fare back: ${o.airline} $${o.price.toLocaleString()} ${o.stops === 0 ? 'nonstop' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.bags ? `, ${o.bags}` : ''} (${f.destCity} → ${f.origin}, ${f.returnDate})`);
   }
   if (!parts.length) return '';
-  return `Live fares (Duffel, test fares): ${parts.join('; ')}.`;
+  const label = duffelMode() === 'live' ? 'Live fares (Duffel)' : 'Live fares (Duffel, test fares)';
+  return `${label}: ${parts.join('; ')}.`;
 }
 
 // --- Whole-trip price check (competitor learning, Nov 11: Mindtrip /

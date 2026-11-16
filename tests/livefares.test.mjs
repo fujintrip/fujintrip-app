@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, serviceFee } from '../lib/planner.ts';
 import { addDays, buildTripCard, suggestedStart } from '../lib/tripCard.ts';
-import { cabinClassFor, duffelMode, formatTime12, parseDuffelOffers, parseLiveFares } from '../lib/duffel.ts';
+import { cabinClassFor, duffelMode, faresPromptBlock, faresSummaryLine, formatTime12, parseDuffelOffers, parseLiveFares } from '../lib/duffel.ts';
 import { bundleFromLegs, bundleTotal } from '../lib/bundle.ts';
 
 // Local calendar date (the card formats dates locally, not UTC — see
@@ -254,6 +254,34 @@ test('duffelMode: the fare label follows the key, so test → live needs no code
     assert.equal(duffelMode(), 'live', 'a live key is live mode');
     process.env.DUFFEL_API_KEY = 'something-else';
     assert.equal(duffelMode(), 'test', 'an unrecognized key is test mode, never live by accident');
+  } finally {
+    if (saved === undefined) delete process.env.DUFFEL_API_KEY;
+    else process.env.DUFFEL_API_KEY = saved;
+  }
+});
+
+// faresPromptBlock / faresSummaryLine: the "test fares" wording
+// follows the key too — a live key must never be called test fares,
+// and a test key (or no key) must keep saying test.
+test('faresPromptBlock + faresSummaryLine: test fares in test mode, never test fares in live mode', () => {
+  const fares = faresFor({ destCity: 'Prague', days: 14 });
+  const saved = process.env.DUFFEL_API_KEY;
+  try {
+    delete process.env.DUFFEL_API_KEY;
+    assert.match(faresPromptBlock(fares), /test fares/, 'no key is test mode in the prompt block');
+    assert.match(faresSummaryLine(fares), /test fares/, 'no key is test mode in the summary line');
+    process.env.DUFFEL_API_KEY = 'duffel_test_abc123';
+    assert.match(faresPromptBlock(fares), /Duffel test fares/, 'test key keeps the test-fares wording');
+    assert.match(faresPromptBlock(fares), /Duffel Airways/, 'test key keeps the fictional-carrier warning');
+    assert.match(faresSummaryLine(fares), /test fares/, 'test key keeps the test-fares summary label');
+    process.env.DUFFEL_API_KEY = 'duffel_live_abc123';
+    const block = faresPromptBlock(fares);
+    assert.doesNotMatch(block, /test fares/i, 'a live key is never called test fares in the prompt block');
+    assert.doesNotMatch(block, /Duffel Airways/, 'a live key never warns about the fictional carrier');
+    assert.match(block, /real, bookable Duffel fares/, 'a live key is called real, bookable fares');
+    assert.match(block, /Iberia \$250/, 'the fares themselves are unchanged in live mode');
+    assert.doesNotMatch(faresSummaryLine(fares), /test fares/i, 'a live key is never called test fares in the summary line');
+    assert.match(faresSummaryLine(fares), /^Live fares \(Duffel\):/, 'a live key gets the plain Duffel label');
   } finally {
     if (saved === undefined) delete process.env.DUFFEL_API_KEY;
     else process.env.DUFFEL_API_KEY = saved;
