@@ -11,8 +11,10 @@
 // is not built.
 'use client';
 import { featuredPackages, packagePrice, type LivePackageFare, type Package } from '../lib/packages';
+import { shareTextFor } from '../lib/share';
 import { Icon } from './icons';
 import { SafeImg } from './FujinChat';
+import ShareMenu from './ShareMenu';
 
 export function PackageCard({
   pkg,
@@ -79,6 +81,14 @@ export function PackageCard({
           <button type="button" className="ghost" onClick={onView}>
             View package
           </button>
+          {/* Social share-out (Nov 15, 2026): the link lands on the
+              packages grid; the text names the package and its
+              from-price. Posting happens on the network the traveler
+              picks, never by FujinTrip. */}
+          <ShareMenu
+            url="/#packages"
+            text={shareTextFor('package', pkg.destination, `from $${price.perTraveler.toLocaleString()} per traveler · planning estimate`)}
+          />
         </div>
       </div>
     </article>

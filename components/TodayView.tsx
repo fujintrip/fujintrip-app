@@ -36,6 +36,7 @@ import { buildChecklist, checklistKeyFor } from '../lib/checklist';
 import { visaForDestination } from '../lib/visa';
 import Checklist from './Checklist';
 import { SosButton } from './EmergencySheet';
+import ShareMenu from './ShareMenu';
 
 const TripMap = dynamic(() => import('./TripMap'), {
   ssr: false,
@@ -330,18 +331,29 @@ export default function TodayView({
             </p>
           )}
           {shareUrl && (
-            <p style={{ marginTop: 8 }}>
-              <input readOnly value={shareUrl} aria-label="Share link for this plan" onFocus={(e) => e.target.select()} />
-              <button
-                className="ghost"
-                style={{ marginTop: 8 }}
-                onClick={() => {
-                  void navigator.clipboard?.writeText(shareUrl).catch(() => {});
-                }}
-              >
-                Copy link
-              </button>
-            </p>
+            <>
+              <p style={{ marginTop: 8 }}>
+                <input readOnly value={shareUrl} aria-label="Share link for this plan" onFocus={(e) => e.target.select()} />
+                <button
+                  className="ghost"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(shareUrl).catch(() => {});
+                  }}
+                >
+                  Copy link
+                </button>
+              </p>
+              {/* Social share-out (Nov 15, 2026): the same plan link,
+                  opened in the network the traveler picks — posting
+                  happens there, never by FujinTrip. */}
+              <div style={{ marginTop: 8 }}>
+                <ShareMenu
+                  url={shareUrl}
+                  text={`${destination} trip — ${days} day${days === 1 ? '' : 's'}, ${travelers} traveler${travelers === 1 ? '' : 's'} — planned with FujinTrip`}
+                />
+              </div>
+            </>
           )}
           {shareMsg && <p className="plan-note">{shareMsg}</p>}
           <p className="plan-note">The link opens a copy of this plan on another device — your done-toggles stay on this device. Links are stored on this server and do not survive a redeploy; accounts and real sync are still to come.</p>

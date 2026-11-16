@@ -23,6 +23,7 @@ export default function ReelsPage() {
       </p>
       <ReelsFeed />
       <p style={{ marginTop: 24 }}>
+        <a href="/community">Visit the Community →</a>{' '}
         <a href="/">← Back to FujinTrip — plan a trip</a>
       </p>
     </div>

@@ -58,6 +58,9 @@ export default function SiteHeader({
         <a href={myTripsHref} className="site-link site-link-desktop">
           My Trips
         </a>
+        <a href="/community" className="site-link site-link-desktop">
+          Community
+        </a>
         <button
           type="button"
           className="ghost site-theme"
@@ -86,6 +89,9 @@ export default function SiteHeader({
           ))}
           <a href={myTripsHref} role="menuitem" onClick={closeMenu}>
             My Trips
+          </a>
+          <a href="/community" role="menuitem" onClick={closeMenu}>
+            Community
           </a>
           <span className="site-account-mobile" onClick={closeMenu}>
             <AccountButton />

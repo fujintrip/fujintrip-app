@@ -507,6 +507,11 @@ html{scroll-padding-bottom:96px}
 .reel-actions .ghost{padding:8px 14px;min-height:44px}
 .reel-share,.reel-report{margin-top:10px;border-top:1px solid var(--line-soft);padding-top:10px}
 .reel-share a.ghost{text-decoration:none;display:inline-block}
+/* Share menu (social/community, Nov 15, 2026): the fallback panel
+   wraps to its own line inside the flex action rows (reel cards,
+   package cards), so it never squeezes beside the buttons. */
+.reel-actions .share-panel,.pkg-actions .share-panel{flex-basis:100%;margin-top:10px}
+.share-panel .plan-note{margin-bottom:0}
 .reel-empty{background:var(--surface);border:1px dashed var(--line);border-radius:16px;padding:20px;text-align:center}
 .reel-composer{border:1px solid var(--line);border-radius:16px;padding:18px;background:var(--card)}
 .reel-composer input[type="file"]{border:1px dashed var(--line);border-radius:12px;padding:12px;background:var(--card)}

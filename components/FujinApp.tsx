@@ -17,6 +17,8 @@ import AdSlot from '../components/AdSlot';
 import PhotoCarousel from '../components/PhotoCarousel';
 import ReelsFeed from '../components/ReelsFeed';
 import ReelComposer from '../components/ReelComposer';
+import ShareMenu from '../components/ShareMenu';
+import { sharePathFor, shareTextFor } from '../lib/share';
 import SiteHeader from './SiteHeader';
 import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
@@ -510,7 +512,8 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                   ) : (
                     <p className="plan-muted">No planning estimate for this one yet</p>
                   )}
-                  <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>
+                  <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>{' '}
+                  <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} />
                 </div>
               </article>
             ))}
@@ -547,6 +550,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
           <ReelsFeed onPost={() => openComposer()} />
           <p style={{ marginTop: 12 }}>
+            <a href="/community">Visit the Community →</a>{' '}
             <a href="/reels">See all travelers’ reels →</a>
           </p>
         </section>
@@ -580,7 +584,8 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                     <summary>See the days</summary>
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
-                  <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>
+                  <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>{' '}
+                  <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} />
                 </div>
               </article>
             ))}
@@ -756,6 +761,9 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               <ul>
                 <li>
                   <a href="/about">About</a>
+                </li>
+                <li>
+                  <a href="/community">Community</a>
                 </li>
                 <li>
                   <a href="/contact">Contact</a>

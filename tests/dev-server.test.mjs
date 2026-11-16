@@ -671,6 +671,35 @@ test('reels: the strip is empty until a human approves a verified post, and a fl
   assert.ok(queueJson.queue.some((q) => q.id === flaggedJson.post.id), 'a flagged post is in the queue');
 });
 
+test('community: /community renders the hub, the honest notes, and links back; the header links it', async () => {
+  const page = await fetch(`${BASE}/community`);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.ok(html.includes('Community'), 'community page renders');
+  assert.ok(html.includes('Share your experience'), 'the composer entry point renders');
+  assert.ok(html.includes('keyword filter'), 'moderation is labeled a keyword filter, not AI');
+  assert.ok(html.includes('do not survive a redeploy'), 'the redeploy wipe is stated honestly');
+  assert.ok(html.includes('device'), 'the verified badge is labeled device-local');
+  assert.ok(html.includes('/reels'), 'community links to the reels feed');
+  // Nothing seeded: the static page carries no post content at all —
+  // the feed loads client-side and starts empty (see ReelsFeed).
+  assert.ok(!html.includes('reel_'), 'no seeded post ids in the community page');
+
+  const home = await fetch(`${BASE}/`);
+  const homeHtml = await home.text();
+  assert.ok(homeHtml.includes('href="/community"'), 'homepage links to the Community');
+  assert.ok(homeHtml.includes('Visit the Community'), 'stories section points at the Community');
+  // Share-out renders on every shareable card: 9 package cards
+  // (6 featured + 3 deals) + 8 destination cards + 3 hidden gems.
+  const shareButtons = (homeHtml.match(/>Share<\/button>/g) ?? []).length;
+  assert.equal(shareButtons, 20, 'one Share button per package and destination card');
+  assert.ok(homeHtml.includes('href="/community"'), 'header links to the Community');
+
+  const reelsPage = await fetch(`${BASE}/reels`);
+  assert.equal(reelsPage.status, 200);
+  assert.ok((await reelsPage.text()).includes('href="/community"'), 'reels page links to the Community');
+});
+
 test('chat-first layout: full-bleed shell, app bar, wrapped chips, short placeholders', async () => {
   const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);

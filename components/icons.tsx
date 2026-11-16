@@ -34,6 +34,7 @@ import {
   Plus,
   Route,
   Search,
+  Share2,
   ShieldCheck,
   Ship,
   Sparkles,
@@ -78,7 +79,8 @@ export type IconName =
   | 'globe'
   | 'luggage'
   | 'chevronDown'
-  | 'externalLink';
+  | 'externalLink'
+  | 'share';
 
 const COMPONENTS: Record<IconName, LucideIcon> = {
   plane: Plane,
@@ -114,6 +116,7 @@ const COMPONENTS: Record<IconName, LucideIcon> = {
   luggage: Luggage,
   chevronDown: ChevronDown,
   externalLink: ExternalLink,
+  share: Share2,
 };
 
 export function Icon({ name, size = 20, className }: { name: IconName; size?: number; className?: string }) {

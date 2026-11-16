@@ -11,6 +11,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { MONTH_NAMES } from '../lib/planner';
+import ShareMenu from './ShareMenu';
 
 export type PublicReelPost = {
   id: string;
@@ -66,8 +67,6 @@ export default function ReelCard({
   const [saved, setSaved] = useState(false);
   const [likes, setLikes] = useState(post.likes);
   const [saves, setSaves] = useState(post.saves);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [shareMsg, setShareMsg] = useState('');
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState(REPORT_REASONS[0]);
   const [reportMsg, setReportMsg] = useState('');
@@ -99,7 +98,6 @@ export default function ReelCard({
     );
   }
 
-  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/reels/${post.id}` : `/reels/${post.id}`;
   const media = post.media[mediaIdx];
 
   const react = async (kind: 'like' | 'save') => {
@@ -120,26 +118,6 @@ export default function ReelCard({
       if (typeof j.likes === 'number') setLikes(j.likes);
       if (typeof j.saves === 'number') setSaves(j.saves);
     } catch {}
-  };
-
-  const shareNative = async () => {
-    const text = `${post.routeLine} — a trip by ${post.author} (Planned with FujinTrip)`;
-    if (typeof navigator !== 'undefined' && 'share' in navigator) {
-      try {
-        await navigator.share({ title: text, text: post.caption, url: shareUrl });
-        return;
-      } catch {}
-    }
-    setShareOpen((o) => !o);
-  };
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareMsg('Link copied.');
-    } catch {
-      setShareMsg(`Copy this link: ${shareUrl}`);
-    }
   };
 
   const report = async () => {
@@ -299,9 +277,7 @@ export default function ReelCard({
           <button type="button" className="ghost" aria-pressed={saved} onClick={() => void react('save')}>
             {saved ? '✓ Saved' : 'Save'} {saves > 0 ? saves : ''}
           </button>
-          <button type="button" className="ghost" onClick={shareNative}>
-            Share
-          </button>
+          <ShareMenu url={`/reels/${post.id}`} text={`${post.routeLine} — a trip by ${post.author} (Planned with FujinTrip)`} />
           <button type="button" className="ghost" aria-label="Report this post" onClick={() => setReportOpen((o) => !o)}>
             ···
           </button>
@@ -316,15 +292,6 @@ export default function ReelCard({
             </>
           )}
         </div>
-        {shareOpen && (
-          <div className="reel-share">
-            <button className="ghost" onClick={copyLink}>Copy link</button>{' '}
-            <a className="ghost" href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${post.routeLine} — a trip by ${post.author}`)}&url=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noreferrer">X</a>{' '}
-            <a className="ghost" href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`} target="_blank" rel="noreferrer">Facebook</a>{' '}
-            <a className="ghost" href={`https://wa.me/?text=${encodeURIComponent(`${post.routeLine} — a trip by ${post.author} ${shareUrl}`)}`} target="_blank" rel="noreferrer">WhatsApp</a>
-            {shareMsg && <p className="plan-note">{shareMsg}</p>}
-          </div>
-        )}
         {reportOpen && (
           <div className="reel-report">
             <p style={{ fontSize: 13, margin: '4px 0' }}><b>Report this post</b></p>
