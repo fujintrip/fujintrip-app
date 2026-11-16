@@ -33,6 +33,11 @@ import {
   searchRequestLabel,
   sortFareOffers,
   sortTabRows,
+  CAR_TIERS,
+  carDaysFor,
+  carTierLabel,
+  carTierOptions,
+  carTierRows,
   STAY_TIERS,
   stayNightsFor,
   stayTierLabel,
@@ -40,6 +45,8 @@ import {
   stayTierRows,
   type RowSort,
   type SearchQuery,
+  type CarTier,
+  type CarTierRow,
   type StayTier,
   type StayTierRow,
 } from '../lib/searchPlaces';
@@ -1152,7 +1159,6 @@ function EstimateCard({
             {entry.days} days · {entry.nights} nights · Best value
           </p>
         )}
-        {query.tab === 'cars' && <p className="plan-muted">Car class (example): Economy · Compact · SUV</p>}
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
         <p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
@@ -1319,6 +1325,163 @@ function StayResults({
   );
 }
 
+// One car row as a card: the destination's photo and route, the
+// rental's days and party, the selected tier's per-traveler price
+// and party total. No company name, model, rating, or per-day
+// figure: the planner has none of those, so the card shows none
+// of those.
+function CarCard({
+  row,
+  query,
+  days,
+  onSave,
+}: {
+  row: CarTierRow;
+  query: SearchQuery;
+  days: number | null;
+  onSave: (label: string) => void;
+}) {
+  const photo = destinationPhoto(row.destination);
+  const highlight = rowIncludesPlace(row.destination, query.dest);
+  const tierLabel = carTierLabel(query.carTier);
+  return (
+    <article className={`result-card${highlight ? ' result-match' : ''}`}>
+      {photo && <SafeImg src={photo} alt={row.destination} label={row.destination} className="result-photo" />}
+      <div className="result-body">
+        <h3>{row.destination}</h3>
+        <p className="plan-muted">{row.routeLine}</p>
+        <p className="plan-muted">
+          {days !== null ? `${days} day${days > 1 ? 's' : ''} · ` : ''}
+          {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+          {query.pickupTime ? ` · pick-up ${query.pickupTime}` : ''}
+        </p>
+        {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
+        <p className="result-price">
+          from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
+          <span className="plan-muted">· {tierLabel} · planning estimate</span>
+        </p>
+        <p className="plan-muted">
+          ${row.total.toLocaleString()} total for {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, row.destination))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Car rental results (Nov 15, 2026 — the Car rental section, same
+// standard as the Stays section): the searched destination's three
+// planner tiers as car cards, then the per-destination car list in
+// the selected tier. Every figure is the planner's own car leg for
+// the party — a planning estimate, never a live quote, never a
+// named company or model. No "Book now": no live supplier exists
+// yet.
+function CarResults({
+  query,
+  sort,
+  maxPrice,
+  carTier,
+  onSave,
+  onClearPrice,
+  onClearCarFilters,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  carTier: CarTier;
+  onSave: (label: string) => void;
+  onClearPrice: () => void;
+  onClearCarFilters: () => void;
+}) {
+  const known = isKnownPlace(query.dest);
+  const tiers = known ? carTierOptions(query.dest, query.travelers) : null;
+  const days = carDaysFor(query, query.dest || undefined);
+  const allRows = useMemo(() => carTierRows(carTier, query.travelers), [carTier, query.travelers]);
+  const rows = useMemo(() => {
+    const sorted = sortTabRows(allRows, sort);
+    return maxPrice === null ? sorted : sorted.filter((r) => r.pricePerTraveler <= maxPrice);
+  }, [allRows, sort, maxPrice]);
+  const filtersActive = maxPrice !== null || carTier !== 'best';
+  const dates = query.depart ? `${query.depart}${query.ret ? ` – ${query.ret}` : ''}` : 'Flexible dates';
+  const travelers = `${query.travelers} traveler${query.travelers > 1 ? 's' : ''}`;
+  const tierLabel = carTierLabel(carTier);
+  return (
+    <div aria-label="Car rental results">
+      <h3>
+        Car rental · {query.dest || 'Anywhere'} · {dates}
+        {days !== null ? ` · ${days} day${days > 1 ? 's' : ''}` : ''} · {travelers}
+      </h3>
+      <p className="plan-muted">Live car prices arrive when Rentalcars / CarTrawler connect.</p>
+      <p className="plan-muted">
+        Car rental prices below are planning estimates from FujinTrip&apos;s planner — not live quotes, and no company or
+        model is attached to them. Live bookable cars open as suppliers connect.
+      </p>
+      {query.pickupTime && <p className="plan-muted">Pick-up {query.pickupTime}.</p>}
+      {!query.sameLocation && query.dropoff && <p className="plan-muted">Drop-off in {query.dropoff}.</p>}
+      {tiers && (
+        <>
+          <h4>Car rental in {query.dest} — planning estimates</h4>
+          <div className="result-cards">
+            {tiers.map((t) => (
+              <article key={t.tier} className={`result-card${t.tier === carTier ? ' result-match' : ''}`}>
+                <div className="result-body">
+                  <h3>
+                    {t.label}
+                    {t.tier === 'best' ? ' · Our pick' : ''}
+                  </h3>
+                  <p className="plan-muted">
+                    {days !== null ? `${days} day${days > 1 ? 's' : ''} · ` : ''}
+                    {travelers}
+                  </p>
+                  <p className="result-price">
+                    from ${t.perTraveler.toLocaleString()} per traveler{' '}
+                    <span className="plan-muted">· planning estimate</span>
+                  </p>
+                  <p className="plan-muted">
+                    ${t.car.toLocaleString()} total for {travelers}
+                  </p>
+                  <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.dest))}>
+                    Save this search
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      {filtersActive && (
+        <p className="fare-count">
+          Showing {rows.length} of {allRows.length} destinations · {tierLabel} cars.{' '}
+          <button type="button" className="linklike" onClick={onClearCarFilters}>
+            Clear filters
+          </button>
+        </p>
+      )}
+      <h4>Cars by destination — planning estimates</h4>
+      {rows.length === 0 ? (
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
+      ) : (
+        <div className="result-cards">
+          {rows.map((r) => (
+            <CarCard key={r.destination} row={r} query={query} days={carDaysFor(query, r.destination)} onSave={onSave} />
+          ))}
+        </div>
+      )}
+      <p className="plan-muted">
+        {tierLabel} car per traveler, {travelers} · planning estimate — not a live quote. Live comparison arrives as suppliers
+        connect.
+      </p>
+    </div>
+  );
+}
+
 // One tab's estimate results: the per-route planner numbers for this
 // category, per traveler, labeled planning estimate. Cruises / buses
 // / taxis carry the honest note instead of a broken-out price.
@@ -1410,13 +1573,22 @@ export default function SearchResults({
   // prices in. It is filter state, not search state — a new search
   // resets it to the tier the search itself carries.
   const [stayTier, setStayTier] = useState<StayTier>(query.stayTier ?? 'best');
+  // Car rental tier (Nov 15, 2026): the same filter-state pattern
+  // as the Stays tier, for the car list.
+  const [carTier, setCarTier] = useState<CarTier>(query.carTier ?? 'best');
   // The estimate rows behind the max-price counts — the counts on the
   // price options come from the same rows the list shows. Stays price
   // for the searched party (guests), in the selected tier — the
   // flights travelers default would price a 4-guest stay for 2.
+  // Cars price for the searched travelers, in the selected tier.
   const estimateRows = useMemo(
-    () => (query.tab === 'hotels' ? stayTierRows(stayTier, query.guests) : tabRowsFor(query.tab, query.travelers)),
-    [query.tab, query.travelers, query.guests, stayTier]
+    () =>
+      query.tab === 'hotels'
+        ? stayTierRows(stayTier, query.guests)
+        : query.tab === 'cars'
+          ? carTierRows(carTier, query.travelers)
+          : tabRowsFor(query.tab, query.travelers),
+    [query.tab, query.travelers, query.guests, stayTier, carTier]
   );
   const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
@@ -1429,7 +1601,7 @@ export default function SearchResults({
   const selectedDiscovery: DiscoveryEntry | null =
     discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
-  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
+  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
   useEffect(() => {
@@ -1438,6 +1610,7 @@ export default function SearchResults({
     setLiveOptions(null);
     setFiltersOpen(false);
     setStayTier(query.stayTier ?? 'best');
+    setCarTier(query.carTier ?? 'best');
   }, [queryKey]);
 
   const primaryPlace =
@@ -1475,6 +1648,18 @@ export default function SearchResults({
           <h3>Stay price</h3>
           <select value={stayTier} onChange={(e) => setStayTier(e.target.value as StayTier)} aria-label="Stay price tier">
             {STAY_TIERS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {query.tab === 'cars' && (
+        <div className="filter-group">
+          <h3>Car price</h3>
+          <select value={carTier} onChange={(e) => setCarTier(e.target.value as CarTier)} aria-label="Car price tier">
+            {CAR_TIERS.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
               </option>
@@ -1602,6 +1787,19 @@ export default function SearchResults({
                 onClearStayFilters={() => {
                   setMaxPrice(null);
                   setStayTier('best');
+                }}
+              />
+            ) : query.tab === 'cars' ? (
+              <CarResults
+                query={query}
+                sort={sort}
+                maxPrice={maxPrice}
+                carTier={carTier}
+                onSave={onSaveSearch}
+                onClearPrice={() => setMaxPrice(null)}
+                onClearCarFilters={() => {
+                  setMaxPrice(null);
+                  setCarTier('best');
                 }}
               />
             ) : (

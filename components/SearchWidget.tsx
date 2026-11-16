@@ -22,6 +22,7 @@ import {
   type FlightLeg,
   type FlightTripType,
   type SearchQuery,
+  type CarTier,
   type StayTier,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
@@ -198,6 +199,10 @@ export default function SearchWidget({
   // link (?tier=) is the tier's home. A submit without it would drop
   // a tiered search back to Best value.
   const [stayTier, setStayTier] = useState<StayTier>(initialSearch?.stayTier ?? 'best');
+  // Car rental tier (Nov 15, 2026): the same carry-through as the
+  // Stays tier, for the same reason — the tier control lives in the
+  // results filters, the deep link is the tier's home.
+  const [carTier, setCarTier] = useState<CarTier>(initialSearch?.carTier ?? 'best');
 
   // A multi-city search always has 2–4 legs. A fresh multi-city
   // form starts from the route already typed (leg 1) plus one empty
@@ -277,6 +282,7 @@ export default function SearchWidget({
     setTripType(v.tripType);
     setLegs(padLegs(v.legs, initialSearch));
     setStayTier(v.stayTier);
+    setCarTier(v.carTier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -366,7 +372,30 @@ export default function SearchWidget({
         return;
       }
     }
-    if (tab !== 'hotels' && (tab !== 'flights' || tripType !== 'multicity')) {
+    // Car rental dates name the rental: a drop-off on the pick-up
+    // day is one rental day (same-day hire is real), a drop-off
+    // before pick-up is not a rental, and a drop-off with no
+    // pick-up has nothing to end. The generic block below would
+    // only repeat these verdicts in vaguer words, so cars skip it.
+    if (tab === 'cars') {
+      if (depart && depart < now) {
+        setNote('That pick-up date is in the past — pick a date from today on.');
+        return;
+      }
+      if (ret && !depart) {
+        setNote('Add a pick-up date first — drop-off needs a pick-up.');
+        return;
+      }
+      if (ret && ret < now) {
+        setNote('That drop-off date is in the past — pick a date from today on.');
+        return;
+      }
+      if (depart && ret && ret < depart) {
+        setNote('Drop-off must be after pick-up — check the dates.');
+        return;
+      }
+    }
+    if (tab !== 'hotels' && tab !== 'cars' && (tab !== 'flights' || tripType !== 'multicity')) {
       if (depart && depart < now) {
         setNote('That date is in the past — pick a date from today on.');
         return;
@@ -406,6 +435,7 @@ export default function SearchWidget({
           ? legs.map((l) => ({ from: l.from.trim(), to: l.to.trim(), depart: l.depart }))
           : [],
       stayTier: tab === 'hotels' ? stayTier : 'best',
+      carTier: tab === 'cars' ? carTier : 'best',
     };
     if (tab === 'flights' && tripType === 'oneway') q.ret = '';
     if (tab === 'flights' && tripType === 'multicity') {
@@ -536,19 +566,19 @@ export default function SearchWidget({
           )}
           {tab === 'cars' && (
             <>
-              <Field label="Pick-up location">
+              <Field label="Pick-up location" icon="pin">
                 <PlaceField id="cars-pickup" label="Pick-up location" value={place} onChange={setPlace} placeholder="City or airport" />
               </Field>
-              <Field label="Pick-up date">
+              <Field label="Pick-up date" icon="calendar">
                 <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Pick-up date" />
               </Field>
-              <Field label="Pick-up time">
+              <Field label="Pick-up time" icon="clock">
                 <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} aria-label="Pick-up time" />
               </Field>
-              <Field label="Drop-off date">
+              <Field label="Drop-off date" icon="calendar">
                 <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Drop-off date" />
               </Field>
-              <Field label="Drop-off time">
+              <Field label="Drop-off time" icon="clock">
                 <input type="time" value={dropoffTime} onChange={(e) => setDropoffTime(e.target.value)} aria-label="Drop-off time" />
               </Field>
               <label className="sw-check">
@@ -556,10 +586,11 @@ export default function SearchWidget({
                 Return to the same location
               </label>
               {!sameLocation && (
-                <Field label="Drop-off location">
+                <Field label="Drop-off location" icon="pin">
                   <PlaceField id="cars-dropoff" label="Drop-off location" value={dropoff} onChange={setDropoff} placeholder="Drop-off city" />
                 </Field>
               )}
+              <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>
           )}
           {tab === 'tours' && (

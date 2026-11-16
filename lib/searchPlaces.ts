@@ -156,6 +156,90 @@ export function stayNightsFor(
   return entry ? entry.nights : null;
 }
 
+// Car rental tiers (Nov 15, 2026 — the Car rental section, same
+// standard as the Stays section): the three planner tiers, priced
+// from the planner's own car legs — never a named company, model,
+// or live quote. The tier is part of the search (a ?tier= URL
+// param, like the Stays tier), so a tiered search is shareable and
+// renders its tier on first paint.
+export type CarTier = 'cheapest' | 'best' | 'premium';
+
+export const CAR_TIERS: { id: CarTier; label: string }[] = [
+  { id: 'cheapest', label: 'Cheapest' },
+  { id: 'best', label: 'Best value' },
+  { id: 'premium', label: 'Premium' },
+];
+
+export function carTierFromValue(v: unknown): CarTier {
+  return v === 'cheapest' || v === 'premium' ? v : 'best';
+}
+
+export function carTierLabel(tier: CarTier): string {
+  return CAR_TIERS.find((t) => t.id === tier)?.label ?? 'Best value';
+}
+
+// One tier's car figures for a destination — the planner's car leg
+// for the whole party (buildPlan's car leg is a party total for the
+// trip) plus the per-traveler share. The figures never depend on
+// the searched dates: the planner prices the trip, not the rental
+// day, so the total stays the planner's figure whatever dates the
+// traveler picked — scaling it by days would invent a pricing
+// model the planner does not have.
+export type CarTierOption = { tier: CarTier; label: string; car: number; perTraveler: number };
+
+export function carTierOptions(destination: string, travelers: number): CarTierOption[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  const options = buildPlan(destination, party, 3).options;
+  return CAR_TIERS.map((t) => {
+    const car = options.find((o) => o.name === t.label)?.car ?? 0;
+    return { tier: t.id, label: t.label, car, perTraveler: Math.round(car / party) };
+  });
+}
+
+// One row per discovery destination in a tier — the car list the
+// Car rental results show. The shape is TabRow plus the party
+// total, so the shared sortTabRows re-orders it and the card can
+// print the total without re-deriving it from a rounded
+// per-traveler figure (perTraveler × travelers would drift from
+// the leg by rounding).
+export type CarTierRow = TabRow & { total: number };
+
+export function carTierRows(tier: CarTier, travelers: number): CarTierRow[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  return discoveryDestinations()
+    .map((e) => {
+      const opt = carTierOptions(e.destination, party).find((o) => o.tier === tier);
+      return {
+        destination: e.destination,
+        routeLine: routeLineFor(e.stops),
+        pricePerTraveler: opt?.perTraveler ?? 0,
+        kind: 'leg' as const,
+        total: opt?.car ?? 0,
+      };
+    })
+    .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
+}
+
+// The days a rental covers: the searched dates when both are given
+// and the drop-off is on or after the pick-up (a same-day pick-up
+// and drop-off is one rental day), else the route's own days from
+// the discovery entry. A drop-off before the pick-up is not a
+// rental — the entry's days stand in instead of a zero or negative.
+export function carDaysFor(
+  query: Pick<SearchQuery, 'depart' | 'ret' | 'dest'>,
+  destination?: string
+): number | null {
+  if (query.depart && query.ret && query.ret >= query.depart) {
+    const days = Math.round(
+      (new Date(`${query.ret}T00:00:00Z`).getTime() - new Date(`${query.depart}T00:00:00Z`).getTime()) / 86400000
+    );
+    if (Number.isFinite(days) && days >= 0) return Math.max(1, days);
+  }
+  const dest = destination ?? query.dest;
+  const entry = dest ? discoveryDestinations().find((e) => e.destination === dest) : undefined;
+  return entry ? entry.days : null;
+}
+
 export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
   { id: 'roundtrip', label: 'Round-trip' },
   { id: 'oneway', label: 'One-way' },
@@ -244,6 +328,9 @@ export type SearchQuery = {
   // is the default; the widget carries it through submit and the
   // results read it back, so a tiered deep link renders its tier.
   stayTier: StayTier;
+  // Car rental only: which planner tier the car list prices in.
+  // Same three tiers, same ?tier= param, same Best value default.
+  carTier: CarTier;
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -283,6 +370,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   tripType: FlightTripType;
   legs: FlightLeg[];
   stayTier: StayTier;
+  carTier: CarTier;
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -301,6 +389,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     tripType: q?.tripType ?? 'roundtrip',
     legs: q?.legs ?? [],
     stayTier: q?.stayTier ?? 'best',
+    carTier: q?.carTier ?? 'best',
   };
 }
 
@@ -324,6 +413,7 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     tripType: 'roundtrip',
     legs: [],
     stayTier: 'best',
+    carTier: 'best',
   };
 }
 
@@ -422,6 +512,11 @@ export function searchQueryFromParams(
   if (tab === 'hotels') {
     q.stayTier = stayTierFromValue(params.tier);
   }
+  // Car rental tier (Nov 15, 2026): the same ?tier= param, the
+  // same fallback — a tiered car search is shareable too.
+  if (tab === 'cars') {
+    q.carTier = carTierFromValue(params.tier);
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -441,6 +536,7 @@ export function searchQueryToParams(q: SearchQuery): string {
     p.set('legs', flightLegsToParam(q.legs));
   }
   if (q.tab === 'hotels' && q.stayTier !== 'best') p.set('tier', q.stayTier);
+  if (q.tab === 'cars' && q.carTier !== 'best') p.set('tier', q.carTier);
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));

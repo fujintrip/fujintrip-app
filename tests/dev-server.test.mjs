@@ -258,6 +258,52 @@ test('stays form: guests and rooms are steppers with icons, not selects', async 
   assert.ok(html.includes('1 room'), 'the Rooms stepper shows the current rooms');
 });
 
+test('search deep link: car rental with dates renders per-destination rows with Best value labels', async () => {
+  const r = await fetch(`${BASE}/?tab=cars&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2&time=10:00`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Car rental in Central Europe'), 'the tier cards name the searched destination');
+  assert.ok(html.includes('from $90 per traveler'), 'the Cheapest tier card is $90 per traveler');
+  assert.ok(html.includes('from $252 per traveler'), 'the Premium tier card is $252 per traveler');
+  assert.ok(html.includes('$288 total for 2 travelers'), 'the Best value total is the party leg, not the rounded share times two');
+  assert.ok(html.includes('13 days'), 'the heading and cards name the searched rental days');
+  assert.ok(html.includes('Pick-up 10:00.'), 'the pick-up time from the link renders');
+  assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
+  assert.ok(html.includes('Car price'), 'the tier filter renders');
+  assert.ok(html.includes('Live car prices arrive when Rentalcars / CarTrawler connect.'), 'the honest supplier line renders');
+  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  assert.ok(!html.includes('Book now'), 'no Book now in the Car rental results');
+  assert.ok(!html.includes('Car class (example)'), 'no invented car-class example line in the results');
+});
+
+test('search deep link: a tiered car rental link renders that tier on first paint', async () => {
+  const r = await fetch(`${BASE}/?tab=cars&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2&tier=cheapest`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The list prices in the Cheapest tier, and the tier is named on
+  // every card and in the count line — a tiered search is shareable.
+  assert.ok(html.includes('Cheapest · planning estimate'), 'the list labels the Cheapest tier');
+  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
+  assert.ok(html.includes('Cheapest cars'), 'the count line names the tier');
+  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The Best value figure is still there — on the tier cards, where
+  // all three tiers always show.
+  assert.ok(html.includes('from $144 per traveler'), 'the Best value tier card still renders');
+});
+
+test('car rental form: icons on the fields, travelers select, same-location toggle', async () => {
+  const r = await fetch(`${BASE}/?tab=cars`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('aria-label="Pick-up date"'), 'the pick-up date field renders');
+  assert.ok(html.includes('aria-label="Pick-up time"'), 'the pick-up time field renders');
+  assert.ok(html.includes('aria-label="Drop-off date"'), 'the drop-off date field renders');
+  assert.ok(html.includes('aria-label="Drop-off time"'), 'the drop-off time field renders');
+  assert.ok(html.includes('Return to the same location'), 'the same-location toggle renders');
+  assert.ok(html.includes('aria-label="Travelers"'), 'the Travelers field renders on the car form');
+  assert.ok(html.includes('Search cars'), 'the car search button renders');
+});
+
 test('search deep link: flights with off-suggested dates shows the SEARCHED dates in the heading (live defect, Nov 14 2026)', async () => {
   // The live check searched Jan 15–22 and got a heading dated Jan 4–11
   // — the planner's suggested start — because the heading derived its
