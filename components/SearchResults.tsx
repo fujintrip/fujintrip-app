@@ -10,7 +10,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../lib/planner';
+import { comparisonFor, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from '../lib/planner';
 import { discoveryDestinations, type DiscoveryEntry } from '../lib/discovery';
 import {
   HOME_TABS,
@@ -38,6 +38,10 @@ import {
   carTierLabel,
   carTierOptions,
   carTierRows,
+  CRUISE_TIERS,
+  cruiseTierLabel,
+  cruiseTierOptions,
+  cruiseTierRows,
   STAY_TIERS,
   stayNightsFor,
   stayTierLabel,
@@ -52,6 +56,8 @@ import {
   type SearchQuery,
   type CarTier,
   type CarTierRow,
+  type CruiseTier,
+  type CruiseTierRow,
   type StayTier,
   type StayTierRow,
   type TourTier,
@@ -1643,9 +1649,162 @@ function TourResults({
   );
 }
 
+// One cruise row: the destination, the searched month and party,
+// the selected tier's per-traveler price and party total. No cruise
+// line, ship, sailing, rating, or per-night figure: the planner has
+// none of those, so the card shows none of those. The price is the
+// per-tier FULL-TRIP total, labeled as such — never a cruise price.
+function CruiseCard({
+  row,
+  query,
+  onSave,
+}: {
+  row: CruiseTierRow;
+  query: SearchQuery;
+  onSave: (label: string) => void;
+}) {
+  const photo = destinationPhoto(row.destination);
+  const highlight = rowIncludesPlace(row.destination, query.dest);
+  const tierLabel = cruiseTierLabel(query.cruiseTier);
+  const monthLabel = query.month ? MONTH_NAMES[Number(query.month) - 1] : 'Flexible month';
+  return (
+    <article className={`result-card${highlight ? ' result-match' : ''}`}>
+      {photo && <SafeImg src={photo} alt={row.destination} label={row.destination} className="result-photo" />}
+      <div className="result-body">
+        <h3>{row.destination}</h3>
+        <p className="plan-muted">{row.routeLine}</p>
+        <p className="plan-muted">
+          {monthLabel} · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
+        <p className="result-price">
+          from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
+          <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
+        </p>
+        <p className="plan-muted">
+          ${row.total.toLocaleString()} total for {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, row.destination))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Cruises results (Nov 15, 2026 — the Cruises section, same
+// standard as the Stays, Car rental and Attractions sections): the
+// searched destination's three planner tiers as cruise cards, then
+// the per-destination cruise list in the selected tier. Every
+// figure is the planner's own per-tier FULL-TRIP total — the
+// planner breaks out no cruise leg, so these are full-trip planning
+// estimates, never cruise prices, never a named line, ship, or
+// sailing. No "Book now": no live supplier exists yet.
+function CruiseResults({
+  query,
+  sort,
+  maxPrice,
+  cruiseTier,
+  onSave,
+  onClearPrice,
+  onClearCruiseFilters,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  cruiseTier: CruiseTier;
+  onSave: (label: string) => void;
+  onClearPrice: () => void;
+  onClearCruiseFilters: () => void;
+}) {
+  const known = isKnownPlace(query.dest);
+  const tiers = known ? cruiseTierOptions(query.dest, query.travelers) : null;
+  const allRows = useMemo(() => cruiseTierRows(cruiseTier, query.travelers), [cruiseTier, query.travelers]);
+  const rows = useMemo(() => {
+    const sorted = sortTabRows(allRows, sort);
+    return maxPrice === null ? sorted : sorted.filter((r) => r.pricePerTraveler <= maxPrice);
+  }, [allRows, sort, maxPrice]);
+  const filtersActive = maxPrice !== null || cruiseTier !== 'best';
+  const monthLabel = query.month ? MONTH_NAMES[Number(query.month) - 1] : 'Flexible month';
+  const travelers = `${query.travelers} traveler${query.travelers > 1 ? 's' : ''}`;
+  const tierLabel = cruiseTierLabel(cruiseTier);
+  const note = noLegNote('cruises');
+  return (
+    <div aria-label="Cruises results">
+      <h3>
+        Cruises · {query.dest || 'Anywhere'} · {monthLabel} · {travelers}
+      </h3>
+      <p className="plan-muted">Live cruise prices arrive when Traveltek connects.</p>
+      {note && <p className="results-note">{note}</p>}
+      <p className="plan-muted">
+        Cruise prices below are full-trip planning estimates from FujinTrip&apos;s planner — not cruise prices and not live
+        quotes, and no cruise line, ship, or sailing is attached to them. Live bookable cruises open as suppliers connect.
+      </p>
+      {tiers && (
+        <>
+          <h4>Cruises in {query.dest} — full-trip planning estimates</h4>
+          <div className="result-cards">
+            {tiers.map((t) => (
+              <article key={t.tier} className={`result-card${t.tier === cruiseTier ? ' result-match' : ''}`}>
+                <div className="result-body">
+                  <h3>
+                    {t.label}
+                    {t.tier === 'best' ? ' · Our pick' : ''}
+                  </h3>
+                  <p className="plan-muted">
+                    {monthLabel} · {travelers}
+                  </p>
+                  <p className="result-price">
+                    from ${t.perTraveler.toLocaleString()} per traveler{' '}
+                    <span className="plan-muted">· Full trip · planning estimate</span>
+                  </p>
+                  <p className="plan-muted">
+                    ${t.total.toLocaleString()} total for {travelers}
+                  </p>
+                  <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.dest))}>
+                    Save this search
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      {filtersActive && (
+        <p className="fare-count">
+          Showing {rows.length} of {allRows.length} destinations · {tierLabel} cruises.{' '}
+          <button type="button" className="linklike" onClick={onClearCruiseFilters}>
+            Clear filters
+          </button>
+        </p>
+      )}
+      <h4>Cruises by destination — full-trip planning estimates</h4>
+      {rows.length === 0 ? (
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
+      ) : (
+        <div className="result-cards">
+          {rows.map((r) => (
+            <CruiseCard key={r.destination} row={r} query={query} onSave={onSave} />
+          ))}
+        </div>
+      )}
+      <p className="plan-muted">
+        {tierLabel} full trip per traveler, {travelers} · planning estimate — not a live quote. Live comparison arrives as suppliers
+        connect.
+      </p>
+    </div>
+  );
+}
+
 // One tab's estimate results: the per-route planner numbers for this
-// category, per traveler, labeled planning estimate. Cruises / buses
-// / taxis carry the honest note instead of a broken-out price.
+// category, per traveler, labeled planning estimate. Buses / taxis
+// carry the honest note instead of a broken-out price (cruises have
+// their own CruiseResults since Nov 15, 2026).
 function CategoryResults({
   query,
   sort,
@@ -1740,12 +1899,17 @@ export default function SearchResults({
   // Attractions tier (Nov 15, 2026): the same filter-state pattern
   // as the Stays and Car rental tiers, for the attraction list.
   const [tourTier, setTourTier] = useState<TourTier>(query.tourTier ?? 'best');
+  // Cruises tier (Nov 15, 2026): the same filter-state pattern
+  // as the Stays, Car rental and Attractions tiers, for the cruise list.
+  const [cruiseTier, setCruiseTier] = useState<CruiseTier>(query.cruiseTier ?? 'best');
   // The estimate rows behind the max-price counts — the counts on the
   // price options come from the same rows the list shows. Stays price
   // for the searched party (guests), in the selected tier — the
   // flights travelers default would price a 4-guest stay for 2.
   // Cars price for the searched travelers, in the selected tier.
   // Attractions price for the searched travelers, in the selected tier.
+  // Cruises price for the searched travelers, in the selected tier
+  // (full-trip totals — the planner breaks out no cruise leg).
   const estimateRows = useMemo(
     () =>
       query.tab === 'hotels'
@@ -1754,8 +1918,10 @@ export default function SearchResults({
           ? carTierRows(carTier, query.travelers)
           : query.tab === 'tours'
             ? tourTierRows(tourTier, query.travelers)
-            : tabRowsFor(query.tab, query.travelers),
-    [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier]
+            : query.tab === 'cruises'
+              ? cruiseTierRows(cruiseTier, query.travelers)
+              : tabRowsFor(query.tab, query.travelers),
+    [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier, cruiseTier]
   );
   const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
@@ -1768,7 +1934,7 @@ export default function SearchResults({
   const selectedDiscovery: DiscoveryEntry | null =
     discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
-  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
+  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.month || ''}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${query.cruiseTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
   useEffect(() => {
@@ -1779,6 +1945,7 @@ export default function SearchResults({
     setStayTier(query.stayTier ?? 'best');
     setCarTier(query.carTier ?? 'best');
     setTourTier(query.tourTier ?? 'best');
+    setCruiseTier(query.cruiseTier ?? 'best');
   }, [queryKey]);
 
   const primaryPlace =
@@ -1840,6 +2007,18 @@ export default function SearchResults({
           <h3>Attraction price</h3>
           <select value={tourTier} onChange={(e) => setTourTier(e.target.value as TourTier)} aria-label="Attraction price tier">
             {TOUR_TIERS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {query.tab === 'cruises' && (
+        <div className="filter-group">
+          <h3>Cruise price</h3>
+          <select value={cruiseTier} onChange={(e) => setCruiseTier(e.target.value as CruiseTier)} aria-label="Cruise price tier">
+            {CRUISE_TIERS.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
               </option>
@@ -1993,6 +2172,19 @@ export default function SearchResults({
                 onClearTourFilters={() => {
                   setMaxPrice(null);
                   setTourTier('best');
+                }}
+              />
+            ) : query.tab === 'cruises' ? (
+              <CruiseResults
+                query={query}
+                sort={sort}
+                maxPrice={maxPrice}
+                cruiseTier={cruiseTier}
+                onSave={onSaveSearch}
+                onClearPrice={() => setMaxPrice(null)}
+                onClearCruiseFilters={() => {
+                  setMaxPrice(null);
+                  setCruiseTier('best');
                 }}
               />
             ) : (

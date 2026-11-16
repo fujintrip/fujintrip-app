@@ -398,13 +398,54 @@ test('search deep link: flights with past dates falls back to flexible dates (Fl
 });
 
 test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {
-  const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=1&travelers=2`);
+  const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=12&travelers=2`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
   assert.ok(html.includes("aren't broken out"), 'the gap is named');
   assert.ok(html.includes('Full trip · planning estimate'), 'the rows say they are full-trip totals');
   assert.ok(html.includes('from $1,800 per traveler'), 'Central Europe full trip $1,800 per traveler');
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  assert.ok(html.includes('Live cruise prices arrive when Traveltek connects.'), 'the honest supplier line renders');
+  assert.ok(!html.includes('Book now'), 'no Book now in the Cruises results');
+});
+
+test('search deep link: a tiered cruise link renders that tier on first paint', async () => {
+  const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=12&travelers=2&tier=cheapest`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The list prices in the Cheapest tier, and the tier is named on
+  // every card and in the count line — a tiered search is shareable.
+  assert.ok(html.includes('Cheapest · Full trip · planning estimate'), 'the list labels the Cheapest tier');
+  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
+  assert.ok(html.includes('Cheapest cruises'), 'the count line names the tier');
+  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  assert.ok(html.includes('Cruise price'), 'the tier filter renders');
+  // The Best value figure is still there — on the tier cards, where
+  // all three tiers always show.
+  assert.ok(html.includes('from $1,800 per traveler'), 'the Best value tier card still renders');
+  assert.ok(html.includes('from $1,152 per traveler'), 'the Cheapest tier card is $1,152 per traveler');
+  assert.ok(html.includes('from $2,952 per traveler'), 'the Premium tier card is $2,952 per traveler');
+  assert.ok(html.includes('$3,600 total for 2 travelers'), 'the Best value total is the party total, not the rounded share times two');
+  assert.ok(html.includes('Best value · Our pick'), 'Best value carries Our pick');
+});
+
+test('search deep link: a stale cruise month falls back to a flexible month', async () => {
+  const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=1&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Flexible month'), 'a past month drops and the heading says Flexible month');
+  assert.ok(html.includes('Cruises · Central Europe'), 'the results still render from the destination');
+  assert.ok(html.includes('Save this search'), 'the primary action is still Save this search');
+});
+
+test('cruises form: icons on the fields, departure month, travelers select', async () => {
+  const r = await fetch(`${BASE}/?tab=cruises`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Departure region'), 'the departure region field renders');
+  assert.ok(html.includes('aria-label="Departure month"'), 'the departure month field renders');
+  assert.ok(html.includes('aria-label="Travelers"'), 'the Travelers field renders on the cruises form');
+  assert.ok(html.includes('Search cruises'), 'the cruises search button renders');
 });
 
 test('tabs: ?tab=bogus falls back to Flights', async () => {

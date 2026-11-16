@@ -23,6 +23,7 @@ import {
   type FlightTripType,
   type SearchQuery,
   type CarTier,
+  type CruiseTier,
   type StayTier,
   type TourTier,
 } from '../lib/searchPlaces';
@@ -207,6 +208,9 @@ export default function SearchWidget({
   // Attractions tier (Nov 15, 2026): the same carry-through as the
   // Stays and Car rental tiers, for the same reason.
   const [tourTier, setTourTier] = useState<TourTier>(initialSearch?.tourTier ?? 'best');
+  // Cruises tier (Nov 15, 2026): the same carry-through as the
+  // Stays, Car rental and Attractions tiers, for the same reason.
+  const [cruiseTier, setCruiseTier] = useState<CruiseTier>(initialSearch?.cruiseTier ?? 'best');
 
   // A multi-city search always has 2–4 legs. A fresh multi-city
   // form starts from the route already typed (leg 1) plus one empty
@@ -288,6 +292,7 @@ export default function SearchWidget({
     setStayTier(v.stayTier);
     setCarTier(v.carTier);
     setTourTier(v.tourTier);
+    setCruiseTier(v.cruiseTier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -422,7 +427,17 @@ export default function SearchWidget({
         return;
       }
     }
-    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && (tab !== 'flights' || tripType !== 'multicity')) {
+    // Cruises month names the sailing window: a month that already
+    // passed is not a trip, and the generic block below has no dates
+    // to check on this tab (cruises carry a month, not dates), so
+    // cruises skip it.
+    if (tab === 'cruises') {
+      if (month && Number(month) < Number(now.slice(5, 7))) {
+        setNote('That month has already passed — pick this month or a later one.');
+        return;
+      }
+    }
+    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && tab !== 'cruises' && (tab !== 'flights' || tripType !== 'multicity')) {
       if (depart && depart < now) {
         setNote('That date is in the past — pick a date from today on.');
         return;
@@ -464,6 +479,7 @@ export default function SearchWidget({
       stayTier: tab === 'hotels' ? stayTier : 'best',
       carTier: tab === 'cars' ? carTier : 'best',
       tourTier: tab === 'tours' ? tourTier : 'best',
+      cruiseTier: tab === 'cruises' ? cruiseTier : 'best',
     };
     if (tab === 'flights' && tripType === 'oneway') q.ret = '';
     if (tab === 'flights' && tripType === 'multicity') {
@@ -637,10 +653,10 @@ export default function SearchWidget({
           )}
           {tab === 'cruises' && (
             <>
-              <Field label="Departure region">
+              <Field label="Departure region" icon="pin">
                 <PlaceField id="cruises-region" label="Departure region" value={place} onChange={setPlace} placeholder="Caribbean, Mediterranean…" />
               </Field>
-              <Field label="Departure month">
+              <Field label="Departure month" icon="calendar">
                 <select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Departure month">
                   <option value="">Any month</option>
                   {MONTH_NAMES.map((m, i) => (

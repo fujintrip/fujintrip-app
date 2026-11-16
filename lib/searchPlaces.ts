@@ -325,6 +325,79 @@ export function tourDaysFor(
   return entry ? entry.days : null;
 }
 
+// Cruise tiers (Nov 15, 2026 — the Cruises section, same standard
+// as the Stays, Car rental and Attractions sections): the three
+// planner tiers, priced from the planner's own per-tier totals —
+// never a named line, ship, sailing, rating, or live quote. The
+// planner breaks out no cruise leg (see noLegNote in lib/homeTabs:
+// cruise prices are not broken out yet), so the tier figures are
+// the per-tier FULL-TRIP totals — the same figures the old cruise
+// rows showed for Best value — and the results label them as
+// full-trip planning estimates, never as cruise prices. Inventing
+// a cruise leg from the trip total would break that rule. The tier
+// is part of the search (a ?tier= URL param, like the Stays, Car
+// and Attractions tiers), so a tiered search is shareable and
+// renders its tier on first paint.
+export type CruiseTier = 'cheapest' | 'best' | 'premium';
+
+export const CRUISE_TIERS: { id: CruiseTier; label: string }[] = [
+  { id: 'cheapest', label: 'Cheapest' },
+  { id: 'best', label: 'Best value' },
+  { id: 'premium', label: 'Premium' },
+];
+
+export function cruiseTierFromValue(v: unknown): CruiseTier {
+  return v === 'cheapest' || v === 'premium' ? v : 'best';
+}
+
+export function cruiseTierLabel(tier: CruiseTier): string {
+  return CRUISE_TIERS.find((t) => t.id === tier)?.label ?? 'Best value';
+}
+
+// One tier's cruise figures for a destination — the planner's
+// per-tier full-trip total for the whole party (buildPlan's total
+// is a party total for the trip) plus the per-traveler share. The
+// figures never depend on the searched month: the planner prices
+// the trip, not the sailing, so the total stays the planner's
+// figure whatever month the traveler picked — scaling it by a
+// sailing length would invent a pricing model the planner does
+// not have.
+export type CruiseTierOption = { tier: CruiseTier; label: string; total: number; perTraveler: number };
+
+export function cruiseTierOptions(destination: string, travelers: number): CruiseTierOption[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  const options = buildPlan(destination, party, 3).options;
+  return CRUISE_TIERS.map((t) => {
+    const total = options.find((o) => o.name === t.label)?.total ?? 0;
+    return { tier: t.id, label: t.label, total, perTraveler: Math.round(total / party) };
+  });
+}
+
+// One row per discovery destination in a tier — the cruise list
+// the Cruises results show. The shape is TabRow plus the party
+// total, so the shared sortTabRows re-orders it and the card can
+// print the total without re-deriving it from a rounded per-traveler
+// figure (perTraveler × travelers would drift from the total by
+// rounding). kind is 'full-trip': these are full-trip totals, not
+// cruise prices.
+export type CruiseTierRow = TabRow & { total: number };
+
+export function cruiseTierRows(tier: CruiseTier, travelers: number): CruiseTierRow[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  return discoveryDestinations()
+    .map((e) => {
+      const opt = cruiseTierOptions(e.destination, party).find((o) => o.tier === tier);
+      return {
+        destination: e.destination,
+        routeLine: routeLineFor(e.stops),
+        pricePerTraveler: opt?.perTraveler ?? 0,
+        kind: 'full-trip' as const,
+        total: opt?.total ?? 0,
+      };
+    })
+    .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
+}
+
 export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
   { id: 'roundtrip', label: 'Round-trip' },
   { id: 'oneway', label: 'One-way' },
@@ -420,6 +493,11 @@ export type SearchQuery = {
   // prices in. Same three tiers, same ?tier= param, same Best
   // value default.
   tourTier: TourTier;
+  // Cruises only: which planner tier the cruise list prices in.
+  // Same three tiers, same ?tier= param, same Best value default.
+  // The figures are the per-tier full-trip totals (the planner
+  // breaks out no cruise leg), labeled as such in the results.
+  cruiseTier: CruiseTier;
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -461,6 +539,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   stayTier: StayTier;
   carTier: CarTier;
   tourTier: TourTier;
+  cruiseTier: CruiseTier;
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -481,6 +560,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     stayTier: q?.stayTier ?? 'best',
     carTier: q?.carTier ?? 'best',
     tourTier: q?.tourTier ?? 'best',
+    cruiseTier: q?.cruiseTier ?? 'best',
   };
 }
 
@@ -506,6 +586,7 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     stayTier: 'best',
     carTier: 'best',
     tourTier: 'best',
+    cruiseTier: 'best',
   };
 }
 
@@ -569,6 +650,12 @@ export function searchQueryFromParams(
   q.dropoff = cleanPlace(params.dropoff);
   const month = cleanInt(params.month, 1, 12, 0);
   q.month = month ? String(month) : '';
+  // A month number is this year's month — a link naming a month
+  // that already passed is stale, so it drops and the search falls
+  // back to a flexible month instead of showing results for a
+  // month that has already gone. The current month itself stays:
+  // a cruise this month is still a trip.
+  if (q.month && Number(q.month) < Number(todayIso.slice(5, 7))) q.month = '';
   // Flights trip type + multi-city legs (Nov 15, 2026): ?type=oneway
   // | roundtrip | multicity, and ?legs=from|to|date,from|to|date.
   // Junk type falls back to round-trip; fewer than 2 clean legs is
@@ -614,6 +701,11 @@ export function searchQueryFromParams(
   if (tab === 'tours') {
     q.tourTier = tourTierFromValue(params.tier);
   }
+  // Cruises tier (Nov 15, 2026): the same ?tier= param, the
+  // same fallback — a tiered cruise search is shareable too.
+  if (tab === 'cruises') {
+    q.cruiseTier = cruiseTierFromValue(params.tier);
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -635,6 +727,7 @@ export function searchQueryToParams(q: SearchQuery): string {
   if (q.tab === 'hotels' && q.stayTier !== 'best') p.set('tier', q.stayTier);
   if (q.tab === 'cars' && q.carTier !== 'best') p.set('tier', q.carTier);
   if (q.tab === 'tours' && q.tourTier !== 'best') p.set('tier', q.tourTier);
+  if (q.tab === 'cruises' && q.cruiseTier !== 'best') p.set('tier', q.cruiseTier);
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));
