@@ -137,7 +137,7 @@ export const SUPPLIERS: SupplierConnector[] = [
     feeModel: 'B2B net rates — true wholesale prices, no retail floor; we set the retail price',
     freeToStart: true, access: 'Partner signup; sandbox immediate on registration (no commercial agreement needed for sandbox)',
     leadTime: 'Days (sandbox); weeks (production)', state: 'not_configured', mode: 'onsite', quickWin: true,
-    envVar: 'HOTELBEDS_API_KEY', notes: 'Net rates give us the best price control in the plan. Also the route for HolidayTaxis-style airport transfers (same HBX Group) — partner route UNVERIFIED, needs direct contact.',
+    envVar: 'HOTELBEDS_API_KEY', notes: 'WIRED Nov 16, 2026 — ALL FOUR products (Hotel/Activities/Transfers/Bundle), each with its own evaluation key (50 req/day each), 6h server cache, results labeled sandbox/test — never bookable. Toggle in one place: HOTELBEDS_PRODUCTS in lib/hotelbeds.ts — hotel ON first; activities/transfers/bundle wired and ready to switch on (lib/hotelbeds-activities.ts + /api/hotelbeds-activities → Attractions tab; lib/hotelbeds-transfers.ts + /api/hotelbeds-transfers → Taxis tab; lib/hotelbeds-bundle.ts + /api/hotelbeds-bundle, packaging search, NO planner rebuild). Live rooms need certification + commercial agreement. Net rates give us the best price control in the plan. Also the route for HolidayTaxis-style airport transfers (same HBX Group) — partner route UNVERIFIED, needs direct contact.',
   },
   {
     id: 'booking-demand', name: 'Booking.com Demand API', categories: ['hotels'],

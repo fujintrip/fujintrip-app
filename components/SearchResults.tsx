@@ -5,8 +5,9 @@
 // left sidebar, Duffel pairs and Ignav trips mixed in one sorted
 // list. Results appear ONLY after a search; nothing here is
 // pre-loaded. Every price is labeled as what it is: live Duffel TEST
-// fares, cached Travelpayouts fares, or the planner's Best value
-// legs/totals per traveler as planning estimates. No "Book now"
+// fares, cached Travelpayouts fares, Hotelbeds sandbox test hotels
+// (never bookable), or the planner's Best value legs/totals per
+// traveler as planning estimates. No "Book now"
 // anywhere — the primary action on every card is "Save this search"
 // (a request in My Trips, no booking, no payment).
 'use client';
@@ -94,6 +95,12 @@ import {
   ignavSourceTag,
   sortIgnavItineraries,
 } from '../lib/ignav';
+import type { HotelbedsHotel, HotelbedsSearchResult } from '../lib/hotelbeds';
+import { hotelbedsEmptyMessage, hotelbedsProductEnabled, hotelbedsSandboxTag } from '../lib/hotelbeds';
+import type { HotelbedsActivity, HotelbedsActivitiesResult } from '../lib/hotelbeds-activities';
+import { hotelbedsActivitiesEmptyMessage, hotelbedsActivitiesSandboxTag } from '../lib/hotelbeds-activities';
+import type { HotelbedsTransfer, HotelbedsTransfersResult } from '../lib/hotelbeds-transfers';
+import { hotelbedsTransfersEmptyMessage, hotelbedsTransfersSandboxTag } from '../lib/hotelbeds-transfers';
 import { serviceFee } from '../lib/planner';
 import { mergeFlightOptions, type FlightOption } from '../lib/flightOptions';
 import { SafeImg } from './FujinChat';
@@ -1241,6 +1248,167 @@ function StayCard({
   );
 }
 
+// One Hotelbeds sandbox hotel as a card: the hotel name, its
+// ContentAPI photo, the zone, and the cheapest test price for the
+// whole stay (per night + per traveler). The sandbox tag is on
+// EVERY card and never hides behind a filter — it is the honesty
+// label (test data, not a bookable room), not a source tag. No
+// "Book now": sandbox rooms cannot be booked, so the primary
+// action is "Save this search" like every other card.
+function HotelbedsHotelCard({
+  hotel,
+  query,
+  checkedAt,
+  onSave,
+}: {
+  hotel: HotelbedsHotel;
+  query: SearchQuery;
+  checkedAt: string | null;
+  onSave: (label: string) => void;
+}) {
+  const money = (n: number) =>
+    hotel.currency === 'USD' ? `$${n.toLocaleString()}` : `${n.toLocaleString()} ${hotel.currency}`;
+  const place = [hotel.zoneName, hotel.destinationName].filter(Boolean).join(' · ');
+  return (
+    <article className="result-card">
+      {hotel.imageUrl && <SafeImg src={hotel.imageUrl} alt={hotel.name} label={hotel.name} className="result-photo" />}
+      <div className="result-body">
+        <h3>{hotel.name}</h3>
+        {(hotel.categoryName || place) && (
+          <p className="plan-muted">
+            {[hotel.categoryName, place].filter(Boolean).join(' · ')}
+          </p>
+        )}
+        <p className="plan-muted">
+          {hotel.nights} night{hotel.nights > 1 ? 's' : ''} · {query.guests} guest{query.guests > 1 ? 's' : ''} ·{' '}
+          {query.rooms} room{query.rooms > 1 ? 's' : ''}
+          {hotel.roomName ? ` · ${hotel.roomName}` : ''}
+          {hotel.boardName ? ` · ${hotel.boardName}` : ''}
+        </p>
+        <p className="result-price">
+          from {money(hotel.price)} total{' '}
+          <span className="plan-muted">
+            · {money(hotel.perNight)}/night · {money(hotel.perTraveler)} per traveler
+          </span>
+        </p>
+        <p className="fare-card-source">{hotelbedsSandboxTag(checkedAt)}</p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.dest))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Hotelbeds sandbox hotels (Nov 16, 2026): the Stays tab's first
+// live hotel source — TEST data from the Hotelbeds evaluation
+// account, fetched once per search (the server caches 6h; the
+// evaluation key allows 50 requests/day). The section renders its
+// honest empty state when the key is missing, the destination has
+// no location, dates are missing, or Hotelbeds has no test hotels
+// — never an invented hotel. The max-price filter narrows these
+// cards by per-traveler price, the same unit the sidebar quotes.
+function HotelbedsStays({
+  query,
+  sort,
+  maxPrice,
+  onSave,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  onSave: (label: string) => void;
+}) {
+  const [state, setState] = useState<{ status: 'idle' | 'loading' | 'done'; data: HotelbedsSearchResult | null }>({
+    status: 'idle',
+    data: null,
+  });
+  const key = `${query.dest}|${query.depart}|${query.ret}|${query.guests}|${query.rooms}`;
+  const fetchedKeyRef = useRef('');
+  useEffect(() => {
+    if (fetchedKeyRef.current === key) return;
+    fetchedKeyRef.current = key;
+    setState({ status: 'loading', data: null });
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/hotelbeds-stays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            destination: query.dest,
+            checkIn: query.depart,
+            checkOut: query.ret,
+            guests: query.guests,
+            rooms: query.rooms,
+          }),
+        });
+        const j = (await r.json()) as HotelbedsSearchResult;
+        if (!cancelled) setState({ status: 'done', data: j });
+      } catch {
+        if (!cancelled) setState({ status: 'done', data: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const visible = useMemo(() => {
+    const list = state.data?.hotels ?? [];
+    const filtered = maxPrice === null ? list : list.filter((h) => h.perTraveler <= maxPrice);
+    if (sort === 'cheapest' || sort === 'best') return [...filtered].sort((a, b) => a.price - b.price);
+    return filtered;
+  }, [state.data, maxPrice, sort]);
+  const nights = state.data?.nights ?? null;
+  return (
+    <div aria-label="Hotelbeds sandbox hotels">
+      <h4>Hotels in {query.dest || 'your destination'} — Hotelbeds sandbox</h4>
+      <p className="plan-muted">
+        Test hotels from the Hotelbeds evaluation account — the prices below are sandbox test data, not live quotes,
+        and the rooms cannot be booked.
+      </p>
+      {state.status === 'loading' && <p className="plan-muted">Checking Hotelbeds sandbox hotels…</p>}
+      {state.status === 'done' && !state.data && (
+        <p className="plan-muted">Hotelbeds could not be reached right now.</p>
+      )}
+      {state.status === 'done' && state.data && !state.data.live && (
+        <p className="plan-muted">{hotelbedsEmptyMessage(state.data.reason)}</p>
+      )}
+      {state.status === 'done' && state.data && state.data.live && (
+        <>
+          {maxPrice !== null && (
+            <p className="fare-count">
+              Showing {visible.length} of {state.data.hotels.length} sandbox hotels.
+            </p>
+          )}
+          {visible.length === 0 ? (
+            <p className="plan-muted">No sandbox hotels under that price — raise the max price or clear it.</p>
+          ) : (
+            <div className="result-cards">
+              {visible.map((h) => (
+                <HotelbedsHotelCard
+                  key={h.code}
+                  hotel={h}
+                  query={query}
+                  checkedAt={state.data?.checkedAt ?? null}
+                  onSave={onSave}
+                />
+              ))}
+            </div>
+          )}
+          <p className="plan-muted">
+            {hotelbedsSandboxTag(state.data.checkedAt)}
+            {nights !== null ? ` · ${nights} night${nights > 1 ? 's' : ''} · ` : ' · '}
+            {state.data.guests} guest{state.data.guests > 1 ? 's' : ''} · {state.data.rooms} room
+            {state.data.rooms > 1 ? 's' : ''}. Live bookable stays arrive when Expedia Rapid / Duffel Stays connect.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Stays results (Nov 15, 2026 — the Stays section, same standard as
 // the Flights section): the searched destination's three planner
 // tiers as stay cards, then the per-destination stay list in the
@@ -1283,7 +1451,10 @@ function StayResults({
         Stays · {query.dest || 'Anywhere'} · {dates}
         {nights !== null ? ` · ${nights} night${nights > 1 ? 's' : ''}` : ''} · {guests} · {rooms}
       </h3>
-      <p className="plan-muted">Live hotel prices arrive when Expedia Rapid / Duffel Stays connect.</p>
+      <p className="plan-muted">
+        Hotelbeds sandbox is connected — the test hotels below come from the Hotelbeds evaluation account. Live hotel
+        prices arrive when Expedia Rapid / Duffel Stays connect.
+      </p>
       <p className="plan-muted">
         Stay prices below are planning estimates from FujinTrip&apos;s planner — not live quotes, and no named property is
         attached to them. Live bookable stays open as suppliers connect.
@@ -1326,6 +1497,9 @@ function StayResults({
             Clear filters
           </button>
         </p>
+      )}
+      {hotelbedsProductEnabled('hotel') && (
+        <HotelbedsStays query={query} sort={sort} maxPrice={maxPrice} onSave={onSave} />
       )}
       <h4>Stays by destination — planning estimates</h4>
       {rows.length === 0 ? (
@@ -1559,6 +1733,164 @@ function TourCard({
 // figure is the planner's own activities leg for the party — a
 // planning estimate, never a live quote, never a named attraction,
 // tour, or operator. No "Book now": no live supplier exists yet.
+// One Hotelbeds sandbox activity as a card: the activity name,
+// its photo, the modality and destination, and the cheapest test
+// price per person (party total beside it). The sandbox tag is on
+// EVERY card and never hides behind a filter — it is the honesty
+// label (test data, not a bookable activity), not a source tag. No
+// "Book now": sandbox activities cannot be booked, so the primary
+// action is "Save this search" like every other card.
+function HotelbedsActivityCard({
+  activity,
+  query,
+  checkedAt,
+  onSave,
+}: {
+  activity: HotelbedsActivity;
+  query: SearchQuery;
+  checkedAt: string | null;
+  onSave: (label: string) => void;
+}) {
+  const money = (n: number) =>
+    activity.currency === 'USD' ? `$${n.toLocaleString()}` : `${n.toLocaleString()} ${activity.currency}`;
+  const place = [activity.destinationName, activity.countryName].filter(Boolean).join(' · ');
+  return (
+    <article className="result-card">
+      {activity.imageUrl && <SafeImg src={activity.imageUrl} alt={activity.name} label={activity.name} className="result-photo" />}
+      <div className="result-body">
+        <h3>{activity.name}</h3>
+        {place && <p className="plan-muted">{place}</p>}
+        {(activity.modalityName || activity.durationDays !== undefined) && (
+          <p className="plan-muted">
+            {activity.modalityName ?? ''}
+            {activity.modalityName && activity.durationDays !== undefined ? ' · ' : ''}
+            {activity.durationDays !== undefined ? `${activity.durationDays} day${activity.durationDays === 1 ? '' : 's'}` : ''}
+          </p>
+        )}
+        {activity.summary && <p className="plan-muted">{activity.summary}</p>}
+        <p className="result-price">
+          from {money(activity.price)} per person{' '}
+          <span className="plan-muted">
+            · {money(activity.total)} total for {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+          </span>
+        </p>
+        <p className="fare-card-source">{hotelbedsActivitiesSandboxTag(checkedAt)}</p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.dest))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Hotelbeds sandbox activities (Nov 16, 2026): the Attractions
+// tab's live activity source — TEST data from the Hotelbeds
+// evaluation account, fetched once per search (the server caches
+// 6h; the evaluation key allows 50 requests/day). The parent
+// renders this only while the activities toggle is on in
+// lib/hotelbeds.ts — when it is off, nothing here mounts, nothing
+// is fetched, and the tab is exactly its planning-estimate view.
+// The section renders its honest empty state when the key is
+// missing, the destination has no location, dates are missing, or
+// Hotelbeds has no test activities — never an invented tour.
+function HotelbedsActivities({
+  query,
+  sort,
+  maxPrice,
+  onSave,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  onSave: (label: string) => void;
+}) {
+  const [state, setState] = useState<{ status: 'idle' | 'loading' | 'done'; data: HotelbedsActivitiesResult | null }>({
+    status: 'idle',
+    data: null,
+  });
+  const key = `${query.dest}|${query.depart}|${query.ret}|${query.travelers}`;
+  const fetchedKeyRef = useRef('');
+  useEffect(() => {
+    if (fetchedKeyRef.current === key) return;
+    fetchedKeyRef.current = key;
+    setState({ status: 'loading', data: null });
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/hotelbeds-activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            destination: query.dest,
+            from: query.depart,
+            to: query.ret,
+            travelers: query.travelers,
+          }),
+        });
+        const j = (await r.json()) as HotelbedsActivitiesResult;
+        if (!cancelled) setState({ status: 'done', data: j });
+      } catch {
+        if (!cancelled) setState({ status: 'done', data: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const visible = useMemo(() => {
+    const list = state.data?.activities ?? [];
+    const filtered = maxPrice === null ? list : list.filter((a) => a.perTraveler <= maxPrice);
+    if (sort === 'cheapest' || sort === 'best') return [...filtered].sort((a, b) => a.price - b.price);
+    return filtered;
+  }, [state.data, maxPrice, sort]);
+  return (
+    <div aria-label="Hotelbeds sandbox activities">
+      <h4>Activities in {query.dest || 'your destination'} — Hotelbeds sandbox</h4>
+      <p className="plan-muted">
+        Test activities from the Hotelbeds evaluation account — the prices below are sandbox test data, not live quotes,
+        and the activities cannot be booked.
+      </p>
+      {state.status === 'loading' && <p className="plan-muted">Checking Hotelbeds sandbox activities…</p>}
+      {state.status === 'done' && !state.data && (
+        <p className="plan-muted">Hotelbeds could not be reached right now.</p>
+      )}
+      {state.status === 'done' && state.data && !state.data.live && (
+        <p className="plan-muted">{hotelbedsActivitiesEmptyMessage(state.data.reason)}</p>
+      )}
+      {state.status === 'done' && state.data && state.data.live && (
+        <>
+          {maxPrice !== null && (
+            <p className="fare-count">
+              Showing {visible.length} of {state.data.activities.length} sandbox activities.
+            </p>
+          )}
+          {visible.length === 0 ? (
+            <p className="plan-muted">No sandbox activities under that price — raise the max price or clear it.</p>
+          ) : (
+            <div className="result-cards">
+              {visible.map((a) => (
+                <HotelbedsActivityCard
+                  key={a.code}
+                  activity={a}
+                  query={query}
+                  checkedAt={state.data?.checkedAt ?? null}
+                  onSave={onSave}
+                />
+              ))}
+            </div>
+          )}
+          <p className="plan-muted">
+            {hotelbedsActivitiesSandboxTag(state.data.checkedAt)} · {state.data.travelers} traveler
+            {state.data.travelers > 1 ? 's' : ''}. Live bookable attractions arrive when Viator / GetYourGuide / Klook
+            connect.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TourResults({
   query,
   sort,
@@ -1637,6 +1969,9 @@ function TourResults({
             Clear filters
           </button>
         </p>
+      )}
+      {hotelbedsProductEnabled('activities') && (
+        <HotelbedsActivities query={query} sort={sort} maxPrice={maxPrice} onSave={onSave} />
       )}
       <h4>Attractions by destination — planning estimates</h4>
       {rows.length === 0 ? (
@@ -2020,6 +2355,170 @@ function TaxiCard({
 // breaks out no taxi leg, so these are full-trip planning estimates,
 // never taxi prices, never a named company, route, or timetable. No
 // "Book now": no live supplier exists yet.
+// One Hotelbeds sandbox transfer as a card: the vehicle and
+// category, the transfer type, the pickup date and time, and the
+// total test price for the whole party (per traveler beside it).
+// The sandbox tag is on EVERY card and never hides behind a filter
+// — it is the honesty label (test data, not a bookable transfer),
+// not a source tag. No "Book now": sandbox transfers cannot be
+// booked, so the primary action is "Save this search" like every
+// other card.
+function HotelbedsTransferCard({
+  transfer,
+  query,
+  checkedAt,
+  onSave,
+}: {
+  transfer: HotelbedsTransfer;
+  query: SearchQuery;
+  checkedAt: string | null;
+  onSave: (label: string) => void;
+}) {
+  const money = (n: number) =>
+    transfer.currency === 'USD' ? `$${n.toLocaleString()}` : `${n.toLocaleString()} ${transfer.currency}`;
+  const typeLabel = transfer.transferType === 'PRIVATE' ? 'Private transfer' : 'Shared shuttle';
+  const route = [transfer.fromDescription, transfer.toDescription].filter(Boolean).join(' → ');
+  return (
+    <article className="result-card">
+      {transfer.imageUrl && <SafeImg src={transfer.imageUrl} alt={transfer.vehicleName ?? 'Transfer'} label={transfer.vehicleName ?? 'Transfer'} className="result-photo" />}
+      <div className="result-body">
+        <h3>
+          {transfer.vehicleName ?? typeLabel}
+          {transfer.categoryName ? ` · ${transfer.categoryName}` : ''}
+        </h3>
+        <p className="plan-muted">{typeLabel}</p>
+        {route && <p className="plan-muted">{route}</p>}
+        <p className="plan-muted">
+          {transfer.pickupDate ? `${transfer.pickupDate}` : ''}
+          {transfer.pickupDate && transfer.pickupTime ? ` · ${transfer.pickupTime}` : transfer.pickupTime ?? ''}
+          {transfer.maxPaxCapacity !== undefined ? ` · up to ${transfer.maxPaxCapacity} passengers` : ''}
+        </p>
+        {transfer.remarks && <p className="plan-muted">{transfer.remarks}</p>}
+        <p className="result-price">
+          from {money(transfer.price)} total{' '}
+          <span className="plan-muted">
+            · {money(transfer.perTraveler)} per traveler · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+          </span>
+        </p>
+        <p className="fare-card-source">{hotelbedsTransfersSandboxTag(checkedAt)}</p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.dropoff || query.from))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Hotelbeds sandbox transfers (Nov 16, 2026): the Taxis tab's
+// airport-transfer source — TEST data from the Hotelbeds
+// evaluation account, fetched once per search (the server caches
+// 6h; the evaluation key allows 50 requests/day). The parent
+// renders this only while the transfers toggle is on in
+// lib/hotelbeds.ts — when it is off, nothing here mounts, nothing
+// is fetched, and the tab is exactly its planning-estimate view.
+// The section renders its honest empty state when the key is
+// missing, a side has no airport or location, the date is missing,
+// or Hotelbeds has no test transfers — never an invented transfer.
+function HotelbedsTransfers({
+  query,
+  sort,
+  maxPrice,
+  onSave,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  onSave: (label: string) => void;
+}) {
+  const [state, setState] = useState<{ status: 'idle' | 'loading' | 'done'; data: HotelbedsTransfersResult | null }>({
+    status: 'idle',
+    data: null,
+  });
+  const key = `${query.from}|${query.dropoff}|${query.depart}|${query.pickupTime}|${query.travelers}`;
+  const fetchedKeyRef = useRef('');
+  useEffect(() => {
+    if (fetchedKeyRef.current === key) return;
+    fetchedKeyRef.current = key;
+    setState({ status: 'loading', data: null });
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/hotelbeds-transfers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: query.from,
+            to: query.dropoff || query.from,
+            depart: query.depart,
+            pickupTime: query.pickupTime,
+            travelers: query.travelers,
+          }),
+        });
+        const j = (await r.json()) as HotelbedsTransfersResult;
+        if (!cancelled) setState({ status: 'done', data: j });
+      } catch {
+        if (!cancelled) setState({ status: 'done', data: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const visible = useMemo(() => {
+    const list = state.data?.transfers ?? [];
+    const filtered = maxPrice === null ? list : list.filter((t) => t.perTraveler <= maxPrice);
+    if (sort === 'cheapest' || sort === 'best') return [...filtered].sort((a, b) => a.price - b.price);
+    return filtered;
+  }, [state.data, maxPrice, sort]);
+  return (
+    <div aria-label="Hotelbeds sandbox transfers">
+      <h4>
+        Airport transfers · {query.from || 'Anywhere'} → {query.dropoff || query.from || 'Anywhere'} — Hotelbeds sandbox
+      </h4>
+      <p className="plan-muted">
+        Test transfers from the Hotelbeds evaluation account — the prices below are sandbox test data, not live quotes,
+        and the transfers cannot be booked.
+      </p>
+      {state.status === 'loading' && <p className="plan-muted">Checking Hotelbeds sandbox transfers…</p>}
+      {state.status === 'done' && !state.data && (
+        <p className="plan-muted">Hotelbeds could not be reached right now.</p>
+      )}
+      {state.status === 'done' && state.data && !state.data.live && (
+        <p className="plan-muted">{hotelbedsTransfersEmptyMessage(state.data.reason)}</p>
+      )}
+      {state.status === 'done' && state.data && state.data.live && (
+        <>
+          {maxPrice !== null && (
+            <p className="fare-count">
+              Showing {visible.length} of {state.data.transfers.length} sandbox transfers.
+            </p>
+          )}
+          {visible.length === 0 ? (
+            <p className="plan-muted">No sandbox transfers under that price — raise the max price or clear it.</p>
+          ) : (
+            <div className="result-cards">
+              {visible.map((t) => (
+                <HotelbedsTransferCard
+                  key={`${t.id}-${t.direction}`}
+                  transfer={t}
+                  query={query}
+                  checkedAt={state.data?.checkedAt ?? null}
+                  onSave={onSave}
+                />
+              ))}
+            </div>
+          )}
+          <p className="plan-muted">
+            {hotelbedsTransfersSandboxTag(state.data.checkedAt)} · {state.data.adults} traveler
+            {state.data.adults > 1 ? 's' : ''}. Live taxi prices arrive when Uber / Lyft / Mozio connect.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TaxiResults({
   query,
   sort,
@@ -2100,6 +2599,9 @@ function TaxiResults({
             Clear filters
           </button>
         </p>
+      )}
+      {hotelbedsProductEnabled('transfers') && (
+        <HotelbedsTransfers query={query} sort={sort} maxPrice={maxPrice} onSave={onSave} />
       )}
       <h4>Taxis by destination — full-trip planning estimates</h4>
       {rows.length === 0 ? (
