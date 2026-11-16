@@ -291,9 +291,15 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   assert.ok(src.includes('serviceFee(cheapestMultiCityTotal(legLists))'), 'the multi-city total carries the fee line');
   assert.ok(src.includes('travelers={query.travelers}'), 'the card knows the party size');
   assert.ok(src.includes('cabin={query.cabin}'), 'the card shows the searched cabin');
-  // All three trip types render the card.
+  // All three trip types render the card — Duffel's fares and
+  // Ignav's, each in their own column.
   const cardUses = (src.match(/<FareCard/g) ?? []).length;
-  assert.equal(cardUses, 4, 'one-way, multi-city, round-trip out, round-trip back — four card sites');
+  assert.equal(
+    cardUses,
+    7,
+    'Duffel: one-way, multi-city, round-trip out, round-trip back; Ignav: one-way, itinerary groups, per-leg multi-city'
+  );
+  assert.ok(src.includes('hidePrice'), 'Ignav itinerary groups hide the per-card price — the trip total shows once');
   assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');
 });
 

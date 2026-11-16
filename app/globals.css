@@ -617,11 +617,11 @@ html{scroll-padding-bottom:96px}
 .results-note{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);font-size:14px}
 
 /* Per-source fare columns (Flights section build, Nov 15, 2026):
-   one labeled column per connected source — Duffel's live fares and
-   the cached "Other sites" column today; Mystifly / Etraveli / Ignav
-   columns slot in here when they connect, and no column renders for
-   a source that isn't connected yet. Two columns on desktop, one
-   column stacked on a phone. */
+   one labeled column per connected source — Duffel's live fares,
+   Ignav's live fares (Nov 15, 2026) and the cached "Other sites"
+   column today; Mystifly / Etraveli columns slot in here when they
+   connect, and no column renders for a source that isn't connected
+   yet. Two columns on desktop, one column stacked on a phone. */
 .fare-sources{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
 .fare-source{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:var(--card);min-width:0}
 .fare-source-head h4{margin:0 0 2px}
@@ -671,6 +671,22 @@ html{scroll-padding-bottom:96px}
 .fare-card-segments{list-style:none;margin:8px 0 0;padding:0}
 .fare-card-segment{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:14px;padding:8px 0;border-top:1px solid var(--line-soft)}
 .fare-card-layover{font-size:13px;color:var(--muted);margin:0 0 4px}
+/* Ignav live column (Nov 15, 2026): whole-trip itinerary groups —
+   the trip total once on top, one FareCard per leg, booking options
+   below. The group is a surface tile so the legs read as one trip. */
+.ignav-itinerary{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 12px;background:var(--surface)}
+.ignav-total{margin:0 0 4px;font-size:15px}
+.ignav-total strong{font-size:19px}
+.ignav-leg-label{margin:10px 0 4px;font-size:13px;color:var(--muted);font-weight:600}
+.fare-card-footer{margin-top:10px}
+/* Booking links: one line per provider, opening the provider's own
+   site in a new tab. The ghost button is the "See booking options"
+   trigger — the links themselves are plain anchors. */
+.booking-links ul{list-style:none;margin:8px 0 0;padding:0}
+.booking-links li{margin:0 0 6px}
+.booking-links a{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--accent-text)}
+.booking-links a:hover{color:var(--accent-ink)}
+.booking-links p{margin:8px 0 0}
 @media(max-width:640px){
   .fare-card{padding:12px}
   .fare-card-main{flex-wrap:wrap}

@@ -39,6 +39,18 @@ import {
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { DuffelFareOffer } from '../lib/duffel';
 import { formatMinutes, layoversFor, perTravelerPrice } from '../lib/duffel';
+import type { IgnavBookingLink, IgnavFaresResponse, IgnavItinerary, IgnavLegOffer } from '../lib/ignav';
+import {
+  cheapestIgnavItinerary,
+  IGNAV_MAX_ITINERARIES,
+  ignavAllLegOffers,
+  ignavBookingContext,
+  ignavBookingContextForOffer,
+  ignavEmptyMessage,
+  ignavFreshnessLabel,
+  ignavItineraryMatches,
+  sortIgnavItineraries,
+} from '../lib/ignav';
 import { serviceFee } from '../lib/planner';
 import { SafeImg } from './FujinChat';
 import { AirlineLogo } from './AirlineLogo';
@@ -104,7 +116,24 @@ function destCityFor(destination: string): string {
 // provide is omitted, not guessed: no times → times show "—", no
 // airport codes → no codes, no bags → no bags line, no aircraft →
 // no aircraft line, no segments at all → no details toggle.
-function FareCard({ offer, travelers, cabin }: { offer: DuffelFareOffer; travelers: number; cabin: string }) {
+function FareCard({
+  offer,
+  travelers,
+  cabin,
+  hidePrice = false,
+  footer,
+}: {
+  offer: DuffelFareOffer;
+  travelers: number;
+  cabin: string;
+  // Trip-priced itineraries (Ignav round-trip / multi-city) show the
+  // trip total once on the group header instead of a price on every
+  // leg card — the per-card price would double-count the trip.
+  hidePrice?: boolean;
+  // An action that belongs to this fare (Ignav's "See booking
+  // options"), rendered at the foot of the card.
+  footer?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const segs = offer.segments ?? [];
   const layovers = layoversFor(offer);
@@ -146,14 +175,16 @@ function FareCard({ offer, travelers, cabin }: { offer: DuffelFareOffer; travele
             {toCode && <span>{toCode}</span>}
           </div>
         </div>
-        <div className="fare-card-price">
-          <strong>${offer.price.toLocaleString()}</strong>
-          {perPerson !== null && (
-            <span>
-              ${perPerson.toLocaleString()} per traveler · {travelers} travelers
-            </span>
-          )}
-        </div>
+        {!hidePrice && (
+          <div className="fare-card-price">
+            <strong>${offer.price.toLocaleString()}</strong>
+            {perPerson !== null && (
+              <span>
+                ${perPerson.toLocaleString()} per traveler · {travelers} travelers
+              </span>
+            )}
+          </div>
+        )}
       </div>
       {offer.bags && (
         <p className="fare-card-bags">
@@ -199,6 +230,7 @@ function FareCard({ offer, travelers, cabin }: { offer: DuffelFareOffer; travele
           )}
         </div>
       )}
+      {footer && <div className="fare-card-footer">{footer}</div>}
     </li>
   );
 }
@@ -226,6 +258,122 @@ function FareSourceColumn({
       </div>
       {children}
     </section>
+  );
+}
+
+// Booking links for one Ignav itinerary (Nov 15, 2026): the fare
+// search never returns booking URLs — they come from a separate
+// Ignav lookup, one billable request, fetched only when the
+// traveler asks. The links open the airline's or OTA's own site;
+// the traveler books and pays there, never on FujinTrip, and no
+// commission is claimed.
+function IgnavBookingLinks({
+  context,
+  travelers,
+}: {
+  context: ReturnType<typeof ignavBookingContext> | ReturnType<typeof ignavBookingContextForOffer>;
+  travelers: number;
+}) {
+  const [state, setState] = useState<{ status: 'idle' | 'loading' | 'done' | 'error'; links: IgnavBookingLink[] }>({
+    status: 'idle',
+    links: [],
+  });
+  if (!context.ignavId) return null;
+  const load = async () => {
+    setState({ status: 'loading', links: [] });
+    try {
+      const r = await fetch('/api/ignav-fares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'booking-links', ...context, adults: travelers }),
+      });
+      const j = (await r.json()) as { available?: boolean; links?: IgnavBookingLink[] };
+      setState({ status: 'done', links: Array.isArray(j.links) ? j.links : [] });
+    } catch {
+      setState({ status: 'error', links: [] });
+    }
+  };
+  return (
+    <div className="booking-links">
+      {state.status === 'idle' && (
+        <button type="button" className="ghost" onClick={load}>
+          See booking options
+        </button>
+      )}
+      {state.status === 'loading' && <p className="plan-muted">Checking booking options…</p>}
+      {state.status === 'error' && (
+        <p className="plan-muted">
+          Booking options could not be checked right now.{' '}
+          <button type="button" className="linklike" onClick={load}>
+            Try again
+          </button>
+        </p>
+      )}
+      {state.status === 'done' && state.links.length === 0 && (
+        <p className="plan-muted">No booking links for this itinerary right now.</p>
+      )}
+      {state.status === 'done' && state.links.length > 0 && (
+        <>
+          <ul>
+            {state.links.map((l) => (
+              <li key={l.url}>
+                <a href={l.url} target="_blank" rel="noreferrer">
+                  {l.specificity === 'search_results' ? `See it on ${l.providerName}` : `Book with ${l.providerName}`}
+                  {l.providerType === 'airline' ? ' · Airline' : l.providerType === 'third_party' ? ' · Travel site' : ''}
+                  {l.price !== undefined ? ` — from $${l.price.toLocaleString()}` : ''}
+                  <Icon name="externalLink" size={14} />
+                </a>
+                {l.fareName && <span className="plan-muted"> · {l.fareName}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="plan-muted">
+            Opens the provider&apos;s site — you book and pay there, not on FujinTrip. Prices can change.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// One Ignav itinerary as a group: the trip total once on top
+// ("from $X" — Ignav's FAQ says to phrase live prices that way),
+// one FareCard per leg with the price hidden (a per-card price
+// would double-count the trip), and the booking options for the
+// whole itinerary below.
+function IgnavItineraryGroup({
+  itinerary,
+  travelers,
+  cabin,
+  labels,
+}: {
+  itinerary: IgnavItinerary;
+  travelers: number;
+  cabin: string;
+  labels: string[];
+}) {
+  const perPerson = travelers > 1 ? perTravelerPrice(itinerary.price, travelers) : null;
+  return (
+    <div className="ignav-itinerary">
+      <p className="ignav-total">
+        Trip total from <strong>${itinerary.price.toLocaleString()}</strong>
+        {perPerson !== null && (
+          <span className="plan-muted">
+            {' '}
+            · ${perPerson.toLocaleString()} per traveler · {travelers} travelers
+          </span>
+        )}
+      </p>
+      {itinerary.legs.map((leg, i) => (
+        <div key={`${leg.airline}-${leg.price}-${i}`}>
+          <h6 className="ignav-leg-label">{labels[i] ?? `Leg ${i + 1}`}</h6>
+          <ul className="fare-list">
+            <FareCard offer={leg} travelers={travelers} cabin={cabin} hidePrice />
+          </ul>
+        </div>
+      ))}
+      <IgnavBookingLinks key={itinerary.ignavId ?? itinerary.price} context={ignavBookingContext(itinerary)} travelers={travelers} />
+    </div>
   );
 }
 
@@ -326,6 +474,14 @@ function FlightResults({
     status: 'idle',
     data: null,
   });
+  // Ignav live fares — the live comparison column (Nov 15, 2026).
+  // Fetched in parallel with the Duffel price-check, one request per
+  // search; the column renders its honest empty state when the key
+  // is missing or Ignav has no fares.
+  const [ignav, setIgnav] = useState<{ status: 'idle' | 'loading' | 'done'; data: IgnavFaresResponse | null }>({
+    status: 'idle',
+    data: null,
+  });
   const fetchedKeyRef = useRef('');
   const tripType = query.tripType ?? 'roundtrip';
   const queryLegs = useMemo(() => flightLegsFromSearch(query), [query]);
@@ -336,8 +492,52 @@ function FlightResults({
     fetchedKeyRef.current = ctxKey;
     setFares({ status: 'loading', data: null });
     setCompetitor({ status: 'idle', data: null });
+    setIgnav({ status: 'loading', data: null });
     onLiveOptions(null);
     let cancelled = false;
+    // Ignav fires in parallel with the Duffel price-check — one
+    // Ignav request per search, never per keystroke. The promise
+    // resolves on its own time; the column renders when it lands.
+    const ignavBody =
+      tripType === 'multicity'
+        ? {
+            tripType: 'multicity',
+            legs: queryLegs.map((l) => ({ origin: l.from, destination: l.to, date: l.depart })),
+            travelers: query.travelers,
+            cabin: ctx.cabin,
+          }
+        : tripType === 'oneway'
+          ? {
+              tripType: 'oneway',
+              origin: ctx.origin,
+              destination: ctx.destination,
+              travelers: query.travelers,
+              depart: ctx.depart,
+              cabin: ctx.cabin,
+            }
+          : {
+              origin: ctx.origin,
+              destination: ctx.destination,
+              travelers: query.travelers,
+              depart: ctx.depart,
+              return: ctx.return,
+              cabin: ctx.cabin,
+            };
+    const ignavPromise = (async (): Promise<IgnavFaresResponse | null> => {
+      try {
+        const r = await fetch('/api/ignav-fares', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ignavBody),
+        });
+        return (await r.json()) as IgnavFaresResponse;
+      } catch {
+        return null;
+      }
+    })();
+    ignavPromise.then((ig) => {
+      if (!cancelled) setIgnav({ status: 'done', data: ig });
+    });
     (async () => {
       let pc: PriceCheckResponse | null = null;
       try {
@@ -385,25 +585,6 @@ function FlightResults({
       }
       if (cancelled) return;
       setFares({ status: 'done', data: pc });
-      if (pc?.live) {
-        // The filter options come from every fare the search found:
-        // out + back for round-trip, out only for one-way, all legs
-        // for multi-city — the counts in the filters panel come from
-        // the fares themselves, never from the planner.
-        const allOffers = [
-          ...(pc.out ?? []),
-          ...(pc.back ?? []),
-          ...(pc.legs ?? []).flatMap((l) => l.out),
-        ];
-        const airlines = [...new Set(allOffers.map((o) => o.airline))].sort();
-        const stops = [...new Set(allOffers.map((o) => o.stops))].sort((a, b) => a - b);
-        const counts = { airlines: {} as Record<string, number>, stops: {} as Record<number, number> };
-        for (const o of allOffers) {
-          counts.airlines[o.airline] = (counts.airlines[o.airline] ?? 0) + 1;
-          counts.stops[o.stops] = (counts.stops[o.stops] ?? 0) + 1;
-        }
-        onLiveOptions({ airlines, stops, counts });
-      }
       // The cached competitor fare is a round-trip fare (Travelpayouts
       // prices_for_dates) — one-way and multi-city have no round-trip
       // to compare, so the column stays out instead of faking one.
@@ -426,6 +607,33 @@ function FlightResults({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctxKey]);
 
+  // The filter options come from every live fare the search found —
+  // Duffel's offers plus Ignav's leg offers — so the filters work
+  // even when one source has no fares. Derived, not set in the
+  // fetch: either source arriving later re-merges the options. The
+  // counts come from the fares themselves, never from the planner.
+  useEffect(() => {
+    const allOffers = [
+      ...(fares.data?.out ?? []),
+      ...(fares.data?.back ?? []),
+      ...(fares.data?.legs ?? []).flatMap((l) => l.out),
+      ...ignavAllLegOffers(ignav.data),
+    ];
+    if (!allOffers.length) {
+      onLiveOptions(null);
+      return;
+    }
+    const airlines = [...new Set(allOffers.map((o) => o.airline))].sort();
+    const stops = [...new Set(allOffers.map((o) => o.stops))].sort((a, b) => a - b);
+    const counts = { airlines: {} as Record<string, number>, stops: {} as Record<number, number> };
+    for (const o of allOffers) {
+      counts.airlines[o.airline] = (counts.airlines[o.airline] ?? 0) + 1;
+      counts.stops[o.stops] = (counts.stops[o.stops] ?? 0) + 1;
+    }
+    onLiveOptions({ airlines, stops, counts });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fares.data, ignav.data]);
+
   const filterOffers = (list: DuffelFareOffer[]) =>
     list.filter(
       (o) =>
@@ -439,6 +647,21 @@ function FlightResults({
   // Multi-city: one filtered + sorted list per leg, from the
   // response's own legs — each leg keeps its route and its date.
   const legLists = (fares.data?.legs ?? []).map((leg) => ({
+    ...leg,
+    offers: sortFareOffers(filterOffers(leg.out), sort),
+  }));
+  // Ignav, filtered + sorted the same way as Duffel's fares: the
+  // itinerary lists are the whole-trip itineraries (one-way,
+  // round-trip, 2-leg multi-city); the per-leg lists are the 3–4-leg
+  // multi-city legs, each with its own fares.
+  const ignavFiltered = ignav.data
+    ? sortIgnavItineraries(
+        ignav.data.itineraries.filter((it) => ignavItineraryMatches(it, stopsFilter, airlinesFilter)),
+        sort
+      )
+    : [];
+  const ignavItineraries = ignavFiltered.slice(0, IGNAV_MAX_ITINERARIES);
+  const ignavLegLists = (ignav.data?.legs ?? []).map((leg) => ({
     ...leg,
     offers: sortFareOffers(filterOffers(leg.out), sort),
   }));
@@ -644,6 +867,206 @@ function FlightResults({
             </p>
           )}
         </FareSourceColumn>
+        {ignav.status !== 'idle' && (
+          <FareSourceColumn
+            title="Ignav — live"
+            freshness={
+              ignav.status === 'done' && ignav.data
+                ? ignavFreshnessLabel(ignav.data.observedAt)
+                : 'Live fares — checking now…'
+            }
+          >
+            {ignav.status === 'loading' && <p>Checking live fares from Ignav…</p>}
+            {ignav.status === 'done' && ignav.data && !ignav.data.live && (
+              <p>{ignavEmptyMessage(ignav.data.reason)}</p>
+            )}
+            {ignav.status === 'done' && !ignav.data && <p>Could not check live fares from Ignav right now.</p>}
+            {ignav.status === 'done' && ignav.data?.live && tripType === 'oneway' && (
+              <>
+                {liveFiltersActive && (
+                  <p className="fare-count">
+                    Showing {ignavItineraries.length} of {ignavFiltered.length} fares.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </p>
+                )}
+                <ul className="fare-list">
+                  {ignavItineraries.map((it) => {
+                    const leg = it.legs[0];
+                    if (!leg) return null;
+                    return (
+                      <FareCard
+                        key={it.ignavId ?? `${leg.airline}-${it.price}`}
+                        offer={leg}
+                        travelers={query.travelers}
+                        cabin={query.cabin}
+                        footer={<IgnavBookingLinks context={ignavBookingContext(it)} travelers={query.travelers} />}
+                      />
+                    );
+                  })}
+                  {ignavItineraries.length === 0 && (
+                    <li className="plan-muted">
+                      No Ignav fares match the filters.{' '}
+                      <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                        Clear filters
+                      </button>
+                    </li>
+                  )}
+                </ul>
+                {cheapestIgnavItinerary(ignavItineraries) > 0 && (
+                  <p className="fare-total">
+                    Cheapest one-way (Ignav): from{' '}
+                    <strong>${cheapestIgnavItinerary(ignavItineraries).toLocaleString()}</strong> for {query.travelers} traveler
+                    {query.travelers > 1 ? 's' : ''}
+                  </p>
+                )}
+                {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
+                  <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live fares from Ignav.</p>
+                )}
+                <p className="plan-muted">
+                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
+                </p>
+              </>
+            )}
+            {ignav.status === 'done' && ignav.data?.live && tripType === 'roundtrip' && (
+              <>
+                {liveFiltersActive && (
+                  <p className="fare-count">
+                    Showing {ignavItineraries.length} of {ignavFiltered.length} trips.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </p>
+                )}
+                {ignavItineraries.map((it) => (
+                  <IgnavItineraryGroup
+                    key={it.ignavId ?? `${it.price}-${it.legs[0]?.airline ?? ''}`}
+                    itinerary={it}
+                    travelers={query.travelers}
+                    cabin={query.cabin}
+                    labels={['Outbound', 'Return']}
+                  />
+                ))}
+                {ignavItineraries.length === 0 && (
+                  <p className="plan-muted">
+                    No Ignav fares match the filters.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </p>
+                )}
+                {cheapestIgnavItinerary(ignavItineraries) > 0 && (
+                  <p className="fare-total">
+                    Cheapest round-trip (Ignav): from{' '}
+                    <strong>${cheapestIgnavItinerary(ignavItineraries).toLocaleString()}</strong> for {query.travelers} traveler
+                    {query.travelers > 1 ? 's' : ''}
+                  </p>
+                )}
+                {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
+                  <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
+                )}
+                <p className="plan-muted">
+                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
+                </p>
+              </>
+            )}
+            {ignav.status === 'done' && ignav.data?.live && tripType === 'multicity' && ignav.data.itineraries.length > 0 && (
+              <>
+                {liveFiltersActive && (
+                  <p className="fare-count">
+                    Showing {ignavItineraries.length} of {ignavFiltered.length} trips.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </p>
+                )}
+                {ignavItineraries.map((it) => (
+                  <IgnavItineraryGroup
+                    key={it.ignavId ?? `${it.price}-${it.legs[0]?.airline ?? ''}`}
+                    itinerary={it}
+                    travelers={query.travelers}
+                    cabin={query.cabin}
+                    labels={queryLegs.map((l, i) => `Leg ${i + 1} — ${l.from} → ${l.to} · ${l.depart}`)}
+                  />
+                ))}
+                {ignavItineraries.length === 0 && (
+                  <p className="plan-muted">
+                    No Ignav fares match the filters.{' '}
+                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      Clear filters
+                    </button>
+                  </p>
+                )}
+                {cheapestIgnavItinerary(ignavItineraries) > 0 && (
+                  <p className="fare-total">
+                    Cheapest multi-city (Ignav): from{' '}
+                    <strong>${cheapestIgnavItinerary(ignavItineraries).toLocaleString()}</strong> for {query.travelers} traveler
+                    {query.travelers > 1 ? 's' : ''}
+                  </p>
+                )}
+                {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
+                  <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
+                )}
+                <p className="plan-muted">
+                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
+                </p>
+              </>
+            )}
+            {ignav.status === 'done' && ignav.data?.live && tripType === 'multicity' && ignavLegLists.length > 0 && (
+              <>
+                {ignavLegLists.map((leg, i) => (
+                  <div key={`${leg.origin}-${leg.destination}-${leg.date}`}>
+                    <h5>
+                      Leg {i + 1} — {leg.origin} → {leg.destCity ?? leg.destination} · {leg.date}
+                    </h5>
+                    {liveFiltersActive && leg.out.length > 0 && (
+                      <p className="fare-count">
+                        Showing {leg.offers.length} of {leg.out.length} fares.{' '}
+                        <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                          Clear filters
+                        </button>
+                      </p>
+                    )}
+                    <ul className="fare-list">
+                      {leg.offers.map((o) => (
+                        <FareCard
+                          key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
+                          offer={o}
+                          travelers={query.travelers}
+                          cabin={query.cabin}
+                          footer={<IgnavBookingLinks context={ignavBookingContextForOffer(o)} travelers={query.travelers} />}
+                        />
+                      ))}
+                      {leg.offers.length === 0 && (
+                        <li className="plan-muted">
+                          {leg.out.length === 0
+                            ? 'No live fares from Ignav for this leg.'
+                            : 'No fares for this leg match the filters.'}{' '}
+                          {leg.out.length > 0 && (
+                            <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                              Clear filters
+                            </button>
+                          )}
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                ))}
+                {cheapestMultiCityTotal(ignavLegLists.map((l) => ({ out: l.offers }))) > 0 && (
+                  <p className="fare-total">
+                    Cheapest all legs (Ignav): from{' '}
+                    <strong>${cheapestMultiCityTotal(ignavLegLists.map((l) => ({ out: l.offers }))).toLocaleString()}</strong> for{' '}
+                    {query.travelers} traveler{query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed.
+                  </p>
+                )}
+                <p className="plan-muted">
+                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
+                </p>
+              </>
+            )}
+          </FareSourceColumn>
+        )}
         {competitor.status !== 'idle' && (
           <FareSourceColumn
             title="Other sites (cached)"

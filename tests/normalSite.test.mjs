@@ -466,7 +466,9 @@ test('flights columns: the per-source column structure exists in the results UI'
   assert.ok(src.includes('title="Other sites (cached)"'), 'the cached competitor column renders');
   assert.ok(!src.includes('Mystifly'), 'no column for a source that is not connected yet');
   assert.ok(!src.includes('Etraveli'), 'no column for a source that is not connected yet');
-  assert.ok(!src.includes('Ignav'), 'no column for a source that is not connected yet');
+  assert.ok(src.includes('title="Ignav — live"'), 'the Ignav live column renders');
+  assert.ok(src.includes('/api/ignav-fares'), 'the Ignav column fetches from the Ignav route');
+  assert.ok(src.includes('IgnavBookingLinks'), 'Ignav fares carry on-click booking options');
   assert.ok(src.includes('fare-total'), 'the cheapest out + back total is a highlighted block');
   assert.ok(src.includes('Clear filters'), 'a filtered-empty list has a way back');
   // "Book now" appears in the file header and in the comment explaining

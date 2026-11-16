@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Clock,
   Compass,
+  ExternalLink,
   Globe,
   Luggage,
   Map,
@@ -76,7 +77,8 @@ export type IconName =
   | 'camera'
   | 'globe'
   | 'luggage'
-  | 'chevronDown';
+  | 'chevronDown'
+  | 'externalLink';
 
 const COMPONENTS: Record<IconName, LucideIcon> = {
   plane: Plane,
@@ -111,6 +113,7 @@ const COMPONENTS: Record<IconName, LucideIcon> = {
   globe: Globe,
   luggage: Luggage,
   chevronDown: ChevronDown,
+  externalLink: ExternalLink,
 };
 
 export function Icon({ name, size = 20, className }: { name: IconName; size?: number; className?: string }) {

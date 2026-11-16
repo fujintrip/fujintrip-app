@@ -874,6 +874,44 @@ test('competitor fares: without a token the route stays honestly empty', async (
   assert.equal((await bad.json()).available, false);
 });
 
+test('ignav fares: without a key the route stays honestly empty, never an invented fare', async () => {
+  // No IGNAV_API_KEY in this environment, so the route must say so —
+  // live:false with the reason, and the key never leaks into the reply.
+  const body = { origin: 'New York', destination: 'London', depart: '2027-01-15', return: '2027-01-22', travelers: 1, cabin: 'economy', tripType: 'roundtrip' };
+  const r = await fetch(`${BASE}/api/ignav-fares`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.live, false);
+  assert.equal(j.configured, false);
+  assert.equal(j.source, 'ignav');
+  assert.equal(j.reason, 'no_key');
+  assert.equal(j.itineraries.length, 0);
+  assert.ok(!('apiKey' in j) && !('key' in j), 'the route returns no key field');
+  // Bad dates degrade the same way instead of erroring.
+  const bad = await fetch(`${BASE}/api/ignav-fares`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, depart: 'soon', return: 'later' }),
+  });
+  assert.equal(bad.status, 200);
+  assert.equal((await bad.json()).live, false);
+  // Booking links without a key are unavailable, not an error.
+  const links = await fetch(`${BASE}/api/ignav-fares`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'booking-links', ignavId: 'ig_abc123' }),
+  });
+  assert.equal(links.status, 200);
+  const lj = await links.json();
+  assert.equal(lj.available, false);
+  assert.equal(lj.configured, false);
+  // The Ignav column is client-side only: a server-rendered flights
+  // deep link carries no Ignav fares (same pattern as the cached column).
+  const page = await fetch(`${BASE}/?tab=flights&from=New%20York&to=London&depart=2027-01-15&return=2027-01-22&guests=1`);
+  assert.equal(page.status, 200);
+  assert.ok(!(await page.text()).includes('Ignav — live'), 'no Ignav column in the server-rendered HTML');
+});
+
 test('places endpoint: live suggestions for a prefix, honest empties for short and junk queries', async () => {
   // GET /api/places (API phase round 1): Travelpayouts autocomplete,
   // then Nominatim, then the known list. Any source may answer here —
