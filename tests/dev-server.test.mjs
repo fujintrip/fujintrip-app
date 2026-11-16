@@ -304,6 +304,47 @@ test('car rental form: icons on the fields, travelers select, same-location togg
   assert.ok(html.includes('Search cars'), 'the car search button renders');
 });
 
+test('search deep link: attractions with dates renders per-destination rows with Best value labels', async () => {
+  const r = await fetch(`${BASE}/?tab=tours&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Attractions in Central Europe'), 'the tier cards name the searched destination');
+  assert.ok(html.includes('from $162 per traveler'), 'the Cheapest tier card is $162 per traveler');
+  assert.ok(html.includes('from $504 per traveler'), 'the Premium tier card is $504 per traveler');
+  assert.ok(html.includes('$612 total for 2 travelers'), 'the Best value total is the party leg, not the rounded share times two');
+  assert.ok(html.includes('13 days'), 'the heading and cards name the searched visit days');
+  assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
+  assert.ok(html.includes('Attraction price'), 'the tier filter renders');
+  assert.ok(html.includes('Live tours arrive when Viator / GetYourGuide / Klook connect.'), 'the honest supplier line renders');
+  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  assert.ok(!html.includes('Book now'), 'no Book now in the Attractions results');
+});
+
+test('search deep link: a tiered attractions link renders that tier on first paint', async () => {
+  const r = await fetch(`${BASE}/?tab=tours&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2&tier=cheapest`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The list prices in the Cheapest tier, and the tier is named on
+  // every card and in the count line — a tiered search is shareable.
+  assert.ok(html.includes('Cheapest · planning estimate'), 'the list labels the Cheapest tier');
+  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
+  assert.ok(html.includes('Cheapest attractions'), 'the count line names the tier');
+  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The Best value figure is still there — on the tier cards, where
+  // all three tiers always show.
+  assert.ok(html.includes('from $306 per traveler'), 'the Best value tier card still renders');
+});
+
+test('attractions form: icons on the fields, start and end dates, travelers select', async () => {
+  const r = await fetch(`${BASE}/?tab=tours`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('aria-label="Start date"'), 'the start date field renders');
+  assert.ok(html.includes('aria-label="End date"'), 'the end date field renders');
+  assert.ok(html.includes('aria-label="Travelers"'), 'the Travelers field renders on the attractions form');
+  assert.ok(html.includes('Search attractions'), 'the attractions search button renders');
+});
+
 test('search deep link: flights with off-suggested dates shows the SEARCHED dates in the heading (live defect, Nov 14 2026)', async () => {
   // The live check searched Jan 15–22 and got a heading dated Jan 4–11
   // — the planner's suggested start — because the heading derived its

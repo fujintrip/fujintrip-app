@@ -24,6 +24,7 @@ import {
   type SearchQuery,
   type CarTier,
   type StayTier,
+  type TourTier,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
 import PlaceField from './PlaceField';
@@ -203,6 +204,9 @@ export default function SearchWidget({
   // Stays tier, for the same reason — the tier control lives in the
   // results filters, the deep link is the tier's home.
   const [carTier, setCarTier] = useState<CarTier>(initialSearch?.carTier ?? 'best');
+  // Attractions tier (Nov 15, 2026): the same carry-through as the
+  // Stays and Car rental tiers, for the same reason.
+  const [tourTier, setTourTier] = useState<TourTier>(initialSearch?.tourTier ?? 'best');
 
   // A multi-city search always has 2–4 legs. A fresh multi-city
   // form starts from the route already typed (leg 1) plus one empty
@@ -283,6 +287,7 @@ export default function SearchWidget({
     setLegs(padLegs(v.legs, initialSearch));
     setStayTier(v.stayTier);
     setCarTier(v.carTier);
+    setTourTier(v.tourTier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -395,7 +400,29 @@ export default function SearchWidget({
         return;
       }
     }
-    if (tab !== 'hotels' && tab !== 'cars' && (tab !== 'flights' || tripType !== 'multicity')) {
+    // Attractions dates name the visit: an end date on the start
+    // date is not a visit window, and an end date with no start
+    // date has nothing to end. The generic block below would only
+    // repeat these verdicts in vaguer words, so tours skip it.
+    if (tab === 'tours') {
+      if (depart && depart < now) {
+        setNote('That start date is in the past — pick a date from today on.');
+        return;
+      }
+      if (ret && !depart) {
+        setNote('Add a start date first — the end date needs a start.');
+        return;
+      }
+      if (ret && ret < now) {
+        setNote('That end date is in the past — pick a date from today on.');
+        return;
+      }
+      if (depart && ret && ret <= depart) {
+        setNote('The end date must be after the start date — an attractions visit needs at least one day.');
+        return;
+      }
+    }
+    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && (tab !== 'flights' || tripType !== 'multicity')) {
       if (depart && depart < now) {
         setNote('That date is in the past — pick a date from today on.');
         return;
@@ -436,6 +463,7 @@ export default function SearchWidget({
           : [],
       stayTier: tab === 'hotels' ? stayTier : 'best',
       carTier: tab === 'cars' ? carTier : 'best',
+      tourTier: tab === 'tours' ? tourTier : 'best',
     };
     if (tab === 'flights' && tripType === 'oneway') q.ret = '';
     if (tab === 'flights' && tripType === 'multicity') {
@@ -595,11 +623,14 @@ export default function SearchWidget({
           )}
           {tab === 'tours' && (
             <>
-              <Field label="Destination">
+              <Field label="Destination" icon="pin">
                 <PlaceField id="tours-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where to?" />
               </Field>
-              <Field label="Date">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
+              <Field label="Start date" icon="calendar">
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Start date" />
+              </Field>
+              <Field label="End date" icon="calendar">
+                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="End date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>

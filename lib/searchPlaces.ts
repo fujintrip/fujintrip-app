@@ -240,6 +240,91 @@ export function carDaysFor(
   return entry ? entry.days : null;
 }
 
+// Attraction tiers (Nov 15, 2026 — the Attractions section, same
+// standard as the Stays and Car rental sections): the three planner
+// tiers, priced from the planner's own activities legs — never a
+// named attraction, tour, operator, rating, or live quote. The tier
+// is part of the search (a ?tier= URL param, like the Stays and Car
+// tiers), so a tiered search is shareable and renders its tier on
+// first paint.
+export type TourTier = 'cheapest' | 'best' | 'premium';
+
+export const TOUR_TIERS: { id: TourTier; label: string }[] = [
+  { id: 'cheapest', label: 'Cheapest' },
+  { id: 'best', label: 'Best value' },
+  { id: 'premium', label: 'Premium' },
+];
+
+export function tourTierFromValue(v: unknown): TourTier {
+  return v === 'cheapest' || v === 'premium' ? v : 'best';
+}
+
+export function tourTierLabel(tier: TourTier): string {
+  return TOUR_TIERS.find((t) => t.id === tier)?.label ?? 'Best value';
+}
+
+// One tier's attraction figures for a destination — the planner's
+// activities leg for the whole party (buildPlan's activities leg is
+// a party total for the trip) plus the per-traveler share. The
+// figures never depend on the searched dates: the planner prices
+// the trip, not the day, so the total stays the planner's figure
+// whatever dates the traveler picked — scaling it by days would
+// invent a pricing model the planner does not have.
+export type TourTierOption = { tier: TourTier; label: string; activities: number; perTraveler: number };
+
+export function tourTierOptions(destination: string, travelers: number): TourTierOption[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  const options = buildPlan(destination, party, 3).options;
+  return TOUR_TIERS.map((t) => {
+    const activities = options.find((o) => o.name === t.label)?.activities ?? 0;
+    return { tier: t.id, label: t.label, activities, perTraveler: Math.round(activities / party) };
+  });
+}
+
+// One row per discovery destination in a tier — the attraction list
+// the Attractions results show. The shape is TabRow plus the party
+// total, so the shared sortTabRows re-orders it and the card can
+// print the total without re-deriving it from a rounded per-traveler
+// figure (perTraveler × travelers would drift from the leg by
+// rounding).
+export type TourTierRow = TabRow & { total: number };
+
+export function tourTierRows(tier: TourTier, travelers: number): TourTierRow[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  return discoveryDestinations()
+    .map((e) => {
+      const opt = tourTierOptions(e.destination, party).find((o) => o.tier === tier);
+      return {
+        destination: e.destination,
+        routeLine: routeLineFor(e.stops),
+        pricePerTraveler: opt?.perTraveler ?? 0,
+        kind: 'leg' as const,
+        total: opt?.activities ?? 0,
+      };
+    })
+    .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
+}
+
+// The days a visit covers: the searched dates when both are given
+// and the end is after the start, else the route's own days from
+// the discovery entry. An end on the start day is not a visit
+// window — the entry's days stand in instead of a zero, and the
+// form validation names it before the search runs.
+export function tourDaysFor(
+  query: Pick<SearchQuery, 'depart' | 'ret' | 'dest'>,
+  destination?: string
+): number | null {
+  if (query.depart && query.ret && query.ret > query.depart) {
+    const days = Math.round(
+      (new Date(`${query.ret}T00:00:00Z`).getTime() - new Date(`${query.depart}T00:00:00Z`).getTime()) / 86400000
+    );
+    if (Number.isFinite(days) && days >= 1) return days;
+  }
+  const dest = destination ?? query.dest;
+  const entry = dest ? discoveryDestinations().find((e) => e.destination === dest) : undefined;
+  return entry ? entry.days : null;
+}
+
 export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
   { id: 'roundtrip', label: 'Round-trip' },
   { id: 'oneway', label: 'One-way' },
@@ -331,6 +416,10 @@ export type SearchQuery = {
   // Car rental only: which planner tier the car list prices in.
   // Same three tiers, same ?tier= param, same Best value default.
   carTier: CarTier;
+  // Attractions only: which planner tier the attraction list
+  // prices in. Same three tiers, same ?tier= param, same Best
+  // value default.
+  tourTier: TourTier;
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -371,6 +460,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   legs: FlightLeg[];
   stayTier: StayTier;
   carTier: CarTier;
+  tourTier: TourTier;
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -390,6 +480,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     legs: q?.legs ?? [],
     stayTier: q?.stayTier ?? 'best',
     carTier: q?.carTier ?? 'best',
+    tourTier: q?.tourTier ?? 'best',
   };
 }
 
@@ -414,6 +505,7 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     legs: [],
     stayTier: 'best',
     carTier: 'best',
+    tourTier: 'best',
   };
 }
 
@@ -517,6 +609,11 @@ export function searchQueryFromParams(
   if (tab === 'cars') {
     q.carTier = carTierFromValue(params.tier);
   }
+  // Attractions tier (Nov 15, 2026): the same ?tier= param, the
+  // same fallback — a tiered attractions search is shareable too.
+  if (tab === 'tours') {
+    q.tourTier = tourTierFromValue(params.tier);
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -537,6 +634,7 @@ export function searchQueryToParams(q: SearchQuery): string {
   }
   if (q.tab === 'hotels' && q.stayTier !== 'best') p.set('tier', q.stayTier);
   if (q.tab === 'cars' && q.carTier !== 'best') p.set('tier', q.carTier);
+  if (q.tab === 'tours' && q.tourTier !== 'best') p.set('tier', q.tourTier);
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));

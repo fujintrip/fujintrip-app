@@ -418,6 +418,7 @@ test('formValuesFromQuery: the widget fields for a query, both directions', () =
     legs: [],
     stayTier: 'best',
     carTier: 'best',
+    tourTier: 'best',
   });
 });
 
