@@ -699,7 +699,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             <input value={embassyNumber} onChange={(e) => setEmbassyNumber(e.target.value)} placeholder="Embassy number" aria-label="Embassy or consulate phone number" />
           </div>
           <h3 style={{ marginTop: 20 }}>Price watches</h3>
-          <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. Live fares are Duffel test fares in test mode; the plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
+          <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. The plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
           {watches.length === 0 ? <p style={{ color: 'var(--muted)' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {watches.map((w) => {

@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, serviceFee } from '../lib/planner.ts';
 import { addDays, buildTripCard, suggestedStart } from '../lib/tripCard.ts';
-import { cabinClassFor, duffelMode, faresPromptBlock, faresSummaryLine, formatTime12, parseDuffelOffers, parseLiveFares } from '../lib/duffel.ts';
+import { cabinClassFor, duffelFareNote, duffelFareQualifier, duffelFareShort, duffelFaresPlural, duffelMode, faresPromptBlock, faresSummaryLine, formatTime12, parseDuffelOffers, parseLiveFares } from '../lib/duffel.ts';
 import { bundleFromLegs, bundleTotal } from '../lib/bundle.ts';
 
 // Local calendar date (the card formats dates locally, not UTC — see
@@ -32,11 +32,13 @@ function faresFor({
   backAirline = 'American',
   out = true,
   back = true,
+  mode,
 } = {}) {
   const start = suggestedStart(month);
   const end = addDays(start, days - 1);
   return {
     live: true,
+    ...(mode !== undefined ? { mode } : {}),
     origin,
     destCity,
     departDate: iso(start),
@@ -286,6 +288,74 @@ test('faresPromptBlock + faresSummaryLine: test fares in test mode, never test f
     if (saved === undefined) delete process.env.DUFFEL_API_KEY;
     else process.env.DUFFEL_API_KEY = saved;
   }
+});
+
+// The fare-label helpers: one source for every label a traveler
+// sees — a live key is never called a test fare, and a test key (or
+// no mode at all) keeps saying test.
+test('duffel fare labels: live key gets live labels, anything else gets test labels', () => {
+  assert.equal(duffelFareShort('live'), 'Duffel live fare');
+  assert.equal(duffelFareShort('test'), 'Duffel test fare');
+  assert.equal(duffelFareShort(undefined), 'Duffel test fare', 'no mode falls back to test, never live by accident');
+  assert.equal(duffelFaresPlural('live'), 'Duffel live fares');
+  assert.equal(duffelFaresPlural('test'), 'Duffel test fares');
+  assert.equal(duffelFareQualifier('live'), 'live fare');
+  assert.equal(duffelFareQualifier('test'), 'test fare');
+  assert.equal(duffelFareQualifier(undefined), 'test fare');
+  assert.match(duffelFareNote('live'), /Live Duffel fare/);
+  assert.match(duffelFareNote('live'), /real-time price/);
+  assert.match(duffelFareNote('live'), /Booking through FujinTrip opens once checkout is ready/);
+  assert.doesNotMatch(duffelFareNote('live'), /test fare/i, 'the live note never says test fare');
+  assert.equal(
+    duffelFareNote('test'),
+    'Duffel test fare — fetched from Duffel, not a live quote and not bookable yet. Real bookable fares need Duffel live mode.',
+    'the test note is byte-identical to the old hardcoded note'
+  );
+});
+
+test('parseLiveFares: the key mode travels with the payload, invalid modes drop', () => {
+  const live = faresFor({ destCity: 'Prague', days: 14, mode: 'live' });
+  assert.equal(parseLiveFares(live)?.mode, 'live', 'a live mode survives validation');
+  const testMode = faresFor({ destCity: 'Prague', days: 14, mode: 'test' });
+  assert.equal(parseLiveFares(testMode)?.mode, 'test', 'a test mode survives validation');
+  const noMode = faresFor({ destCity: 'Prague', days: 14 });
+  assert.equal(parseLiveFares(noMode)?.mode, undefined, 'a payload without a mode stays without one — the card defaults to test');
+  const junk = faresFor({ destCity: 'Prague', days: 14, mode: 'banana' });
+  assert.equal(parseLiveFares(junk)?.mode, undefined, 'an invalid mode is dropped, never trusted as live');
+});
+
+test('tripCard with live-key fares: no leg says test fare anywhere', () => {
+  const fares = faresFor({ destCity: 'Prague', days: 14, mode: 'live' });
+  const card = buildTripCard({ destination: 'Central Europe', travelers: 2, days: 14, month: 1, origin: 'New York', tier: 1, liveFares: fares });
+  assert.equal(card.flight.mode, 'live', 'the card carries the live mode');
+  assert.equal(card.flight.live, true);
+  // Prices are unchanged by the mode — only the labels move.
+  assert.equal(leg(card, 'flight-out').price, 250);
+  assert.equal(leg(card, 'flight-back').price, 260);
+  assert.match(leg(card, 'flight-out').detail, /Iberia · Duffel live fare/);
+  assert.match(leg(card, 'flight-out').more, /Live Duffel fare/);
+  assert.match(leg(card, 'flight-out').more, /Real-time price from Duffel/);
+  assert.match(leg(card, 'flight-back').detail, /American · Duffel live fare/);
+  assert.match(leg(card, 'flight-back').more, /Live Duffel fare/);
+  for (const id of ['flight-out', 'flight-back']) {
+    assert.doesNotMatch(leg(card, id).detail, /test fare/i, `${id} never says test fare in live mode`);
+    assert.doesNotMatch(leg(card, id).more, /test fare/i, `${id} note never says test fare in live mode`);
+  }
+  // The between-cities note names the live fares, not test fares.
+  assert.match(leg(card, 'leg-1').more, /Duffel live fares price only/);
+  assert.doesNotMatch(leg(card, 'leg-1').more, /test fares/i);
+});
+
+test('tripCard with test-key fares (or no mode): the test label stays, and the mode defaults to test', () => {
+  const fares = faresFor({ destCity: 'Prague', days: 14, mode: 'test' });
+  const card = buildTripCard({ destination: 'Central Europe', travelers: 2, days: 14, month: 1, origin: 'New York', tier: 1, liveFares: fares });
+  assert.equal(card.flight.mode, 'test');
+  assert.match(leg(card, 'flight-out').detail, /Iberia · Duffel test fare/);
+  assert.match(leg(card, 'flight-out').more, /Duffel test fare/);
+  assert.match(leg(card, 'leg-1').more, /Duffel test fares price only/);
+  const noMode = buildTripCard({ destination: 'Central Europe', travelers: 2, days: 14, month: 1, origin: 'New York', tier: 1, liveFares: faresFor({ destCity: 'Prague', days: 14 }) });
+  assert.equal(noMode.flight.mode, 'test', 'a payload without a mode is labeled test, never live');
+  assert.match(leg(noMode, 'flight-out').detail, /Duffel test fare/);
 });
 
 // Flights section build (Nov 15, 2026): fare cards show the times

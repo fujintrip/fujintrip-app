@@ -12,7 +12,7 @@ import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard
 import { buildMapRail } from '../lib/mapRail';
 import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
-import { appendObservation, parseLiveFares, trendLine, type LiveFares, type TrendObservation } from '../lib/duffel';
+import { appendObservation, duffelFareNote, duffelFareQualifier, duffelFareShort, duffelFaresPlural, parseLiveFares, trendLine, type LiveFares, type TrendObservation } from '../lib/duffel';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
@@ -70,6 +70,10 @@ type ServerParsed = { destination: string; travelers: number; reply: string; mis
 type PriceCheckOffer = { airline: string; price: number; currency: string; stops: number; duration: string };
 export type PriceCheckData = {
   live: boolean;
+  // The mode of the key that fetched these fares — the fare labels
+  // read it, so a live fare is never called a test fare. Absent on
+  // older responses: readers treat it as test.
+  mode?: 'test' | 'live';
   reason?: string;
   origin: string;
   destination: string;
@@ -1231,7 +1235,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     setMsgs((m2) => [...m2, { who: 'ai', text: `Moved the trip to ${MONTH_NAMES[m - 1]} — it now starts ${start}.` }]);
   };
   // Watch this trip's prices: a real watch now that live fares exist
-  // (Duffel test fares). The baseline is the live out+back total from a
+  // (live Duffel fares). The baseline is the live out+back total from a
   // fresh check — a drop is measured against that, never against the
   // planner estimate, which is static and never moves. Without a live
   // fare yet, the watch is saved with no baseline and waits for one.
@@ -1239,8 +1243,12 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
     if (!plan) return;
     const slots = { destination: plan.destination, travelers: plan.travelers, origin: lastParsed?.origin ?? '', month: lastParsed?.month ?? 0, durationDays: lastParsed?.durationDays ?? 0 };
     let baseline: number | null = null;
+    // The mode of the fares the baseline comes from (the price check
+    // or a fresh fetch) — the watch message names them by it.
+    let fareMode: 'test' | 'live' = 'test';
     if (priceCheck && priceCheck !== 'loading' && priceCheck.live) {
       baseline = priceCheck.liveTotal;
+      fareMode = priceCheck.mode === 'live' ? 'live' : 'test';
     } else {
       try {
         const r = await fetch('/api/price-check', {
@@ -1249,13 +1257,16 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
           body: JSON.stringify(slots),
         });
         const j = (await r.json()) as PriceCheckData;
-        if (j.live) baseline = j.liveTotal;
+        if (j.live) {
+          baseline = j.liveTotal;
+          fareMode = j.mode === 'live' ? 'live' : 'test';
+        }
       } catch {}
     }
     onWatchPrices({ ...slots, baseline, lastTotal: baseline, history: baseline !== null ? appendObservation([], baseline) : [] });
     setActionMsg(
       baseline !== null
-        ? `Watching ${plan.destination} prices — baseline $${baseline.toLocaleString()} for the cheapest live fares out and back (Duffel test fares). We'll tell you in My Trips when they drop below that.`
+        ? `Watching ${plan.destination} prices — baseline $${baseline.toLocaleString()} for the cheapest live fares out and back (${duffelFaresPlural(fareMode)}). We'll tell you in My Trips when they drop below that.`
         : `Watching ${plan.destination} prices — no live fare for this trip yet, so there's no baseline to drop from. The watch is saved in My Trips and starts the moment a live fare appears.`
     );
   };
@@ -2536,18 +2547,18 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                     className="plan-row"
                     summary={
                       <>
-                        {stop.transportIn.mode} · {fmtDate(stop.startDate)} · {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{si === 0 && (displayCard ?? tripCard).flight.out.live ? `(Duffel test fare — ${(displayCard ?? tripCard).flight.out.airline})` : '(estimate)'}</span>
+                        {stop.transportIn.mode} · {fmtDate(stop.startDate)} · {stop.transportIn.from} → {stop.city} · from ${stop.transportIn.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{si === 0 && (displayCard ?? tripCard).flight.out.live ? `(${duffelFareShort((displayCard ?? tripCard).flight.mode)} — ${(displayCard ?? tripCard).flight.out.airline})` : '(estimate)'}</span>
                       </>
                     }
                   >
                     <p className="plan-line">Mode: {stop.transportIn.mode} · {stop.transportIn.from} → {stop.city}</p>
                     {si === 0 && (displayCard ?? tripCard).flight.out.live ? (
-                      <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · {(displayCard ?? tripCard).flight.out.airline} ${stop.transportIn.price.toLocaleString()} (Duffel test fare, {stop.transportIn.from} → {stop.city})</p>
+                      <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · {(displayCard ?? tripCard).flight.out.airline} ${stop.transportIn.price.toLocaleString()} ({duffelFareShort((displayCard ?? tripCard).flight.mode)}, {stop.transportIn.from} → {stop.city})</p>
                     ) : (
                       <p className="plan-line">Travel day: {fmtDate(stop.startDate)} · from ${stop.transportIn.price.toLocaleString()} (planning estimate)</p>
                     )}
                     {si === 0 && (displayCard ?? tripCard).flight.out.live ? (
-                      <p className="plan-note">Duffel test fare — fetched from Duffel, not a live quote and not bookable yet. Real bookable fares need Duffel live mode.</p>
+                      <p className="plan-note">{duffelFareNote((displayCard ?? tripCard).flight.mode)}</p>
                     ) : (
                       <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                     )}
@@ -2712,18 +2723,18 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                 className="plan-section"
                 summary={
                   <>
-                    {tripCard.returnTransport.mode} · {fmtDate(tripCard.endDate)} · {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{tripCard.flight.back.live ? `(Duffel test fare — ${tripCard.flight.back.airline})` : '(estimate)'}</span>
+                    {tripCard.returnTransport.mode} · {fmtDate(tripCard.endDate)} · {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'} · from ${tripCard.returnTransport.price.toLocaleString()} <span style={{ color: 'var(--muted)' }}>{tripCard.flight.back.live ? `(${duffelFareShort(tripCard.flight.mode)} — ${tripCard.flight.back.airline})` : '(estimate)'}</span>
                   </>
                 }
               >
                 <p className="plan-line">Mode: ✈️ Flight · {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'}</p>
                 {tripCard.flight.back.live ? (
-                  <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · {tripCard.flight.back.airline} ${tripCard.returnTransport.price.toLocaleString()} (Duffel test fare, {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'})</p>
+                  <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · {tripCard.flight.back.airline} ${tripCard.returnTransport.price.toLocaleString()} ({duffelFareShort(tripCard.flight.mode)}, {tripCard.stops[tripCard.stops.length - 1].city} → {tripCard.origin || 'your city'})</p>
                 ) : (
                   <p className="plan-line">Travel day: {fmtDate(tripCard.endDate)} · from ${tripCard.returnTransport.price.toLocaleString()} (planning estimate)</p>
                 )}
                 {tripCard.flight.back.live ? (
-                  <p className="plan-note">Duffel test fare — fetched from Duffel, not a live quote and not bookable yet. Real bookable fares need Duffel live mode.</p>
+                  <p className="plan-note">{duffelFareNote(tripCard.flight.mode)}</p>
                 ) : (
                   <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                 )}
@@ -2740,7 +2751,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                 <KnowHowBlock entries={[tripCard.returnTransport.knowHow]} />
               </Expandable>
               {/* Live fares, reconciled (finish-the-web-version round):
-                  the card's flight legs are the Duffel test fares the
+                  the card's flight legs are the Duffel fares the
                   chat quoted — one total with them, the planning
                   estimate beside it, and the service fee on its own
                   line. The comparison table below stays planner-based
@@ -2749,11 +2760,11 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                   totals. */}
               {(displayCard ?? tripCard).flight.live && (
                 <p className="plan-note" style={{ marginTop: 12 }}>
-                  ✈️ Flights on this trip use the same Duffel test fares as the chat —{' '}
-                  {(displayCard ?? tripCard).flight.out.live ? `${(displayCard ?? tripCard).flight.out.airline} $${(displayCard ?? tripCard).flight.out.price.toLocaleString()} out (test fare)` : `$${(displayCard ?? tripCard).flight.out.price.toLocaleString()} out (planning estimate)`}{' '}
+                  ✈️ Flights on this trip use the same {duffelFaresPlural((displayCard ?? tripCard).flight.mode)} as the chat —{' '}
+                  {(displayCard ?? tripCard).flight.out.live ? `${(displayCard ?? tripCard).flight.out.airline} $${(displayCard ?? tripCard).flight.out.price.toLocaleString()} out (${duffelFareQualifier((displayCard ?? tripCard).flight.mode)})` : `$${(displayCard ?? tripCard).flight.out.price.toLocaleString()} out (planning estimate)`}{' '}
                   ·{' '}
-                  {(displayCard ?? tripCard).flight.back.live ? `${(displayCard ?? tripCard).flight.back.airline} $${(displayCard ?? tripCard).flight.back.price.toLocaleString()} back (test fare)` : `$${(displayCard ?? tripCard).flight.back.price.toLocaleString()} back (planning estimate)`}.{' '}
-                  Total with live fares ${(displayCard ?? tripCard).total.toLocaleString()} (planning estimate ${(displayCard ?? tripCard).plannerTotal.toLocaleString()}) · + ${(displayCard ?? tripCard).flight.serviceFee.toLocaleString()} service fee per flight order, shown separately at checkout, never hidden in the fare. Test fares are not live quotes and not bookable yet.
+                  {(displayCard ?? tripCard).flight.back.live ? `${(displayCard ?? tripCard).flight.back.airline} $${(displayCard ?? tripCard).flight.back.price.toLocaleString()} back (${duffelFareQualifier((displayCard ?? tripCard).flight.mode)})` : `$${(displayCard ?? tripCard).flight.back.price.toLocaleString()} back (planning estimate)`}.{' '}
+                  Total with live fares ${(displayCard ?? tripCard).total.toLocaleString()} (planning estimate ${(displayCard ?? tripCard).plannerTotal.toLocaleString()}) · + ${(displayCard ?? tripCard).flight.serviceFee.toLocaleString()} service fee per flight order, shown separately at checkout, never hidden in the fare. {(displayCard ?? tripCard).flight.mode === 'live' ? 'Live fares are real-time prices — booking through FujinTrip opens once checkout is ready.' : 'Test fares are not live quotes and not bookable yet.'}
                 </p>
               )}
               {comparison && (
@@ -3001,7 +3012,7 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                         <p className="plan-note">No price history yet — watch this trip&apos;s prices and we&apos;ll show whether the fares are drifting up or down.</p>
                       )}
                       <p className="plan-note">
-                        Cheapest live fares: {priceCheck.out[0] ? `${priceCheck.out[0].airline} $${priceCheck.out[0].price.toLocaleString()} out` : 'no outbound fare'} · {priceCheck.back[0] ? `${priceCheck.back[0].airline} $${priceCheck.back[0].price.toLocaleString()} back` : 'no return fare'} · {priceCheck.departDate} → {priceCheck.returnDate}. Live Duffel fares (test fares in test mode).
+                        Cheapest live fares: {priceCheck.out[0] ? `${priceCheck.out[0].airline} $${priceCheck.out[0].price.toLocaleString()} out` : 'no outbound fare'} · {priceCheck.back[0] ? `${priceCheck.back[0].airline} $${priceCheck.back[0].price.toLocaleString()} back` : 'no return fare'} · {priceCheck.departDate} → {priceCheck.returnDate}. {priceCheck.mode === 'live' ? 'Live Duffel fares.' : 'Live Duffel fares (test fares in test mode).'}
                       </p>
                     </>
                   )}
@@ -3207,7 +3218,7 @@ export function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) 
       try {
         const r = await fetch('/api/duffel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: from || 'JFK', destination: to || 'LHR', date, travelers: 2 }) });
         const j = await r.json();
-        setResult(`${j.label} — from $${j.offers?.[0]?.price ?? '—'} ${j.offers?.[0] ? `(${j.live ? 'live fare' : 'estimate'})` : ''} Saved to My Trips.`);
+        setResult(`${j.label} — from $${j.offers?.[0]?.price ?? '—'} ${j.offers?.[0] ? `(${j.mode === 'live' ? 'live fare' : j.live ? 'test fare' : 'estimate'})` : ''} Saved to My Trips.`);
       } catch { setResult('Saved to My Trips as a request.'); }
     } else {
       setResult('Saved to My Trips as a request — we’ll match it to live suppliers once connected.');

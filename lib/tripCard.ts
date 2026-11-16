@@ -14,7 +14,8 @@
 // fare split, labeled as an estimate.
 
 import { allInFlightLine, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, familyPaceLine, fareClassForTier, fareClassLine, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination, serviceFee, stopsForRoute, type Party, type RouteOverride } from './planner';
-import type { DuffelFareOffer, LiveFares } from './duffel';
+import type { DuffelFareOffer, DuffelMode, LiveFares } from './duffel';
+import { duffelFareShort, duffelFaresPlural } from './duffel';
 import { knowHowForLeg, passKnowHowForRoute, type TransportKnowHow } from './groundTransport';
 import { paceWarningsForCard, type PaceLevel, type PaceWarning } from './pace';
 import { arrivalAnchor, departureAnchor, type ArrivalInfo, type DepartureInfo } from './arrival';
@@ -279,6 +280,12 @@ export type CardFlight = {
   plannerFlight: number;
   serviceFee: number;
   live: boolean;
+  // The mode of the key that fetched these fares (from the LiveFares
+  // payload) — the leg labels, the panel and the chat all read it, so
+  // a fare fetched with a live key is never called a test fare.
+  // Absent on cards saved before this round: readers treat it as
+  // test, so a fare is never called live unless the key was live.
+  mode?: DuffelMode;
 };
 
 // Build the Layla-style trip card. Prices come from buildPlan() (the same
@@ -392,6 +399,7 @@ export function buildTripCard(opts: {
     plannerFlight: best.flight,
     serviceFee: serviceFee(flightTotal),
     live: !!(liveOut || liveBack),
+    mode: opts.liveFares?.mode ?? 'test',
   };
   // The card's own total for the chosen tier: the plan total with the
   // planner flight leg swapped for the flight total above. Hotels,
@@ -497,16 +505,22 @@ export function buildTripCard(opts: {
   // byte-identical to before this round.
   const flightAllIn = allInFlightLine(flightTotal);
   // The live-fare line for a flight leg: airline, price, what was
-  // fetched and when — and the test-mode label, every time. A test fare
+  // fetched and when — and the mode label, every time. A test fare
   // is a fetched Duffel fare; it is not a live quote and not bookable.
-  const liveFareLine = (o: { airline: string; price: number; stops: number; duration: string }, from: string, to: string, date: string) =>
-    `Duffel test fare — fetched for ${from} → ${to} on ${date}: ${o.airline} $${o.price.toLocaleString()}${o.stops === 0 ? ' nonstop' : `, ${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.duration ? `, ${o.duration}` : ''}. Not a live quote and not bookable yet — real bookable fares need Duffel live mode.`;
+  // A live fare is a real-time price; booking opens once checkout is
+  // built, so the line never promises a booking today.
+  const liveFareLine = (o: { airline: string; price: number; stops: number; duration: string }, from: string, to: string, date: string) => {
+    const what = `${o.airline} $${o.price.toLocaleString()}${o.stops === 0 ? ' nonstop' : `, ${o.stops} stop${o.stops > 1 ? 's' : ''}`}${o.duration ? `, ${o.duration}` : ''}`;
+    return flight.mode === 'live'
+      ? `Live Duffel fare — fetched for ${from} → ${to} on ${date}: ${what}. Real-time price from Duffel. Booking through FujinTrip opens once checkout is ready.`
+      : `Duffel test fare — fetched for ${from} → ${to} on ${date}: ${what}. Not a live quote and not bookable yet — real bookable fares need Duffel live mode.`;
+  };
   legs.push({
     id: 'flight-out',
     kind: 'flight',
     icon: '✈️',
     label: `Flight ${opts.origin || 'Your city'} → ${cardStops[0].city}`,
-    detail: flight.out.live ? `${liveOut!.airline} · Duffel test fare` : `${fareClassName} · planning estimate`,
+    detail: flight.out.live ? `${liveOut!.airline} · ${duffelFareShort(flight.mode)}` : `${fareClassName} · planning estimate`,
     more: flight.out.live
       ? `${fareClass} ${flightAllIn} ${liveFareLine(liveOut!, opts.origin || 'Your city', cardStops[0].city, fmtIso(startDate))}`
       : `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,
@@ -530,7 +544,7 @@ export function buildTripCard(opts: {
     // exactly that, instead of letting the live label leak onto it.
     const isFlightLeg = legMode.includes('flight');
     const intercityLiveNote = flight.live
-      ? `Duffel's test fares price only ${opts.origin || 'your city'} → ${cardStops[0].city} and back — this leg between cities stays a planning estimate. `
+      ? `${duffelFaresPlural(flight.mode)} price only ${opts.origin || 'your city'} → ${cardStops[0].city} and back — this leg between cities stays a planning estimate. `
       : '';
     legs.push({
       id: `leg-${i}`,
@@ -558,7 +572,7 @@ export function buildTripCard(opts: {
     kind: 'flight',
     icon: '✈️',
     label: `Flight ${lastStop.city} → ${opts.origin || 'Your city'}`,
-    detail: flight.back.live ? `${liveBack!.airline} · Duffel test fare` : `${fareClassName} · planning estimate`,
+    detail: flight.back.live ? `${liveBack!.airline} · ${duffelFareShort(flight.mode)}` : `${fareClassName} · planning estimate`,
     more: flight.back.live
       ? `${fareClass} ${flightAllIn} ${liveFareLine(liveBack!, lastStop.city, opts.origin || 'Your city', fmtIso(endDate))}`
       : `${fareClass} ${flightAllIn} Live fares arrive with Duffel live mode — until then this is a planning estimate, not a live quote.`,

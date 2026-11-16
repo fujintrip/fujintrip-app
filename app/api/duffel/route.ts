@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { duffelMode } from '../../../lib/duffel';
 
 /**
  * Duffel flights — server-side only.
@@ -115,9 +116,16 @@ export async function POST(req: NextRequest) {
       .sort((a, b) => a.price - b.price)
       .slice(0, 6);
 
+    // The label follows the key (duffelMode): a test key's fares are
+    // test fares, never presented as live.
+    const mode = duffelMode();
     return NextResponse.json({
       live: true,
-      label: `Live fares from Duffel — ${origin} → ${destination} · ${date} · ${travelers} traveler${travelers > 1 ? 's' : ''}. Prices before booking; confirm at checkout.`,
+      mode,
+      label:
+        mode === 'live'
+          ? `Live fares from Duffel — ${origin} → ${destination} · ${date} · ${travelers} traveler${travelers > 1 ? 's' : ''}. Prices before booking; confirm at checkout.`
+          : `Test fares from Duffel — ${origin} → ${destination} · ${date} · ${travelers} traveler${travelers > 1 ? 's' : ''}. Test mode — not real market prices.`,
       origin, destination, date, travelers,
       offer_request_id: json.data?.id,
       offers,

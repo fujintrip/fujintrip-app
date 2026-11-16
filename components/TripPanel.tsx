@@ -15,6 +15,7 @@ import KnowHowBlock from './KnowHow';
 import { SosButton } from './EmergencySheet';
 import { MONTH_NAMES } from '../lib/planner';
 import type { Plan } from '../lib/planner';
+import { duffelFareNote, duffelFareShort, duffelFaresPlural } from '../lib/duffel';
 import type { BestTime } from '../lib/bestTime';
 import type { TripCard } from '../lib/tripCard';
 
@@ -65,6 +66,10 @@ export default function TripPanel({
   const stops = card?.stops ?? [];
   const totalNights = stops.reduce((s, x) => s + x.nights, 0);
   const chosen = plan ? plan.options[choice] : null;
+  // The mode of the key that fetched the card's fares (absent on
+  // cards saved before this round → test): every fare label below
+  // reads it, so a live fare is never called a test fare.
+  const fareMode = card?.flight.mode;
   const perPerson = chosen && travelers > 0 ? Math.round(chosen.total / travelers) : 0;
   const familyNote = kids.length ? ` · ${kids.length} kid${kids.length > 1 ? 's' : ''} (ages ${kids.join(', ')})` : '';
   return (
@@ -100,15 +105,15 @@ export default function TripPanel({
       )}
 
       {/* Live Duffel fares (finish-the-web-version round): the card's
-          flight legs are the same test fares the chat quoted — one line
+          flight legs are the same Duffel fares the chat quoted — one line
           naming them, with the live-fare total beside the planning
           estimate and the service fee on its own. The header total
           above stays the planner total; this line is what reconciles
           the two. */}
       {card?.flight.live && (
         <p className="plan-note">
-          ✈️ Flights are Duffel test fares — {card.flight.out.live ? `${card.flight.out.airline} $${card.flight.out.price.toLocaleString()} out` : `$${card.flight.out.price.toLocaleString()} out (estimate)`} ·{' '}
-          {card.flight.back.live ? `${card.flight.back.airline} $${card.flight.back.price.toLocaleString()} back` : `$${card.flight.back.price.toLocaleString()} back (estimate)`} · + ${card.flight.serviceFee.toLocaleString()} service fee · total with live fares ${card.total.toLocaleString()} (planning estimate ${card.plannerTotal.toLocaleString()}). Test fares are not live quotes.
+          ✈️ Flights are {duffelFaresPlural(fareMode)} — {card.flight.out.live ? `${card.flight.out.airline} $${card.flight.out.price.toLocaleString()} out` : `$${card.flight.out.price.toLocaleString()} out (estimate)`} ·{' '}
+          {card.flight.back.live ? `${card.flight.back.airline} $${card.flight.back.price.toLocaleString()} back` : `$${card.flight.back.price.toLocaleString()} back (estimate)`} · + ${card.flight.serviceFee.toLocaleString()} service fee · total with live fares ${card.total.toLocaleString()} (planning estimate ${card.plannerTotal.toLocaleString()}). {fareMode === 'live' ? 'Live fares are real-time prices.' : 'Test fares are not live quotes.'}
         </p>
       )}
 
@@ -265,10 +270,10 @@ export default function TripPanel({
                   <p className="plan-line">
                     <b>Arrive:</b> {stop.transportIn.mode} {stop.transportIn.from} → {stop.city} · {fmtDate(stop.startDate)} · from $
                     {stop.transportIn.price.toLocaleString()}{' '}
-                    {si === 0 && card.flight.out.live ? `(Duffel test fare — ${card.flight.out.airline})` : '(planning estimate)'}
+                    {si === 0 && card.flight.out.live ? `(${duffelFareShort(fareMode)} — ${card.flight.out.airline})` : '(planning estimate)'}
                   </p>
                   {si === 0 && card.flight.out.live ? (
-                    <p className="plan-note">Duffel test fare — fetched from Duffel, not a live quote and not bookable yet.</p>
+                    <p className="plan-note">{duffelFareNote(fareMode)}</p>
                   ) : (
                     <p className="plan-note">Live times arrive with live inventory — until then this is a planning estimate, not a live quote.</p>
                   )}
@@ -299,7 +304,7 @@ export default function TripPanel({
                   <>
                     <p className="panel-transport">
                       {card.returnTransport.mode} · {fmtDate(card.endDate)} · {card.returnTransport.from} → home · from ${card.returnTransport.price.toLocaleString()}
-                      {card.flight.back.live ? ` · Duffel test fare — ${card.flight.back.airline}` : ''}
+                      {card.flight.back.live ? ` · ${duffelFareShort(fareMode)} — ${card.flight.back.airline}` : ''}
                     </p>
                     <Expandable className="panel-transport-detail" summary={<>How to book</>}>
                       <KnowHowBlock entries={[card.returnTransport.knowHow]} />

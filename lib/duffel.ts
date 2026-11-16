@@ -175,6 +175,12 @@ export type LiveFares = {
   out: DuffelFareOffer[];
   back: DuffelFareOffer[];
   reason?: string;
+  // The mode of the key that fetched these fares — threaded to the
+  // trip card so every label follows the key. Absent on payloads
+  // built before this round (and on cards saved from them): readers
+  // treat an absent mode as test, so a fare is never called live
+  // unless the key that fetched it was live.
+  mode?: DuffelMode;
 };
 
 // Validate a live-fares payload before the trip card trusts it (the
@@ -208,6 +214,10 @@ export function parseLiveFares(value: unknown): LiveFares | null {
     out: v.out as DuffelFareOffer[],
     back: v.back as DuffelFareOffer[],
     ...(typeof v.reason === 'string' ? { reason: v.reason as string } : {}),
+    // The mode travels with the payload — the card labels the fares
+    // by the key that fetched them. An absent or invalid mode stays
+    // absent: readers fall back to test, never to live.
+    ...(v.mode === 'live' || v.mode === 'test' ? { mode: v.mode as DuffelMode } : {}),
   };
 }
 
@@ -464,13 +474,48 @@ export function cabinClassFor(value: unknown): DuffelCabinClass {
   return 'economy';
 }
 
+// The mode of a Duffel key: 'live' for a duffel_live_… key, 'test'
+// for anything else (including no key). Pure functions of the mode
+// below are the one source for every fare label a traveler sees —
+// the card, the panel, the chat and the search results all read the
+// same mode, so a fare fetched with a live key is never called a
+// test fare, and a fare fetched with a test key keeps the test
+// label. Anything that is not 'live' reads as test, including an
+// absent mode on a card saved before this round.
+export type DuffelMode = 'test' | 'live';
+
 // Which Duffel mode the configured key is: a live key (duffel_live_…)
 // means real fares; anything else set — or no key at all — is test
 // mode. The fare label follows the key, so swapping test → live
 // needs no code change — and so do the prompt block and the summary
 // line below, which read the same mode.
-export function duffelMode(): 'test' | 'live' {
+export function duffelMode(): DuffelMode {
   return (process.env.DUFFEL_API_KEY ?? '').startsWith('duffel_live_') ? 'live' : 'test';
+}
+
+// The short fare tag on a leg: "Iberia · Duffel test fare" in test
+// mode, "Iberia · Duffel live fare" once the key is live.
+export function duffelFareShort(mode: DuffelMode | string | undefined): string {
+  return mode === 'live' ? 'Duffel live fare' : 'Duffel test fare';
+}
+
+// The plural for "Flights are Duffel test fares — …".
+export function duffelFaresPlural(mode: DuffelMode | string | undefined): string {
+  return mode === 'live' ? 'Duffel live fares' : 'Duffel test fares';
+}
+
+// The qualifier in "out (test fare)" / "back (live fare)".
+export function duffelFareQualifier(mode: DuffelMode | string | undefined): string {
+  return mode === 'live' ? 'live fare' : 'test fare';
+}
+
+// The plan-note sentence under a live leg. The test wording is
+// byte-identical to the old hardcoded note; the live wording never
+// promises a booking — checkout is not built yet.
+export function duffelFareNote(mode: DuffelMode | string | undefined): string {
+  return mode === 'live'
+    ? 'Live Duffel fare — fetched from Duffel, a real-time price. Booking through FujinTrip opens once checkout is ready.'
+    : 'Duffel test fare — fetched from Duffel, not a live quote and not bookable yet. Real bookable fares need Duffel live mode.';
 }
 
 async function offerRequest(
@@ -524,6 +569,7 @@ export async function fetchLiveFares(opts: {
 }): Promise<LiveFares> {
   const base: LiveFares = {
     live: false,
+    mode: duffelMode(),
     origin: opts.origin,
     destCity: opts.destCity,
     departDate: opts.departDate,
@@ -568,6 +614,7 @@ export async function fetchOneWayFares(opts: {
 }): Promise<LiveFares> {
   const base: LiveFares = {
     live: false,
+    mode: duffelMode(),
     origin: opts.origin,
     destCity: opts.destCity,
     departDate: opts.departDate,

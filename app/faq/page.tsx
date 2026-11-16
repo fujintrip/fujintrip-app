@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { duffelMode } from '../../lib/duffel';
 
 export const metadata: Metadata = {
   title: 'FAQ — FujinTrip',
@@ -15,7 +16,7 @@ export default function Faq() {
           <p className="sub">Short answers, drawn from how the site actually works today.</p>
 
           <h2 style={{ marginTop: 28 }}>Are the prices on FujinTrip live?</h2>
-          <p>Prices marked &ldquo;planning estimate&rdquo; are estimates from our planner, not live quotes. Flight searches show fares from our flight supplier (Duffel) — currently in test mode, and the page labels them as test fares, not live bookable quotes. Fares shown from other sites are cached and labeled with when they were checked, never presented as live.</p>
+          <p>Prices marked &ldquo;planning estimate&rdquo; are estimates from our planner, not live quotes. {duffelMode() === 'live' ? 'Flight searches show live fares from our flight supplier (Duffel) — real-time prices, labeled with their source.' : 'Flight searches show fares from our flight supplier (Duffel) — currently in test mode, and the page labels them as test fares, not live bookable quotes.'} Fares shown from other sites are cached and labeled with when they were checked, never presented as live.</p>
 
           <h2 style={{ marginTop: 28 }}>Do I need an account?</h2>
           <p>No — browsing and searching are free without an account. Saving a search or downloading a plan as a PDF needs a free account: sign in with an email link, no password. Your saved trips are stored in your browser on this device for now.</p>
