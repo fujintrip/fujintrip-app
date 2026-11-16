@@ -398,6 +398,77 @@ export function cruiseTierRows(tier: CruiseTier, travelers: number): CruiseTierR
     .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
 }
 
+// Buses tiers (Nov 15, 2026 — the Buses section, same standard as
+// the Stays, Car rental, Attractions and Cruises sections): the three
+// planner tiers, priced from the planner's own per-tier totals —
+// never a named operator, route, timetable, rating, or live quote.
+// The planner breaks out no bus leg (see noLegNote in lib/homeTabs:
+// bus prices are not broken out yet), so the tier figures are the
+// per-tier FULL-TRIP totals — the same figures the old bus rows
+// showed for Best value — and the results label them as full-trip
+// planning estimates, never as bus prices. Inventing a bus leg from
+// the trip total would break that rule. The tier is part of the
+// search (a ?tier= URL param, like the Stays, Car, Attractions and
+// Cruises tiers), so a tiered search is shareable and renders its
+// tier on first paint.
+export type BusTier = 'cheapest' | 'best' | 'premium';
+
+export const BUS_TIERS: { id: BusTier; label: string }[] = [
+  { id: 'cheapest', label: 'Cheapest' },
+  { id: 'best', label: 'Best value' },
+  { id: 'premium', label: 'Premium' },
+];
+
+export function busTierFromValue(v: unknown): BusTier {
+  return v === 'cheapest' || v === 'premium' ? v : 'best';
+}
+
+export function busTierLabel(tier: BusTier): string {
+  return BUS_TIERS.find((t) => t.id === tier)?.label ?? 'Best value';
+}
+
+// One tier's bus figures for a destination — the planner's per-tier
+// full-trip total for the whole party (buildPlan's total is a party
+// total for the trip) plus the per-traveler share. The figures never
+// depend on the searched dates: the planner prices the trip, not the
+// bus ride, so the total stays the planner's figure whatever dates
+// the traveler picked — scaling it by a ride length would invent a
+// pricing model the planner does not have.
+export type BusTierOption = { tier: BusTier; label: string; total: number; perTraveler: number };
+
+export function busTierOptions(destination: string, travelers: number): BusTierOption[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  const options = buildPlan(destination, party, 3).options;
+  return BUS_TIERS.map((t) => {
+    const total = options.find((o) => o.name === t.label)?.total ?? 0;
+    return { tier: t.id, label: t.label, total, perTraveler: Math.round(total / party) };
+  });
+}
+
+// One row per discovery destination in a tier — the bus list the
+// Buses results show. The shape is TabRow plus the party total, so
+// the shared sortTabRows re-orders it and the card can print the
+// total without re-deriving it from a rounded per-traveler figure
+// (perTraveler × travelers would drift from the total by rounding).
+// kind is 'full-trip': these are full-trip totals, not bus prices.
+export type BusTierRow = TabRow & { total: number };
+
+export function busTierRows(tier: BusTier, travelers: number): BusTierRow[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  return discoveryDestinations()
+    .map((e) => {
+      const opt = busTierOptions(e.destination, party).find((o) => o.tier === tier);
+      return {
+        destination: e.destination,
+        routeLine: routeLineFor(e.stops),
+        pricePerTraveler: opt?.perTraveler ?? 0,
+        kind: 'full-trip' as const,
+        total: opt?.total ?? 0,
+      };
+    })
+    .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
+}
+
 export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
   { id: 'roundtrip', label: 'Round-trip' },
   { id: 'oneway', label: 'One-way' },
@@ -498,6 +569,11 @@ export type SearchQuery = {
   // The figures are the per-tier full-trip totals (the planner
   // breaks out no cruise leg), labeled as such in the results.
   cruiseTier: CruiseTier;
+  // Buses only: which planner tier the bus list prices in. Same
+  // three tiers, same ?tier= param, same Best value default. The
+  // figures are the per-tier full-trip totals (the planner breaks
+  // out no bus leg), labeled as such in the results.
+  busTier: BusTier;
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -540,6 +616,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   carTier: CarTier;
   tourTier: TourTier;
   cruiseTier: CruiseTier;
+  busTier: BusTier;
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -561,6 +638,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     carTier: q?.carTier ?? 'best',
     tourTier: q?.tourTier ?? 'best',
     cruiseTier: q?.cruiseTier ?? 'best',
+    busTier: q?.busTier ?? 'best',
   };
 }
 
@@ -587,6 +665,7 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     carTier: 'best',
     tourTier: 'best',
     cruiseTier: 'best',
+    busTier: 'best',
   };
 }
 
@@ -706,6 +785,11 @@ export function searchQueryFromParams(
   if (tab === 'cruises') {
     q.cruiseTier = cruiseTierFromValue(params.tier);
   }
+  // Buses tier (Nov 15, 2026): the same ?tier= param, the
+  // same fallback — a tiered bus search is shareable too.
+  if (tab === 'buses') {
+    q.busTier = busTierFromValue(params.tier);
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -728,6 +812,7 @@ export function searchQueryToParams(q: SearchQuery): string {
   if (q.tab === 'cars' && q.carTier !== 'best') p.set('tier', q.carTier);
   if (q.tab === 'tours' && q.tourTier !== 'best') p.set('tier', q.tourTier);
   if (q.tab === 'cruises' && q.cruiseTier !== 'best') p.set('tier', q.cruiseTier);
+  if (q.tab === 'buses' && q.busTier !== 'best') p.set('tier', q.busTier);
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));

@@ -33,6 +33,10 @@ import {
   searchRequestLabel,
   sortFareOffers,
   sortTabRows,
+  BUS_TIERS,
+  busTierLabel,
+  busTierOptions,
+  busTierRows,
   CAR_TIERS,
   carDaysFor,
   carTierLabel,
@@ -54,6 +58,8 @@ import {
   tourTierRows,
   type RowSort,
   type SearchQuery,
+  type BusTier,
+  type BusTierRow,
   type CarTier,
   type CarTierRow,
   type CruiseTier,
@@ -1801,10 +1807,163 @@ function CruiseResults({
   );
 }
 
+// One bus row: the destination, the searched route and dates, the
+// selected tier's per-traveler price and party total. No bus
+// operator, route, timetable, rating, or per-ride figure: the
+// planner has none of those, so the card shows none of those. The
+// price is the per-tier FULL-TRIP total, labeled as such — never a
+// bus price.
+function BusCard({
+  row,
+  query,
+  onSave,
+}: {
+  row: BusTierRow;
+  query: SearchQuery;
+  onSave: (label: string) => void;
+}) {
+  const photo = destinationPhoto(row.destination);
+  const highlight = rowIncludesPlace(row.destination, query.to);
+  const tierLabel = busTierLabel(query.busTier);
+  const dates = query.depart ? `${query.depart}${query.ret ? ` – ${query.ret}` : ''}` : 'Flexible dates';
+  return (
+    <article className={`result-card${highlight ? ' result-match' : ''}`}>
+      {photo && <SafeImg src={photo} alt={row.destination} label={row.destination} className="result-photo" />}
+      <div className="result-body">
+        <h3>{row.destination}</h3>
+        <p className="plan-muted">{row.routeLine}</p>
+        <p className="plan-muted">
+          {dates} · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
+        <p className="result-price">
+          from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
+          <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
+        </p>
+        <p className="plan-muted">
+          ${row.total.toLocaleString()} total for {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, row.destination))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Buses results (Nov 15, 2026 — the Buses section, same standard
+// as the Stays, Car rental, Attractions and Cruises sections): the
+// searched route's three planner tiers as bus cards, then the
+// per-destination bus list in the selected tier. Every figure is
+// the planner's own per-tier FULL-TRIP total — the planner breaks
+// out no bus leg, so these are full-trip planning estimates, never
+// bus prices, never a named operator, route, or timetable. No
+// "Book now": no live supplier exists yet.
+function BusResults({
+  query,
+  sort,
+  maxPrice,
+  busTier,
+  onSave,
+  onClearPrice,
+  onClearBusFilters,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  busTier: BusTier;
+  onSave: (label: string) => void;
+  onClearPrice: () => void;
+  onClearBusFilters: () => void;
+}) {
+  const known = isKnownPlace(query.to);
+  const tiers = known ? busTierOptions(query.to, query.travelers) : null;
+  const allRows = useMemo(() => busTierRows(busTier, query.travelers), [busTier, query.travelers]);
+  const rows = useMemo(() => {
+    const sorted = sortTabRows(allRows, sort);
+    return maxPrice === null ? sorted : sorted.filter((r) => r.pricePerTraveler <= maxPrice);
+  }, [allRows, sort, maxPrice]);
+  const filtersActive = maxPrice !== null || busTier !== 'best';
+  const dates = query.depart ? `${query.depart}${query.ret ? ` – ${query.ret}` : ''}` : 'Flexible dates';
+  const travelers = `${query.travelers} traveler${query.travelers > 1 ? 's' : ''}`;
+  const tierLabel = busTierLabel(busTier);
+  const note = noLegNote('buses');
+  return (
+    <div aria-label="Buses results">
+      <h3>
+        Buses · {query.from || 'Anywhere'} → {query.to || 'Anywhere'} · {dates} · {travelers}
+      </h3>
+      <p className="plan-muted">Live bus prices arrive when Distribusion / Busbud / FlixBus connect.</p>
+      {note && <p className="results-note">{note}</p>}
+      <p className="plan-muted">
+        Bus prices below are full-trip planning estimates from FujinTrip&apos;s planner — not bus prices and not live
+        quotes, and no bus operator, route, or timetable is attached to them. Live bookable buses open as suppliers connect.
+      </p>
+      {tiers && (
+        <>
+          <h4>Buses to {query.to} — full-trip planning estimates</h4>
+          <div className="result-cards">
+            {tiers.map((t) => (
+              <article key={t.tier} className={`result-card${t.tier === busTier ? ' result-match' : ''}`}>
+                <div className="result-body">
+                  <h3>
+                    {t.label}
+                    {t.tier === 'best' ? ' · Our pick' : ''}
+                  </h3>
+                  <p className="plan-muted">
+                    {query.from || 'Anywhere'} → {query.to} · {dates} · {travelers}
+                  </p>
+                  <p className="result-price">
+                    from ${t.perTraveler.toLocaleString()} per traveler{' '}
+                    <span className="plan-muted">· Full trip · planning estimate</span>
+                  </p>
+                  <p className="plan-muted">
+                    ${t.total.toLocaleString()} total for {travelers}
+                  </p>
+                  <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.to))}>
+                    Save this search
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      {filtersActive && (
+        <p className="fare-count">
+          Showing {rows.length} of {allRows.length} destinations · {tierLabel} buses.{' '}
+          <button type="button" className="linklike" onClick={onClearBusFilters}>
+            Clear filters
+          </button>
+        </p>
+      )}
+      <h4>Buses by destination — full-trip planning estimates</h4>
+      {rows.length === 0 ? (
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
+      ) : (
+        <div className="result-cards">
+          {rows.map((r) => (
+            <BusCard key={r.destination} row={r} query={query} onSave={onSave} />
+          ))}
+        </div>
+      )}
+      <p className="plan-muted">
+        {tierLabel} full trip per traveler, {travelers} · planning estimate — not a live quote. Live comparison arrives as suppliers
+        connect.
+      </p>
+    </div>
+  );
+}
+
 // One tab's estimate results: the per-route planner numbers for this
-// category, per traveler, labeled planning estimate. Buses / taxis
-// carry the honest note instead of a broken-out price (cruises have
-// their own CruiseResults since Nov 15, 2026).
+// category, per traveler, labeled planning estimate. Taxis carry the
+// honest note instead of a broken-out price (cruises have their own
+// CruiseResults and buses their own BusResults since Nov 15, 2026).
 function CategoryResults({
   query,
   sort,
@@ -1902,6 +2061,9 @@ export default function SearchResults({
   // Cruises tier (Nov 15, 2026): the same filter-state pattern
   // as the Stays, Car rental and Attractions tiers, for the cruise list.
   const [cruiseTier, setCruiseTier] = useState<CruiseTier>(query.cruiseTier ?? 'best');
+  // Buses tier (Nov 15, 2026): the same filter-state pattern
+  // as the Stays, Car rental, Attractions and Cruises tiers, for the bus list.
+  const [busTier, setBusTier] = useState<BusTier>(query.busTier ?? 'best');
   // The estimate rows behind the max-price counts — the counts on the
   // price options come from the same rows the list shows. Stays price
   // for the searched party (guests), in the selected tier — the
@@ -1910,6 +2072,8 @@ export default function SearchResults({
   // Attractions price for the searched travelers, in the selected tier.
   // Cruises price for the searched travelers, in the selected tier
   // (full-trip totals — the planner breaks out no cruise leg).
+  // Buses price for the searched travelers, in the selected tier
+  // (full-trip totals — the planner breaks out no bus leg).
   const estimateRows = useMemo(
     () =>
       query.tab === 'hotels'
@@ -1920,8 +2084,10 @@ export default function SearchResults({
             ? tourTierRows(tourTier, query.travelers)
             : query.tab === 'cruises'
               ? cruiseTierRows(cruiseTier, query.travelers)
-              : tabRowsFor(query.tab, query.travelers),
-    [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier, cruiseTier]
+              : query.tab === 'buses'
+                ? busTierRows(busTier, query.travelers)
+                : tabRowsFor(query.tab, query.travelers),
+    [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier, cruiseTier, busTier]
   );
   const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
@@ -1934,7 +2100,7 @@ export default function SearchResults({
   const selectedDiscovery: DiscoveryEntry | null =
     discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
-  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.month || ''}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${query.cruiseTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
+  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.month || ''}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${query.cruiseTier ?? 'best'}|${query.busTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
   useEffect(() => {
@@ -1946,6 +2112,7 @@ export default function SearchResults({
     setCarTier(query.carTier ?? 'best');
     setTourTier(query.tourTier ?? 'best');
     setCruiseTier(query.cruiseTier ?? 'best');
+    setBusTier(query.busTier ?? 'best');
   }, [queryKey]);
 
   const primaryPlace =
@@ -2019,6 +2186,18 @@ export default function SearchResults({
           <h3>Cruise price</h3>
           <select value={cruiseTier} onChange={(e) => setCruiseTier(e.target.value as CruiseTier)} aria-label="Cruise price tier">
             {CRUISE_TIERS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {query.tab === 'buses' && (
+        <div className="filter-group">
+          <h3>Bus price</h3>
+          <select value={busTier} onChange={(e) => setBusTier(e.target.value as BusTier)} aria-label="Bus price tier">
+            {BUS_TIERS.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
               </option>
@@ -2185,6 +2364,19 @@ export default function SearchResults({
                 onClearCruiseFilters={() => {
                   setMaxPrice(null);
                   setCruiseTier('best');
+                }}
+              />
+            ) : query.tab === 'buses' ? (
+              <BusResults
+                query={query}
+                sort={sort}
+                maxPrice={maxPrice}
+                busTier={busTier}
+                onSave={onSaveSearch}
+                onClearPrice={() => setMaxPrice(null)}
+                onClearBusFilters={() => {
+                  setMaxPrice(null);
+                  setBusTier('best');
                 }}
               />
             ) : (

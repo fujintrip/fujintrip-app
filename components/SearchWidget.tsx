@@ -22,6 +22,7 @@ import {
   type FlightLeg,
   type FlightTripType,
   type SearchQuery,
+  type BusTier,
   type CarTier,
   type CruiseTier,
   type StayTier,
@@ -211,6 +212,10 @@ export default function SearchWidget({
   // Cruises tier (Nov 15, 2026): the same carry-through as the
   // Stays, Car rental and Attractions tiers, for the same reason.
   const [cruiseTier, setCruiseTier] = useState<CruiseTier>(initialSearch?.cruiseTier ?? 'best');
+  // Buses tier (Nov 15, 2026): the same carry-through as the
+  // Stays, Car rental, Attractions and Cruises tiers, for the same
+  // reason.
+  const [busTier, setBusTier] = useState<BusTier>(initialSearch?.busTier ?? 'best');
 
   // A multi-city search always has 2–4 legs. A fresh multi-city
   // form starts from the route already typed (leg 1) plus one empty
@@ -293,6 +298,7 @@ export default function SearchWidget({
     setCarTier(v.carTier);
     setTourTier(v.tourTier);
     setCruiseTier(v.cruiseTier);
+    setBusTier(v.busTier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -437,7 +443,29 @@ export default function SearchWidget({
         return;
       }
     }
-    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && tab !== 'cruises' && (tab !== 'flights' || tripType !== 'multicity')) {
+    // Buses dates name the ride: a return on the departure day is
+    // not a round trip, and a return with no departure has nothing
+    // to end. The generic block below would only repeat these
+    // verdicts in vaguer words, so buses skip it.
+    if (tab === 'buses') {
+      if (depart && depart < now) {
+        setNote('That departure date is in the past — pick a date from today on.');
+        return;
+      }
+      if (ret && !depart) {
+        setNote('Add a departure date first — the return date needs a departure.');
+        return;
+      }
+      if (ret && ret < now) {
+        setNote('That return date is in the past — pick a date from today on.');
+        return;
+      }
+      if (depart && ret && ret <= depart) {
+        setNote('The return date must be after the departure date — a bus trip needs at least one day.');
+        return;
+      }
+    }
+    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && tab !== 'cruises' && tab !== 'buses' && (tab !== 'flights' || tripType !== 'multicity')) {
       if (depart && depart < now) {
         setNote('That date is in the past — pick a date from today on.');
         return;
@@ -480,6 +508,7 @@ export default function SearchWidget({
       carTier: tab === 'cars' ? carTier : 'best',
       tourTier: tab === 'tours' ? tourTier : 'best',
       cruiseTier: tab === 'cruises' ? cruiseTier : 'best',
+      busTier: tab === 'buses' ? busTier : 'best',
     };
     if (tab === 'flights' && tripType === 'oneway') q.ret = '';
     if (tab === 'flights' && tripType === 'multicity') {
@@ -671,14 +700,17 @@ export default function SearchWidget({
           )}
           {tab === 'buses' && (
             <>
-              <Field label="From">
+              <Field label="From" icon="pin">
                 <PlaceField id="buses-from" label="Traveling from" value={from} onChange={setFrom} placeholder="Departure city" />
               </Field>
-              <Field label="To">
+              <Field label="To" icon="pin">
                 <PlaceField id="buses-to" label="Traveling to" value={place} onChange={setPlace} placeholder="Destination city" />
               </Field>
-              <Field label="Date">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
+              <Field label="Departure date" icon="calendar">
+                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
+              </Field>
+              <Field label="Return date" icon="calendar">
+                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>
