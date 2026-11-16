@@ -22,6 +22,7 @@ import {
   type FlightLeg,
   type FlightTripType,
   type SearchQuery,
+  type StayTier,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
 import PlaceField from './PlaceField';
@@ -108,6 +109,50 @@ function TravelersSelect({
   );
 }
 
+// Guests / Rooms steppers (Stays, Nov 15 2026): minus / plus
+// buttons instead of a select — the traveler sees the number and
+// taps to change it. 44px targets, clamped to the range, disabled
+// at the bounds, the value announced when it changes.
+function Stepper({
+  value,
+  min,
+  max,
+  onChange,
+  singular,
+  plural,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (n: number) => void;
+  singular: string;
+  plural: string;
+}) {
+  return (
+    <span className="sw-stepper">
+      <button
+        type="button"
+        aria-label={`Fewer ${plural}`}
+        disabled={value <= min}
+        onClick={() => onChange(Math.max(min, value - 1))}
+      >
+        −
+      </button>
+      <strong aria-live="polite">
+        {value} {value === 1 ? singular : plural}
+      </strong>
+      <button
+        type="button"
+        aria-label={`More ${plural}`}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
+      >
+        +
+      </button>
+    </span>
+  );
+}
+
 export default function SearchWidget({
   tab,
   onTabChange,
@@ -148,6 +193,11 @@ export default function SearchWidget({
   // deep-link re-sync never see a second source of truth.
   const [tripType, setTripType] = useState<FlightTripType>(initialSearch?.tripType ?? 'roundtrip');
   const [legs, setLegs] = useState<FlightLeg[]>(() => padLegs(initialSearch?.legs ?? [], initialSearch));
+  // Stays tier (Nov 15, 2026): the widget carries it, never renders
+  // it — the tier control lives in the results filters, and the deep
+  // link (?tier=) is the tier's home. A submit without it would drop
+  // a tiered search back to Best value.
+  const [stayTier, setStayTier] = useState<StayTier>(initialSearch?.stayTier ?? 'best');
 
   // A multi-city search always has 2–4 legs. A fresh multi-city
   // form starts from the route already typed (leg 1) plus one empty
@@ -226,6 +276,7 @@ export default function SearchWidget({
     setMonth(v.month);
     setTripType(v.tripType);
     setLegs(padLegs(v.legs, initialSearch));
+    setStayTier(v.stayTier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -293,7 +344,29 @@ export default function SearchWidget({
     // above; the shared dates mirror leg 1 there, so re-checking
     // them would only repeat the same verdict in vaguer words.
     const now = todayIsoLocal();
-    if (tab !== 'flights' || tripType !== 'multicity') {
+    // Stays dates name the stay: a check-out on the check-in day
+    // is not a night, and a check-out with no check-in has nothing
+    // to end. The generic block below would only repeat these
+    // verdicts in vaguer words, so Stays skips it.
+    if (tab === 'hotels') {
+      if (depart && depart < now) {
+        setNote('That check-in date is in the past — pick a date from today on.');
+        return;
+      }
+      if (ret && !depart) {
+        setNote('Add a check-in date first — check-out needs a check-in.');
+        return;
+      }
+      if (ret && ret < now) {
+        setNote('That check-out date is in the past — pick a date from today on.');
+        return;
+      }
+      if (depart && ret && ret <= depart) {
+        setNote('Check-out must be after check-in — a stay needs at least one night.');
+        return;
+      }
+    }
+    if (tab !== 'hotels' && (tab !== 'flights' || tripType !== 'multicity')) {
       if (depart && depart < now) {
         setNote('That date is in the past — pick a date from today on.');
         return;
@@ -332,6 +405,7 @@ export default function SearchWidget({
         tab === 'flights' && tripType === 'multicity'
           ? legs.map((l) => ({ from: l.from.trim(), to: l.to.trim(), depart: l.depart }))
           : [],
+      stayTier: tab === 'hotels' ? stayTier : 'best',
     };
     if (tab === 'flights' && tripType === 'oneway') q.ret = '';
     if (tab === 'flights' && tripType === 'multicity') {
@@ -370,32 +444,20 @@ export default function SearchWidget({
         <div className="sw-fields">
           {tab === 'hotels' && (
             <>
-              <Field label="Destination">
+              <Field label="Destination" icon="pin">
                 <PlaceField id="hotels-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where are you staying?" />
               </Field>
-              <Field label="Check-in">
+              <Field label="Check-in" icon="calendar">
                 <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Check-in date" />
               </Field>
-              <Field label="Check-out">
+              <Field label="Check-out" icon="calendar">
                 <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Check-out date" />
               </Field>
-              <Field label="Guests">
-                <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} aria-label="Guests">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                    <option key={n} value={n}>
-                      {n} guest{n > 1 ? 's' : ''}
-                    </option>
-                  ))}
-                </select>
+              <Field label="Guests" icon="users">
+                <Stepper value={guests} min={1} max={9} onChange={setGuests} singular="guest" plural="guests" />
               </Field>
-              <Field label="Rooms">
-                <select value={rooms} onChange={(e) => setRooms(Number(e.target.value))} aria-label="Rooms">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={n}>
-                      {n} room{n > 1 ? 's' : ''}
-                    </option>
-                  ))}
-                </select>
+              <Field label="Rooms" icon="bed">
+                <Stepper value={rooms} min={1} max={5} onChange={setRooms} singular="room" plural="rooms" />
               </Field>
             </>
           )}

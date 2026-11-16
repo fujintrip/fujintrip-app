@@ -33,8 +33,15 @@ import {
   searchRequestLabel,
   sortFareOffers,
   sortTabRows,
+  STAY_TIERS,
+  stayNightsFor,
+  stayTierLabel,
+  stayTierOptions,
+  stayTierRows,
   type RowSort,
   type SearchQuery,
+  type StayTier,
+  type StayTierRow,
 } from '../lib/searchPlaces';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { DuffelFareOffer } from '../lib/duffel';
@@ -1159,6 +1166,159 @@ function EstimateCard({
   );
 }
 
+// One stay row as a card: the destination's photo and route, the
+// stay's nights and party, the selected tier's per-traveler price
+// and party total. No property name, rating, or per-night figure:
+// the planner has none of those, so the card shows none of those.
+function StayCard({
+  row,
+  query,
+  nights,
+  onSave,
+}: {
+  row: StayTierRow;
+  query: SearchQuery;
+  nights: number | null;
+  onSave: (label: string) => void;
+}) {
+  const photo = destinationPhoto(row.destination);
+  const highlight = rowIncludesPlace(row.destination, query.dest);
+  const tierLabel = stayTierLabel(query.stayTier);
+  return (
+    <article className={`result-card${highlight ? ' result-match' : ''}`}>
+      {photo && <SafeImg src={photo} alt={row.destination} label={row.destination} className="result-photo" />}
+      <div className="result-body">
+        <h3>{row.destination}</h3>
+        <p className="plan-muted">{row.routeLine}</p>
+        <p className="plan-muted">
+          {nights !== null ? `${nights} night${nights > 1 ? 's' : ''} · ` : ''}
+          {query.guests} guest{query.guests > 1 ? 's' : ''} · {query.rooms} room{query.rooms > 1 ? 's' : ''}
+        </p>
+        {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
+        <p className="result-price">
+          from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
+          <span className="plan-muted">· {tierLabel} · planning estimate</span>
+        </p>
+        <p className="plan-muted">
+          ${row.total.toLocaleString()} total for {query.guests} guest{query.guests > 1 ? 's' : ''}
+        </p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, row.destination))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Stays results (Nov 15, 2026 — the Stays section, same standard as
+// the Flights section): the searched destination's three planner
+// tiers as stay cards, then the per-destination stay list in the
+// selected tier. Every figure is the planner's own hotel leg for
+// the party — a planning estimate, never a live quote, never a named
+// property. No "Book now": no live supplier exists yet.
+function StayResults({
+  query,
+  sort,
+  maxPrice,
+  stayTier,
+  onSave,
+  onClearPrice,
+  onClearStayFilters,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  stayTier: StayTier;
+  onSave: (label: string) => void;
+  onClearPrice: () => void;
+  onClearStayFilters: () => void;
+}) {
+  const known = isKnownPlace(query.dest);
+  const tiers = known ? stayTierOptions(query.dest, query.guests) : null;
+  const nights = stayNightsFor(query, query.dest || undefined);
+  const allRows = useMemo(() => stayTierRows(stayTier, query.guests), [stayTier, query.guests]);
+  const rows = useMemo(() => {
+    const sorted = sortTabRows(allRows, sort);
+    return maxPrice === null ? sorted : sorted.filter((r) => r.pricePerTraveler <= maxPrice);
+  }, [allRows, sort, maxPrice]);
+  const filtersActive = maxPrice !== null || stayTier !== 'best';
+  const dates = query.depart ? `${query.depart}${query.ret ? ` – ${query.ret}` : ''}` : 'Flexible dates';
+  const guests = `${query.guests} guest${query.guests > 1 ? 's' : ''}`;
+  const rooms = `${query.rooms} room${query.rooms > 1 ? 's' : ''}`;
+  const tierLabel = stayTierLabel(stayTier);
+  return (
+    <div aria-label="Stay results">
+      <h3>
+        Stays · {query.dest || 'Anywhere'} · {dates}
+        {nights !== null ? ` · ${nights} night${nights > 1 ? 's' : ''}` : ''} · {guests} · {rooms}
+      </h3>
+      <p className="plan-muted">Live hotel prices arrive when Expedia Rapid / Duffel Stays connect.</p>
+      <p className="plan-muted">
+        Stay prices below are planning estimates from FujinTrip&apos;s planner — not live quotes, and no named property is
+        attached to them. Live bookable stays open as suppliers connect.
+      </p>
+      {tiers && (
+        <>
+          <h4>Stays in {query.dest} — planning estimates</h4>
+          <div className="result-cards">
+            {tiers.map((t) => (
+              <article key={t.tier} className={`result-card${t.tier === stayTier ? ' result-match' : ''}`}>
+                <div className="result-body">
+                  <h3>
+                    {t.label}
+                    {t.tier === 'best' ? ' · Our pick' : ''}
+                  </h3>
+                  <p className="plan-muted">
+                    {nights !== null ? `${nights} night${nights > 1 ? 's' : ''} · ` : ''}
+                    {guests} · {rooms}
+                  </p>
+                  <p className="result-price">
+                    from ${t.perTraveler.toLocaleString()} per traveler{' '}
+                    <span className="plan-muted">· planning estimate</span>
+                  </p>
+                  <p className="plan-muted">
+                    ${t.hotel.toLocaleString()} total for {guests}
+                  </p>
+                  <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, query.dest))}>
+                    Save this search
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      {filtersActive && (
+        <p className="fare-count">
+          Showing {rows.length} of {allRows.length} destinations · {tierLabel} stays.{' '}
+          <button type="button" className="linklike" onClick={onClearStayFilters}>
+            Clear filters
+          </button>
+        </p>
+      )}
+      <h4>Stays by destination — planning estimates</h4>
+      {rows.length === 0 ? (
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
+      ) : (
+        <div className="result-cards">
+          {rows.map((r) => (
+            <StayCard key={r.destination} row={r} query={query} nights={stayNightsFor(query, r.destination)} onSave={onSave} />
+          ))}
+        </div>
+      )}
+      <p className="plan-muted">
+        {tierLabel} stay per traveler, {guests} · planning estimate — not a live quote. Live comparison arrives as suppliers
+        connect.
+      </p>
+    </div>
+  );
+}
+
 // One tab's estimate results: the per-route planner numbers for this
 // category, per traveler, labeled planning estimate. Cruises / buses
 // / taxis carry the honest note instead of a broken-out price.
@@ -1246,9 +1406,18 @@ export default function SearchResults({
   const [stopsFilter, setStopsFilter] = useState<number[]>([]);
   const [airlinesFilter, setAirlinesFilter] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Stays tier (Nov 15, 2026): which planner tier the stay list
+  // prices in. It is filter state, not search state — a new search
+  // resets it to the tier the search itself carries.
+  const [stayTier, setStayTier] = useState<StayTier>(query.stayTier ?? 'best');
   // The estimate rows behind the max-price counts — the counts on the
-  // price options come from the same rows the list shows.
-  const estimateRows = useMemo(() => tabRowsFor(query.tab, query.travelers), [query.tab, query.travelers]);
+  // price options come from the same rows the list shows. Stays price
+  // for the searched party (guests), in the selected tier — the
+  // flights travelers default would price a 4-guest stay for 2.
+  const estimateRows = useMemo(
+    () => (query.tab === 'hotels' ? stayTierRows(stayTier, query.guests) : tabRowsFor(query.tab, query.travelers)),
+    [query.tab, query.travelers, query.guests, stayTier]
+  );
   const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
   // page had no "map" at all — the toggle existed only on Stays). It
@@ -1260,7 +1429,7 @@ export default function SearchResults({
   const selectedDiscovery: DiscoveryEntry | null =
     discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
-  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
+  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
   useEffect(() => {
@@ -1268,6 +1437,7 @@ export default function SearchResults({
     setAirlinesFilter([]);
     setLiveOptions(null);
     setFiltersOpen(false);
+    setStayTier(query.stayTier ?? 'best');
   }, [queryKey]);
 
   const primaryPlace =
@@ -1300,6 +1470,18 @@ export default function SearchResults({
           <option value="2000">Under $2,000 ({underCount(2000)})</option>
         </select>
       </div>
+      {query.tab === 'hotels' && (
+        <div className="filter-group">
+          <h3>Stay price</h3>
+          <select value={stayTier} onChange={(e) => setStayTier(e.target.value as StayTier)} aria-label="Stay price tier">
+            {STAY_TIERS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {query.tab === 'flights' && liveOptions && (
         <>
           <div className="filter-group">
@@ -1408,6 +1590,19 @@ export default function SearchResults({
                   setAirlinesFilter([]);
                 }}
                 onClearPrice={() => setMaxPrice(null)}
+              />
+            ) : query.tab === 'hotels' ? (
+              <StayResults
+                query={query}
+                sort={sort}
+                maxPrice={maxPrice}
+                stayTier={stayTier}
+                onSave={onSaveSearch}
+                onClearPrice={() => setMaxPrice(null)}
+                onClearStayFilters={() => {
+                  setMaxPrice(null);
+                  setStayTier('best');
+                }}
               />
             ) : (
               <CategoryResults query={query} sort={sort} maxPrice={maxPrice} onSave={onSaveSearch} onClearPrice={() => setMaxPrice(null)} />

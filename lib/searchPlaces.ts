@@ -7,10 +7,10 @@
 // a typed place it does not know is handled honestly by the results
 // (empty state / no live fare), never invented.
 import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from './data';
-import { discoveryDestinations } from './discovery';
+import { discoveryDestinations, routeLineFor } from './discovery';
 import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
-import { MONTH_NAMES } from './planner';
+import { MONTH_NAMES, buildPlan } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
 import { cabinClassFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
 
@@ -73,6 +73,88 @@ export function rowIncludesPlace(destination: string, place: string): boolean {
 // a one-way search, not a multi-city one.
 export type FlightTripType = 'roundtrip' | 'oneway' | 'multicity';
 export type FlightLeg = { from: string; to: string; depart: string };
+
+// Stays tiers (Nov 15, 2026 — the Stays section, same standard as
+// the Flights section): the three planner tiers, priced from the
+// planner's own hotel legs — never a named property, never a live
+// quote. The tier is part of the search (a ?tier= URL param, like
+// the Flights cabin), so a tiered search is shareable and renders
+// its tier on first paint.
+export type StayTier = 'cheapest' | 'best' | 'premium';
+
+export const STAY_TIERS: { id: StayTier; label: string }[] = [
+  { id: 'cheapest', label: 'Cheapest' },
+  { id: 'best', label: 'Best value' },
+  { id: 'premium', label: 'Premium' },
+];
+
+export function stayTierFromValue(v: unknown): StayTier {
+  return v === 'cheapest' || v === 'premium' ? v : 'best';
+}
+
+export function stayTierLabel(tier: StayTier): string {
+  return STAY_TIERS.find((t) => t.id === tier)?.label ?? 'Best value';
+}
+
+// One tier's stay figures for a destination — the planner's hotel
+// leg for the whole party (buildPlan's hotel leg is a party total
+// for the trip) plus the per-traveler share. The figures never
+// depend on the searched dates: the planner prices the trip, not
+// the night, so the total stays the planner's figure whatever dates
+// the traveler picked — scaling it by nights would invent a pricing
+// model the planner does not have.
+export type StayTierOption = { tier: StayTier; label: string; hotel: number; perTraveler: number };
+
+export function stayTierOptions(destination: string, guests: number): StayTierOption[] {
+  const party = Math.min(9, Math.max(1, Math.floor(guests) || 2));
+  const options = buildPlan(destination, party, 3).options;
+  return STAY_TIERS.map((t) => {
+    const hotel = options.find((o) => o.name === t.label)?.hotel ?? 0;
+    return { tier: t.id, label: t.label, hotel, perTraveler: Math.round(hotel / party) };
+  });
+}
+
+// One row per discovery destination in a tier — the stay list the
+// Stays results show. The shape is TabRow plus the party total, so
+// the shared sortTabRows re-orders it and the card can print the
+// total without re-deriving it from a rounded per-traveler figure
+// (perTraveler × guests would drift from the leg by rounding).
+export type StayTierRow = TabRow & { total: number };
+
+export function stayTierRows(tier: StayTier, guests: number): StayTierRow[] {
+  const party = Math.min(9, Math.max(1, Math.floor(guests) || 2));
+  return discoveryDestinations()
+    .map((e) => {
+      const opt = stayTierOptions(e.destination, party).find((o) => o.tier === tier);
+      return {
+        destination: e.destination,
+        routeLine: routeLineFor(e.stops),
+        pricePerTraveler: opt?.perTraveler ?? 0,
+        kind: 'leg' as const,
+        total: opt?.hotel ?? 0,
+      };
+    })
+    .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
+}
+
+// The nights a stay covers: the searched dates when both are given
+// and the check-out is after the check-in, else the route's own
+// nights from the discovery entry. A check-out on the check-in day
+// is not a night — the entry's nights stand in instead of a zero.
+export function stayNightsFor(
+  query: Pick<SearchQuery, 'depart' | 'ret' | 'dest'>,
+  destination?: string
+): number | null {
+  if (query.depart && query.ret && query.ret > query.depart) {
+    const days = Math.round(
+      (new Date(`${query.ret}T00:00:00Z`).getTime() - new Date(`${query.depart}T00:00:00Z`).getTime()) / 86400000
+    );
+    if (Number.isFinite(days) && days >= 1) return days;
+  }
+  const dest = destination ?? query.dest;
+  const entry = dest ? discoveryDestinations().find((e) => e.destination === dest) : undefined;
+  return entry ? entry.nights : null;
+}
 
 export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
   { id: 'roundtrip', label: 'Round-trip' },
@@ -158,6 +240,10 @@ export type SearchQuery = {
   // reads the first hop without knowing about legs.
   tripType: FlightTripType;
   legs: FlightLeg[];
+  // Stays only: which planner tier the stay list prices in. 'best'
+  // is the default; the widget carries it through submit and the
+  // results read it back, so a tiered deep link renders its tier.
+  stayTier: StayTier;
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -196,6 +282,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   month: string;
   tripType: FlightTripType;
   legs: FlightLeg[];
+  stayTier: StayTier;
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -213,6 +300,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     month: q?.month || '',
     tripType: q?.tripType ?? 'roundtrip',
     legs: q?.legs ?? [],
+    stayTier: q?.stayTier ?? 'best',
   };
 }
 
@@ -235,6 +323,7 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     month: '',
     tripType: 'roundtrip',
     legs: [],
+    stayTier: 'best',
   };
 }
 
@@ -328,6 +417,11 @@ export function searchQueryFromParams(
       q.legs = [];
     }
   }
+  // Stays tier (Nov 15, 2026): ?tier=cheapest | best | premium.
+  // Junk falls back to Best value; other tabs ignore it.
+  if (tab === 'hotels') {
+    q.stayTier = stayTierFromValue(params.tier);
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -346,6 +440,7 @@ export function searchQueryToParams(q: SearchQuery): string {
   if (q.tab === 'flights' && q.tripType === 'multicity' && q.legs.length) {
     p.set('legs', flightLegsToParam(q.legs));
   }
+  if (q.tab === 'hotels' && q.stayTier !== 'best') p.set('tier', q.stayTier);
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));
@@ -453,7 +548,7 @@ export type RowSort = 'best' | 'cheapest' | 'duration' | 'departure';
 // duration or departure time, so 'duration' / 'departure' leave them
 // in best-value order — those sorts re-order the live fare lists
 // (sortFareOffers), not the estimates.
-export function sortTabRows(rows: TabRow[], sort: RowSort): TabRow[] {
+export function sortTabRows<T extends TabRow>(rows: T[], sort: RowSort): T[] {
   if (sort === 'cheapest') return [...rows].sort((a, b) => a.pricePerTraveler - b.pricePerTraveler);
   return rows;
 }

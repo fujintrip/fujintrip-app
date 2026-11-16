@@ -797,6 +797,16 @@ html{scroll-padding-bottom:96px}
 .sw-field-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;display:inline-flex}
 .sw-field-icon svg{display:block}
 .sw-field-control input,.sw-field-control select{padding-left:38px}
+/* Guests / Rooms steppers (Stays, Nov 15, 2026): minus / plus
+   buttons beside the number, 44px targets. The stepper sits in the
+   same icon-cleared control as the inputs, so the field icon clears
+   it by the same 38px the text inputs keep. */
+.sw-field-control .sw-stepper{padding-left:30px}
+.sw-stepper{display:inline-flex;align-items:center;gap:8px;min-height:44px}
+.sw-stepper button{width:44px;height:44px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;font-size:18px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1}
+.sw-stepper button:hover:not(:disabled){border-color:var(--ink)}
+.sw-stepper button:disabled{opacity:.4;cursor:default}
+.sw-stepper strong{min-width:64px;text-align:center;font-size:15px;font-variant-numeric:tabular-nums}
 /* The search button (Nov 15, 2026): the accent, large and rounded,
    with a search icon — the one action on the card. Hover lifts,
    press settles; transform + shadow only, 200ms. The button.primary

@@ -216,6 +216,46 @@ test('search deep link: stays with dates renders per-destination rows with Best 
   assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
   assert.ok(html.includes('Show on map'), 'the Stays map toggle renders');
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  // The Stays section (Nov 15, 2026): the searched destination's
+  // three planner tiers as stay cards, with the selected tier
+  // highlighted, and the stay heading naming the nights and party.
+  assert.ok(html.includes('Stays in Central Europe'), 'the tier cards name the searched destination');
+  assert.ok(html.includes('from $396 per traveler'), 'the Cheapest tier card is $396 per traveler');
+  assert.ok(html.includes('from $1,116 per traveler'), 'the Premium tier card is $1,116 per traveler');
+  assert.ok(html.includes('$1,188 total for 2 guests'), 'the Best value total is the party leg, not the rounded share times two');
+  assert.ok(html.includes('13 nights'), 'the heading and cards name the searched nights');
+  assert.ok(html.includes('Stay price'), 'the tier filter renders');
+  assert.ok(html.includes('Live hotel prices arrive when Expedia Rapid / Duffel Stays connect.'), 'the honest supplier line renders');
+  assert.ok(!html.includes('Book now'), 'no Book now in the Stays results');
+});
+
+test('search deep link: a tiered stays link renders that tier on first paint', async () => {
+  const r = await fetch(`${BASE}/?tab=hotels&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&guests=2&rooms=1&tier=cheapest`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The list prices in the Cheapest tier, and the tier is named on
+  // every card and in the count line — a tiered search is shareable.
+  assert.ok(html.includes('Cheapest · planning estimate'), 'the list labels the Cheapest tier');
+  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
+  assert.ok(html.includes('Cheapest stays'), 'the count line names the tier');
+  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The Best value figure is still there — on the tier cards, where
+  // all three tiers always show.
+  assert.ok(html.includes('from $594 per traveler'), 'the Best value tier card still renders');
+});
+
+test('stays form: guests and rooms are steppers with icons, not selects', async () => {
+  const r = await fetch(`${BASE}/?tab=hotels`);
+  assert.equal(r.status, 200);
+  // React splits "2 guests" into 2<!-- --> guests in the served
+  // HTML — strip the comments like the other deep-link tests do.
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Fewer guests'), 'the Guests stepper renders its minus button');
+  assert.ok(html.includes('More guests'), 'the Guests stepper renders its plus button');
+  assert.ok(html.includes('Fewer rooms'), 'the Rooms stepper renders its minus button');
+  assert.ok(html.includes('More rooms'), 'the Rooms stepper renders its plus button');
+  assert.ok(html.includes('2 guests'), 'the Guests stepper shows the current party');
+  assert.ok(html.includes('1 room'), 'the Rooms stepper shows the current rooms');
 });
 
 test('search deep link: flights with off-suggested dates shows the SEARCHED dates in the heading (live defect, Nov 14 2026)', async () => {

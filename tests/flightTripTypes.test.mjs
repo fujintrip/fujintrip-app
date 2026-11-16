@@ -242,7 +242,11 @@ test('one-way form: the return field is hidden, not disabled-and-visible', () =>
   assert.ok(src.includes("tripType === 'roundtrip' &&"), 'the Return field is gated on round-trip');
   const retField = src.match(/tripType === 'roundtrip' && \([\s\S]*?<Field label="Return"/);
   assert.ok(retField, 'the Return field lives inside the round-trip gate');
-  assert.ok(!src.includes('disabled'), 'nothing in the widget is disabled-and-visible');
+  // No *field* is disabled-and-visible: the one-way form hides the
+  // return instead of disabling it. Stepper buttons disable at their
+  // bounds (a clamped stepper, not a hidden field) — that is the
+  // honest disabled, so the check names inputs and selects only.
+  assert.ok(!/<(?:input|select)[^>]*\bdisabled\b/.test(src), 'no input or select in the widget is disabled');
 });
 
 test('modern form: Lucide icons inside the fields, an accent search button, 44px targets', () => {
