@@ -3,30 +3,24 @@ import type { ReactNode } from 'react';
 import './globals.css';
 import ServiceWorkerRegister from '../components/ServiceWorkerRegister';
 import { AuthProvider } from '../components/AccountGate';
-import { Bricolage_Grotesque, Inter, JetBrains_Mono } from 'next/font/google';
+import { DM_Sans, Inter } from 'next/font/google';
 
-// Type system (Layla-interface direction §6): two families + a mono
-// accent, self-hosted WOFF2 variable fonts via next/font/google — no
-// Google Fonts request at runtime, display:swap so a font never blocks
-// first paint. Only the faces the scale uses are requested:
-// Bricolage 700/800 (display), Inter 400/600/700 (body), JetBrains Mono
-// 600 (prices you compare).
-const bricolage = Bricolage_Grotesque({
+// Type system (Nov 15, 2026): two families, self-hosted WOFF2
+// variable fonts via next/font/google — no Google Fonts request at
+// runtime, display:swap so a font never blocks first paint. DM Sans
+// (variable, 100–1000) is the display face for headings; Inter
+// 400/600/700 is the body + UI face. Prices use Inter with
+// tabular-nums, not a mono face — the primary font system is
+// Inter + DM Sans.
+const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-display',
-  weight: ['700', '800'],
   display: 'swap',
 });
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-body',
   weight: ['400', '600', '700'],
-  display: 'swap',
-});
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-  weight: ['600'],
   display: 'swap',
 });
 
@@ -46,7 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${bricolage.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+      className={`${dmSans.variable} ${inter.variable}`}
       suppressHydrationWarning
     >
       <head>

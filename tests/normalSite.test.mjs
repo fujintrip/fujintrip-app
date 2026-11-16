@@ -465,15 +465,26 @@ test('sortTabRows: duration and departure leave estimate rows in best-value orde
   assert.deepEqual(sortTabRows(rows, 'departure'), rows, 'estimates carry no departure time');
 });
 
-test('flights columns: the per-source column structure exists in the results UI', () => {
+test('flights: one merged live-fares list — no supplier column headers, a small tag per fare', () => {
   const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
-  assert.ok(src.includes('FareSourceColumn'), 'one labeled column component per fare source');
-  assert.ok(src.includes('title="Duffel"'), 'the Duffel column renders');
-  assert.ok(src.includes('title="Other sites (cached)"'), 'the cached competitor column renders');
-  assert.ok(!src.includes('Mystifly'), 'no column for a source that is not connected yet');
-  assert.ok(!src.includes('Etraveli'), 'no column for a source that is not connected yet');
-  assert.ok(src.includes('title="Ignav — live"'), 'the Ignav live column renders');
-  assert.ok(src.includes('/api/ignav-fares'), 'the Ignav column fetches from the Ignav route');
+  assert.ok(src.includes('fare-live-list'), 'one clean live list, not supplier-branded sections');
+  assert.ok(!src.includes('FareSourceColumn'), 'the per-source column component is gone');
+  assert.ok(!src.includes('title="Duffel"'), 'no big Duffel header');
+  assert.ok(!src.includes('title="Ignav — live"'), 'no big Ignav header');
+  // The per-fare tag is required — a test fare must never read as a
+  // real bookable fare, and every fare is labelled with its source
+  // and when it was checked.
+  assert.ok(src.includes('fare-card-source'), 'each fare carries its small source tag');
+  assert.ok(src.includes("sourceLabel={duffelTag}"), 'Duffel fares carry their tag');
+  assert.ok(src.includes("sourceLabel={ignavTag}"), 'Ignav fares carry their tag');
+  assert.ok(src.includes("'Duffel · test fare'"), 'test fares are named as test fares on the card');
+  assert.ok(src.includes('ignavSourceTag('), 'Ignav fares carry the checked time');
+  // The cached comparison block stays, below the live list.
+  assert.ok(src.includes('Other sites (cached)'), 'the cached column survives as a standalone block');
+  assert.ok(src.includes('<section className="fare-block" aria-label="Other sites (cached)">'), 'the cached block is a section, not a source column');
+  assert.ok(!src.includes('Mystifly'), 'no fares from a source that is not connected yet');
+  assert.ok(!src.includes('Etraveli'), 'no fares from a source that is not connected yet');
+  assert.ok(src.includes('/api/ignav-fares'), 'the Ignav fares fetch from the Ignav route');
   assert.ok(src.includes('IgnavBookingLinks'), 'Ignav fares carry on-click booking options');
   assert.ok(src.includes('fare-total'), 'the cheapest out + back total is a highlighted block');
   assert.ok(src.includes('Clear filters'), 'a filtered-empty list has a way back');
@@ -501,7 +512,7 @@ test('cheapestOutBackTotal: the total follows the visible fares, never a filtere
 });
 
 // Homepage restructure (Nov 15, 2026): one Lucide icon set, the
-// Bricolage + Inter + JetBrains Mono stack kept, calm minimalism.
+// DM Sans + Inter stack, calm minimalism.
 test('restructure: the new section styles exist in the CSS', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   for (const cls of [
@@ -561,14 +572,20 @@ test('restructure: the header, the widget tabs and the category tiles share one 
   assert.ok(widget.includes('<Icon name={t.icon} size={16} />'), 'widget tabs render the shared key');
 });
 
-test('restructure: fonts stay Bricolage Grotesque + Inter + JetBrains Mono', () => {
+test('restructure: fonts are Inter + DM Sans — DM Sans display, Inter body, no Bricolage', () => {
   const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
-  assert.ok(layout.includes('Bricolage_Grotesque'), 'display font is still Bricolage Grotesque');
-  assert.ok(layout.includes('Inter'), 'body font is still Inter');
-  assert.ok(layout.includes('JetBrains_Mono'), 'price labels still use JetBrains Mono');
+  assert.ok(layout.includes('DM_Sans'), 'display font is DM Sans');
+  assert.ok(layout.includes('Inter'), 'body font is Inter');
+  assert.ok(!layout.includes('Bricolage_Grotesque'), 'Bricolage Grotesque is dropped');
+  assert.ok(!layout.includes('JetBrains_Mono'), 'no JetBrains Mono — prices use Inter tabular-nums');
   assert.ok(!layout.includes('Plus_Jakarta_Sans'), 'no display-font swap to Plus Jakarta Sans');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   assert.ok(!css.includes('Plus Jakarta Sans'), 'no Plus Jakarta Sans fallback in the CSS');
+  assert.ok(!css.includes('Bricolage'), 'no Bricolage fallback in the CSS');
+  assert.ok(!css.includes('JetBrains'), 'no JetBrains fallback in the CSS');
+  assert.ok(css.includes("--font-display:'DM Sans'"), 'the display token is DM Sans');
+  assert.ok(css.includes("--font-body:'Inter'"), 'the body token is Inter');
+  assert.ok(!css.includes('--font-mono'), 'no mono font token');
 });
 
 test('restructure: micro-interactions animate transform only, 150–300ms', () => {

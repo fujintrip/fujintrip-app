@@ -1214,11 +1214,13 @@ test('ignav fares: without a key the route stays honestly empty, never an invent
   const lj = await links.json();
   assert.equal(lj.available, false);
   assert.equal(lj.configured, false);
-  // The Ignav column is client-side only: a server-rendered flights
-  // deep link carries no Ignav fares (same pattern as the cached column).
+  // Ignav fares are client-side only: a server-rendered flights deep
+  // link carries no Ignav fares (same pattern as the cached column).
+  // The big "Ignav — live" header is gone (Nov 15, 2026) — the live
+  // list carries small per-fare tags instead, also client-side.
   const page = await fetch(`${BASE}/?tab=flights&from=New%20York&to=London&depart=2027-01-15&return=2027-01-22&guests=1`);
   assert.equal(page.status, 200);
-  assert.ok(!(await page.text()).includes('Ignav — live'), 'no Ignav column in the server-rendered HTML');
+  assert.ok(!(await page.text()).includes('Ignav — live'), 'no Ignav fares in the server-rendered HTML');
 });
 
 test('places endpoint: live suggestions for a prefix, honest empties for short and junk queries', async () => {

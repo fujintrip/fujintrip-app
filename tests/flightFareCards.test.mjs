@@ -292,7 +292,8 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   assert.ok(src.includes('travelers={query.travelers}'), 'the card knows the party size');
   assert.ok(src.includes('cabin={query.cabin}'), 'the card shows the searched cabin');
   // All three trip types render the card — Duffel's fares and
-  // Ignav's, each in their own column.
+  // Ignav's, one merged live list (Nov 15, 2026: the per-source
+  // column headers are gone; each fare carries its own small tag).
   const cardUses = (src.match(/<FareCard/g) ?? []).length;
   assert.equal(
     cardUses,
@@ -303,15 +304,26 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');
 });
 
-test('fare cards: 390px stacking — logo + times on top, price below, no overflow', () => {
+test('fare cards: the time row wraps as a unit — no overlap at desktop width', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  assert.ok(css.includes('.fare-card{border:1px solid var(--line)'), 'the card is a bordered card, not a bare row');
+  assert.ok(css.includes('.fare-card{border:1px solid var(--line);border-radius:20px'), 'the card is a 20px-rounded card, not a bare row');
   assert.ok(css.includes('.fare-card-price strong{display:block;font-size:22px'), 'the total is the largest type on the card');
   assert.ok(css.includes('.fare-card-toggle{'), 'the details toggle is styled');
   assert.ok(css.includes('min-height:44px'), 'the toggle is a 44px touch target');
   assert.ok(css.includes('.fare-card-chevron{transition:transform 200ms ease'), 'the chevron micro-interaction is 150–300ms, transform only');
   assert.ok(css.includes('.fare-card-details{animation:fare-details-in 200ms ease'), 'the details region fades in 200ms');
   assert.ok(css.includes('@keyframes fare-details-in{from{opacity:0;transform:translateY(-4px)}'), 'the details entrance is opacity + transform only');
+  // The Nov 15 overlap defect: .fare-card-main was flex nowrap with
+  // the timeline min-width:0, so in a ~335px column the duration
+  // overflowed over the times and the price was pushed past the
+  // card's right edge. The main row now wraps at every width, the
+  // timeline needs a 260px basis before it takes its own row, and
+  // the price never shrinks.
+  assert.ok(css.includes('.fare-card-main{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}'), 'the card row wraps at every width, not just on a phone');
+  assert.ok(css.includes('.fare-card-times{display:flex;align-items:center;gap:12px;flex:1 1 260px'), 'the timeline takes its own full row below ~260px');
+  assert.ok(css.includes('.fare-card-airline{display:flex;gap:10px;align-items:center;min-width:0;flex:0 1 180px}'), 'the airline may shrink a little, never below its name');
+  assert.ok(css.includes('.fare-card-price{margin-left:auto;text-align:right;flex:0 0 auto}'), 'the price never shrinks — it wraps, never clips');
+  assert.ok(css.includes('.fare-card-source{font-size:12px'), 'each fare carries its small source tag');
   assert.ok(css.includes('.fare-card-main{flex-wrap:wrap}'), 'the card wraps on a phone');
   assert.ok(css.includes('.fare-card-airline{flex:1 1 100%}'), 'logo + name take the full phone row');
   assert.ok(css.includes('.fare-card-times{flex:1 1 100%}'), 'the timeline takes its own phone row');

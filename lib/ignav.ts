@@ -30,6 +30,7 @@ import {
   cabinClassFor,
   formatMinutes,
   formatTime12,
+  timeBucketFor,
   type DuffelCabinClass,
   type DuffelFareOffer,
   type DuffelFareSegment,
@@ -418,6 +419,20 @@ export function ignavFreshnessLabel(observedAt: string | null): string {
   )}`;
 }
 
+// The short source tag on each individual Ignav fare (Nov 15,
+// 2026): source + freshness, discreet — the big column header is
+// gone, but every fare still says where it came from and when it
+// was checked. No timestamp on file means no time is claimed.
+export function ignavSourceTag(observedAt: string | null): string {
+  if (!observedAt) return 'Ignav · live fare';
+  const d = new Date(observedAt);
+  if (Number.isNaN(d.getTime())) return 'Ignav · live fare';
+  return `Ignav · live, checked ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(
+    'en-US',
+    { hour: 'numeric', minute: '2-digit' }
+  )}`;
+}
+
 // The itineraries, re-ordered by the same sort the sidebar offers:
 // cheapest = trip price ascending; shortest = total trip duration;
 // earliest = outbound departure. A missing value sorts last, price
@@ -436,16 +451,23 @@ export function sortIgnavItineraries(list: IgnavItinerary[], sort: RowSort): Ign
   return [...list].sort((a, b) => a.price - b.price);
 }
 
-// Does this itinerary survive the panel's stops/airline filters?
-// Every leg must match — a round-trip with a nonstop out and a
-// 1-stop return does not pass a "Nonstop" filter.
+// Does this itinerary survive the panel's stops/airline/time
+// filters? Every leg must match — a round-trip with a nonstop out and
+// a 1-stop return does not pass a "Nonstop" filter. The time filter
+// reads the OUTBOUND departure only: the traveler picks when the trip
+// leaves, and the return leaves when it leaves.
 export function ignavItineraryMatches(
   it: IgnavItinerary,
   stopsFilter: number[],
-  airlinesFilter: string[]
+  airlinesFilter: string[],
+  timesFilter: string[] = []
 ): boolean {
   if (stopsFilter.length && !it.legs.every((l) => stopsFilter.includes(l.stops))) return false;
   if (airlinesFilter.length && !it.legs.every((l) => airlinesFilter.includes(l.airline))) return false;
+  if (timesFilter.length) {
+    const bucket = timeBucketFor(it.legs[0]?.departMinutes);
+    if (!bucket || !timesFilter.includes(bucket)) return false;
+  }
   return true;
 }
 

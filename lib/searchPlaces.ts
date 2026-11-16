@@ -12,7 +12,8 @@ import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES, buildPlan } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
-import { cabinClassFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
+import { cabinClassFor, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
+import type { IgnavItinerary } from './ignav';
 
 let placeCache: string[] | null = null;
 
@@ -1083,6 +1084,82 @@ export function sortFareOffers(offers: DuffelFareOffer[], sort: RowSort): Duffel
     );
   }
   return [...offers].sort((a, b) => a.price - b.price);
+}
+
+// The flights filter options + counts (Nov 15, 2026): the filter
+// checkboxes list every value the FULL live result holds — filtering
+// re-slices Ignav, so a value that only appears in a later itinerary
+// is still filterable — but every COUNT comes only from the offers
+// actually shown on screen: the Duffel legs and the Ignav itineraries
+// on screen (the Nov 15 defect: counts came from every leg of every
+// Ignav itinerary the API returned — Nonstop (277) against 9 shown
+// options). An itinerary counts toward a stops/airline value only
+// when every leg agrees — the filter itself needs every leg to match
+// — and its time bucket is the outbound departure. `totalVisible` is
+// the unfiltered visible count (Duffel legs + sliced Ignav trips);
+// null when there is nothing visible to filter at all.
+export type LiveFilterOptions = {
+  airlines: string[];
+  stops: number[];
+  times: string[];
+  counts: { airlines: Record<string, number>; stops: Record<number, number>; times: Record<string, number> };
+  shownCount: number;
+  totalCount: number;
+};
+
+export function liveFilterOptions(args: {
+  shownOffers: DuffelFareOffer[];
+  shownItineraries: IgnavItinerary[];
+  allOffers: DuffelFareOffer[];
+  allItineraries: IgnavItinerary[];
+  totalVisible: number;
+}): LiveFilterOptions | null {
+  if (args.totalVisible === 0) return null;
+  const optionAirlines = new Set<string>();
+  const optionStops = new Set<number>();
+  const optionTimes = new Set<string>();
+  for (const o of args.allOffers) {
+    optionAirlines.add(o.airline);
+    optionStops.add(o.stops);
+    const b = timeBucketFor(o.departMinutes);
+    if (b) optionTimes.add(b);
+  }
+  for (const it of args.allItineraries) {
+    for (const l of it.legs) {
+      optionAirlines.add(l.airline);
+      optionStops.add(l.stops);
+    }
+    const b = timeBucketFor(it.legs[0]?.departMinutes);
+    if (b) optionTimes.add(b);
+  }
+  const counts: LiveFilterOptions['counts'] = { airlines: {}, stops: {}, times: {} };
+  let shownCount = 0;
+  const countOffer = (stops: number[], airlines: string[], bucket: string | null) => {
+    shownCount += 1;
+    for (const s of stops) counts.stops[s] = (counts.stops[s] ?? 0) + 1;
+    for (const a of airlines) counts.airlines[a] = (counts.airlines[a] ?? 0) + 1;
+    if (bucket) counts.times[bucket] = (counts.times[bucket] ?? 0) + 1;
+  };
+  for (const o of args.shownOffers) {
+    countOffer([o.stops], [o.airline], timeBucketFor(o.departMinutes));
+  }
+  for (const it of args.shownItineraries) {
+    const stops = [...new Set(it.legs.map((l) => l.stops))];
+    const airlines = [...new Set(it.legs.map((l) => l.airline))];
+    countOffer(
+      stops.length === 1 ? stops : [],
+      airlines.length === 1 ? airlines : [],
+      timeBucketFor(it.legs[0]?.departMinutes)
+    );
+  }
+  return {
+    airlines: [...optionAirlines].sort(),
+    stops: [...optionStops].sort((a, b) => a - b),
+    times: TIME_BUCKETS.filter((b) => optionTimes.has(b.id)).map((b) => b.id),
+    counts,
+    shownCount,
+    totalCount: args.totalVisible,
+  };
 }
 
 // The saved-request label for My Trips — the same shape the old

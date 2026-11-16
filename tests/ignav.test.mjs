@@ -17,6 +17,7 @@ import {
   ignavEmptyMessage,
   ignavFreshnessLabel,
   ignavItineraryMatches,
+  ignavSourceTag,
   parseIgnavBookingLinksResponse,
   parseIgnavFareSearchResponse,
   parseIgnavSearchResponse,
@@ -547,6 +548,30 @@ test('sort + filter: itineraries sort by price/duration/departure and match the 
   assert.equal(ignavItineraryMatches(its[0], [], ['TAP Air Portugal']), false);
   assert.equal(cheapestIgnavItinerary(its), 380);
   assert.equal(cheapestIgnavItinerary([]), 0);
+});
+
+test('time filter: an itinerary matches on its outbound departure bucket only', () => {
+  const parsed = parseIgnavFareSearchResponse(ONEWAY_SAMPLE);
+  const its = parsed.itineraries;
+  // its[0] is the BA nonstop departing 8:30 AM (morning); its[1] is
+  // the TAP 1-stop departing 5:40 PM (afternoon — evening starts 6 PM).
+  assert.equal(ignavItineraryMatches(its[0], [], [], ['morning']), true, 'the 8:30 AM departure is morning');
+  assert.equal(ignavItineraryMatches(its[0], [], [], ['afternoon']), false, 'the 8:30 AM departure is not afternoon');
+  assert.equal(ignavItineraryMatches(its[1], [], [], ['afternoon']), true, 'the 5:40 PM departure is afternoon');
+  assert.equal(ignavItineraryMatches(its[1], [], [], ['morning']), false, 'the 5:40 PM departure is not morning');
+  assert.equal(ignavItineraryMatches(its[0], [], []), true, 'no time filter passes everything');
+  assert.equal(ignavItineraryMatches(its[0], [0], [], ['morning']), true, 'stops and time filters combine');
+  assert.equal(ignavItineraryMatches(its[0], [1], [], ['morning']), false, 'a nonstop fails a 1-stop filter even in the right time bucket');
+});
+
+test('source tag: every live fare is labelled with its source and when it was checked', () => {
+  assert.equal(
+    ignavSourceTag('2026-11-15T21:17:00.000Z'),
+    'Ignav · live, checked Nov 15 9:17 PM',
+    'the tag carries the freshness time'
+  );
+  assert.equal(ignavSourceTag(undefined), 'Ignav · live fare', 'no timestamp is still a live tag, never a fake time');
+  assert.equal(ignavSourceTag('not-a-date'), 'Ignav · live fare', 'an unparseable timestamp is never shown');
 });
 
 test('booking links: parse flattens options, drops dead links', () => {

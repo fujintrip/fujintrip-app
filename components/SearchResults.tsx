@@ -14,7 +14,6 @@ import { comparisonFor, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from 
 import { discoveryDestinations, type DiscoveryEntry } from '../lib/discovery';
 import {
   HOME_TABS,
-  duffelFareLabel,
   noFareMessage,
   noLegNote,
   tabRowsFor,
@@ -29,6 +28,7 @@ import {
   flightContextFromSearch,
   flightLegsFromSearch,
   isKnownPlace,
+  liveFilterOptions,
   rowIncludesPlace,
   searchRequestLabel,
   sortFareOffers,
@@ -61,6 +61,7 @@ import {
   tourTierOptions,
   tourTierRows,
   type RowSort,
+  type LiveFilterOptions,
   type SearchQuery,
   type BusTier,
   type BusTierRow,
@@ -77,17 +78,16 @@ import {
 } from '../lib/searchPlaces';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { DuffelFareOffer } from '../lib/duffel';
-import { formatMinutes, layoversFor, perTravelerPrice } from '../lib/duffel';
+import { formatMinutes, layoversFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor } from '../lib/duffel';
 import type { IgnavBookingLink, IgnavFaresResponse, IgnavItinerary, IgnavLegOffer } from '../lib/ignav';
 import {
   cheapestIgnavItinerary,
   IGNAV_MAX_ITINERARIES,
-  ignavAllLegOffers,
   ignavBookingContext,
   ignavBookingContextForOffer,
   ignavEmptyMessage,
-  ignavFreshnessLabel,
   ignavItineraryMatches,
+  ignavSourceTag,
   sortIgnavItineraries,
 } from '../lib/ignav';
 import { serviceFee } from '../lib/planner';
@@ -161,6 +161,7 @@ function FareCard({
   cabin,
   hidePrice = false,
   footer,
+  sourceLabel,
 }: {
   offer: DuffelFareOffer;
   travelers: number;
@@ -172,6 +173,11 @@ function FareCard({
   // An action that belongs to this fare (Ignav's "See booking
   // options"), rendered at the foot of the card.
   footer?: React.ReactNode;
+  // The small, discreet source + freshness tag on the fare itself
+  // (Nov 15, 2026): the big supplier column headers are gone, but
+  // every fare still says where it came from and when it was checked
+  // — a test fare must never be mistaken for a real bookable fare.
+  sourceLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const segs = offer.segments ?? [];
@@ -269,34 +275,9 @@ function FareCard({
           )}
         </div>
       )}
+      {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {footer && <div className="fare-card-footer">{footer}</div>}
     </li>
-  );
-}
-
-// One labeled column per fare source (multi-API panel, Nov 15 2026):
-// the traveler sees where each price came from and how fresh it is,
-// never a merged or averaged price. A source that isn't connected
-// yet renders NO column at all — the column appears only when its
-// source can say something (live fares, cached fares, or an honest
-// empty state from a connected source).
-function FareSourceColumn({
-  title,
-  freshness,
-  children,
-}: {
-  title: string;
-  freshness: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="fare-source" aria-label={title}>
-      <div className="fare-source-head">
-        <h4>{title}</h4>
-        <p className="plan-muted">{freshness}</p>
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -385,11 +366,16 @@ function IgnavItineraryGroup({
   travelers,
   cabin,
   labels,
+  sourceLabel,
 }: {
   itinerary: IgnavItinerary;
   travelers: number;
   cabin: string;
   labels: string[];
+  // The small source + freshness tag for the whole trip (Nov 15,
+  // 2026): the big column header is gone, so the trip total carries
+  // its own "Ignav · live, checked …" line.
+  sourceLabel?: string;
 }) {
   const perPerson = travelers > 1 ? perTravelerPrice(itinerary.price, travelers) : null;
   return (
@@ -403,6 +389,7 @@ function IgnavItineraryGroup({
           </span>
         )}
       </p>
+      {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {itinerary.legs.map((leg, i) => (
         <div key={`${leg.airline}-${leg.price}-${i}`}>
           <h6 className="ignav-leg-label">{labels[i] ?? `Leg ${i + 1}`}</h6>
@@ -460,6 +447,7 @@ function FlightResults({
   maxPrice,
   stopsFilter,
   airlinesFilter,
+  timesFilter,
   onLiveOptions,
   onSave,
   onClearLiveFilters,
@@ -470,14 +458,11 @@ function FlightResults({
   maxPrice: number | null;
   stopsFilter: number[];
   airlinesFilter: string[];
-  onLiveOptions: (opts: {
-    airlines: string[];
-    stops: number[];
-    // How many live fares (outbound + return combined) each filter
-    // option holds — the counts in the filters panel come from the
-    // fares themselves, never from the planner.
-    counts: { airlines: Record<string, number>; stops: Record<number, number> };
-  } | null) => void;
+  // Departure-time buckets the traveler picked ('' when none) — the
+  // filter system, Nov 15 2026: airline, stops, price and times all
+  // narrow the live offers, and every count matches what is shown.
+  timesFilter: string[];
+  onLiveOptions: (opts: LiveFilterOptions | null) => void;
   onSave: (label: string) => void;
   onClearLiveFilters: () => void;
   onClearPrice: () => void;
@@ -646,65 +631,108 @@ function FlightResults({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctxKey]);
 
-  // The filter options come from every live fare the search found —
-  // Duffel's offers plus Ignav's leg offers — so the filters work
-  // even when one source has no fares. Derived, not set in the
-  // fetch: either source arriving later re-merges the options. The
-  // counts come from the fares themselves, never from the planner.
-  useEffect(() => {
-    const allOffers = [
-      ...(fares.data?.out ?? []),
-      ...(fares.data?.back ?? []),
-      ...(fares.data?.legs ?? []).flatMap((l) => l.out),
-      ...ignavAllLegOffers(ignav.data),
-    ];
-    if (!allOffers.length) {
-      onLiveOptions(null);
-      return;
-    }
-    const airlines = [...new Set(allOffers.map((o) => o.airline))].sort();
-    const stops = [...new Set(allOffers.map((o) => o.stops))].sort((a, b) => a - b);
-    const counts = { airlines: {} as Record<string, number>, stops: {} as Record<number, number> };
-    for (const o of allOffers) {
-      counts.airlines[o.airline] = (counts.airlines[o.airline] ?? 0) + 1;
-      counts.stops[o.stops] = (counts.stops[o.stops] ?? 0) + 1;
-    }
-    onLiveOptions({ airlines, stops, counts });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fares.data, ignav.data]);
+  // The live offers actually on screen (Nov 15, 2026): every filter
+  // — airline, stops, departure time and max price — narrows these
+  // lists, and the lists are memoized so the counts below are stable
+  // references (the counts effect must not fire on every render).
+  // Max price reads per traveler, the same unit the sidebar quotes:
+  // a leg passes when its own per-traveler price fits. An offer with
+  // no departure time matches no time filter — its time is unknown,
+  // never assumed.
+  const visibleLive = useMemo(() => {
+    const passesPrice = (price: number) => maxPrice === null || perTravelerPrice(price, query.travelers) <= maxPrice;
+    const passesTime = (o: DuffelFareOffer) => {
+      if (timesFilter.length === 0) return true;
+      const bucket = timeBucketFor(o.departMinutes);
+      return bucket !== null && timesFilter.includes(bucket);
+    };
+    const passesOffer = (o: DuffelFareOffer) =>
+      (stopsFilter.length === 0 || stopsFilter.includes(o.stops)) &&
+      (airlinesFilter.length === 0 || airlinesFilter.includes(o.airline)) &&
+      passesTime(o) &&
+      passesPrice(o.price);
+    // The sidebar sort re-orders the live fares too — cheapest,
+    // shortest or earliest departure — not just the estimate rows.
+    const out = fares.data ? sortFareOffers(fares.data.out.filter(passesOffer), sort) : [];
+    const back = fares.data ? sortFareOffers(fares.data.back.filter(passesOffer), sort) : [];
+    // Multi-city: one filtered + sorted list per leg, from the
+    // response's own legs — each leg keeps its route and its date.
+    const legLists = (fares.data?.legs ?? []).map((leg) => ({
+      ...leg,
+      offers: sortFareOffers(leg.out.filter(passesOffer), sort),
+    }));
+    // Ignav, filtered + sorted the same way as Duffel's fares: the
+    // itinerary lists are the whole-trip itineraries (one-way,
+    // round-trip, 2-leg multi-city); the per-leg lists are the 3–4-leg
+    // multi-city legs, each with its own fares.
+    const ignavFiltered = ignav.data
+      ? sortIgnavItineraries(
+          ignav.data.itineraries.filter(
+            (it) => ignavItineraryMatches(it, stopsFilter, airlinesFilter, timesFilter) && passesPrice(it.price)
+          ),
+          sort
+        )
+      : [];
+    const ignavItineraries = ignavFiltered.slice(0, IGNAV_MAX_ITINERARIES);
+    const ignavLegLists = (ignav.data?.legs ?? []).map((leg) => ({
+      ...leg,
+      offers: sortFareOffers(leg.out.filter(passesOffer), sort),
+    }));
+    return { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists };
+  }, [fares.data, ignav.data, stopsFilter, airlinesFilter, timesFilter, maxPrice, sort, query.travelers]);
+  const { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists } = visibleLive;
 
-  const filterOffers = (list: DuffelFareOffer[]) =>
-    list.filter(
-      (o) =>
-        (stopsFilter.length === 0 || stopsFilter.includes(o.stops)) &&
-        (airlinesFilter.length === 0 || airlinesFilter.includes(o.airline))
-    );
-  // The sidebar sort re-orders the live fares too — cheapest, shortest
-  // or earliest departure — not just the estimate rows below.
-  const out = fares.data ? sortFareOffers(filterOffers(fares.data.out), sort) : [];
-  const back = fares.data ? sortFareOffers(filterOffers(fares.data.back), sort) : [];
-  // Multi-city: one filtered + sorted list per leg, from the
-  // response's own legs — each leg keeps its route and its date.
-  const legLists = (fares.data?.legs ?? []).map((leg) => ({
-    ...leg,
-    offers: sortFareOffers(filterOffers(leg.out), sort),
-  }));
-  // Ignav, filtered + sorted the same way as Duffel's fares: the
-  // itinerary lists are the whole-trip itineraries (one-way,
-  // round-trip, 2-leg multi-city); the per-leg lists are the 3–4-leg
-  // multi-city legs, each with its own fares.
-  const ignavFiltered = ignav.data
-    ? sortIgnavItineraries(
-        ignav.data.itineraries.filter((it) => ignavItineraryMatches(it, stopsFilter, airlinesFilter)),
-        sort
-      )
-    : [];
-  const ignavItineraries = ignavFiltered.slice(0, IGNAV_MAX_ITINERARIES);
-  const ignavLegLists = (ignav.data?.legs ?? []).map((leg) => ({
-    ...leg,
-    offers: sortFareOffers(filterOffers(leg.out), sort),
-  }));
-  const liveFiltersActive = stopsFilter.length > 0 || airlinesFilter.length > 0;
+  // The filter options + counts (Nov 15, 2026): the options come from
+  // the full live result, the counts only from the offers on screen —
+  // see liveFilterOptions. The JSON-key guard keeps the parent from
+  // re-rendering on an identical value.
+  const liveOptionsValue = useMemo(() => {
+    const totalVisible =
+      (fares.data?.out.length ?? 0) +
+      (fares.data?.back.length ?? 0) +
+      (fares.data?.legs ?? []).reduce((n, l) => n + l.out.length, 0) +
+      Math.min(ignav.data?.itineraries.length ?? 0, IGNAV_MAX_ITINERARIES) +
+      (ignav.data?.legs ?? []).reduce((n, l) => n + l.out.length, 0);
+    return liveFilterOptions({
+      shownOffers: [
+        ...visibleLive.out,
+        ...visibleLive.back,
+        ...visibleLive.legLists.flatMap((l) => l.offers),
+        ...visibleLive.ignavLegLists.flatMap((l) => l.offers),
+      ],
+      shownItineraries: visibleLive.ignavItineraries,
+      allOffers: [
+        ...(fares.data?.out ?? []),
+        ...(fares.data?.back ?? []),
+        ...(fares.data?.legs ?? []).flatMap((l) => l.out),
+        ...(ignav.data?.legs ?? []).flatMap((l) => l.out),
+      ],
+      allItineraries: ignav.data?.itineraries ?? [],
+      totalVisible,
+    });
+  }, [visibleLive, fares.data, ignav.data]);
+  const liveOptionsKeyRef = useRef('');
+  useEffect(() => {
+    const key = liveOptionsValue === null ? 'null' : JSON.stringify(liveOptionsValue);
+    if (key === liveOptionsKeyRef.current) return;
+    liveOptionsKeyRef.current = key;
+    onLiveOptions(liveOptionsValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveOptionsValue]);
+
+  const liveFiltersActive =
+    stopsFilter.length > 0 || airlinesFilter.length > 0 || timesFilter.length > 0 || maxPrice !== null;
+  // One way back from any live filter — the live "Clear filters"
+  // clears the panel filters AND the max price, so the full list
+  // comes back (the price filter also narrows the live offers).
+  const clearAllLiveFilters = () => {
+    onClearLiveFilters();
+    onClearPrice();
+  };
+  // The per-fare source tags (Nov 15, 2026): the big supplier column
+  // headers are gone, so each fare carries its own discreet tag.
+  const duffelTag = fares.data?.mode === 'live' ? 'Duffel · live fare' : 'Duffel · test fare';
+  const ignavTag = ignavSourceTag(ignav.data?.observedAt ?? null);
   // The plan flight budget is a round-trip figure — for one-way and
   // multi-city it would quote a budget that does not apply, so the
   // line (and the budget inside noFareMessage) stays round-trip only.
@@ -725,58 +753,57 @@ function FlightResults({
                 query.travelers > 1 ? 's' : ''
               } · ${query.cabin}`}
       </h3>
-      <div className="fare-sources">
-        <FareSourceColumn
-          title="Duffel"
-          freshness={
-            fares.status === 'done' && fares.data
-              ? duffelFareLabel(fares.data.mode)
-              : 'Live fares — checking now…'
-          }
-        >
-          {fares.status === 'loading' && <p>Checking live fares…</p>}
-          {fares.status === 'done' && fares.data?.live && tripType === 'oneway' && (
-            <>
-              {liveFiltersActive && (
-                <p className="fare-count">
-                  Showing {out.length} of {fares.data.out.length} fares.{' '}
-                  <button type="button" className="linklike" onClick={onClearLiveFilters}>
+      {/* One clean live-fares list (Nov 15, 2026): the big supplier
+          column headers ("Duffel", "Ignav — live") are gone — the
+          traveler sees one results list, and each fare carries its
+          own small source + freshness tag instead. The trip structure
+          stays: outbound / return lists, whole-trip itinerary groups.
+          The summary line counts the live offers actually shown. */}
+      <div className="fare-live-list">
+        {liveOptionsValue && liveFiltersActive && (
+          <p className="fare-count">
+            Showing {liveOptionsValue.shownCount} of {liveOptionsValue.totalCount} live fares.{' '}
+            <button type="button" className="linklike" onClick={clearAllLiveFilters}>
+              Clear filters
+            </button>
+          </p>
+        )}
+        {fares.status === 'loading' && <p>Checking live fares…</p>}
+        {fares.status === 'done' && fares.data?.live && tripType === 'oneway' && (
+          <>
+            <h5>Outbound — {fares.data.departDate}</h5>
+            <ul className="fare-list">
+              {out.map((o) => (
+                <FareCard
+                  key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
+                  offer={o}
+                  travelers={query.travelers}
+                  cabin={query.cabin}
+                  sourceLabel={duffelTag}
+                />
+              ))}
+              {out.length === 0 && (
+                <li className="plan-muted">
+                  No outbound fares match the filters.{' '}
+                  <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                     Clear filters
                   </button>
-                </p>
+                </li>
               )}
-              <h5>Outbound — {fares.data.departDate}</h5>
-              <ul className="fare-list">
-                {out.map((o) => (
-                  <FareCard
-                    key={`${o.airline}-${o.price}-${o.departTime ?? ''}-${o.arriveTime ?? ''}`}
-                    offer={o}
-                    travelers={query.travelers}
-                    cabin={query.cabin}
-                  />
-                ))}
-                {out.length === 0 && (
-                  <li className="plan-muted">
-                    No outbound fares match the filters.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                      Clear filters
-                    </button>
-                  </li>
-                )}
-              </ul>
-              {cheapestOneWayTotal(out) > 0 && (
-                <p className="fare-total">
-                  Cheapest one-way: <strong>${cheapestOneWayTotal(out).toLocaleString()}</strong> for {query.travelers} traveler
-                  {query.travelers > 1 ? 's' : ''} · + ${serviceFee(cheapestOneWayTotal(out)).toLocaleString()} service fee per flight order.
-                </p>
-              )}
-              <p>
-                <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
-                  Save this search
-                </button>
+            </ul>
+            {cheapestOneWayTotal(out) > 0 && (
+              <p className="fare-total">
+                Cheapest one-way: <strong>${cheapestOneWayTotal(out).toLocaleString()}</strong> for {query.travelers} traveler
+                {query.travelers > 1 ? 's' : ''} · + ${serviceFee(cheapestOneWayTotal(out)).toLocaleString()} service fee per flight order.
               </p>
-            </>
-          )}
+            )}
+            <p>
+              <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
+                Save this search
+              </button>
+            </p>
+          </>
+        )}
           {fares.status === 'done' && fares.data?.live && tripType === 'multicity' && (
             <>
               {legLists.map((leg, i) => (
@@ -784,14 +811,6 @@ function FlightResults({
                   <h5>
                     Leg {i + 1} — {leg.origin} → {leg.destCity} · {leg.date}
                   </h5>
-                  {liveFiltersActive && leg.out.length > 0 && (
-                    <p className="fare-count">
-                      Showing {leg.offers.length} of {leg.out.length} fares.{' '}
-                      <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                        Clear filters
-                      </button>
-                    </p>
-                  )}
                   <ul className="fare-list">
                     {leg.offers.map((o) => (
                       <FareCard
@@ -799,6 +818,7 @@ function FlightResults({
                         offer={o}
                         travelers={query.travelers}
                         cabin={query.cabin}
+                        sourceLabel={duffelTag}
                       />
                     ))}
                     {leg.offers.length === 0 && (
@@ -807,7 +827,7 @@ function FlightResults({
                           ? 'No fares for this leg.'
                           : 'No fares for this leg match the filters.'}{' '}
                         {leg.out.length > 0 && (
-                          <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                          <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                             Clear filters
                           </button>
                         )}
@@ -831,14 +851,6 @@ function FlightResults({
           )}
           {fares.status === 'done' && fares.data?.live && tripType === 'roundtrip' && (
             <>
-              {liveFiltersActive && (
-                <p className="fare-count">
-                  Showing {out.length} of {fares.data.out.length} outbound · {back.length} of {fares.data.back.length} return fares.{' '}
-                  <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                    Clear filters
-                  </button>
-                </p>
-              )}
               <h5>Outbound — {fares.data.departDate}</h5>
               <ul className="fare-list">
                 {out.map((o) => (
@@ -847,12 +859,13 @@ function FlightResults({
                     offer={o}
                     travelers={query.travelers}
                     cabin={query.cabin}
+                    sourceLabel={duffelTag}
                   />
                 ))}
                 {out.length === 0 && (
                   <li className="plan-muted">
                     No outbound fares match the filters.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                    <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                       Clear filters
                     </button>
                   </li>
@@ -866,12 +879,13 @@ function FlightResults({
                     offer={o}
                     travelers={query.travelers}
                     cabin={query.cabin}
+                    sourceLabel={duffelTag}
                   />
                 ))}
                 {back.length === 0 && (
                   <li className="plan-muted">
                     No return fares match the filters.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                    <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                       Clear filters
                     </button>
                   </li>
@@ -905,31 +919,13 @@ function FlightResults({
                 : ''}
             </p>
           )}
-        </FareSourceColumn>
-        {ignav.status !== 'idle' && (
-          <FareSourceColumn
-            title="Ignav — live"
-            freshness={
-              ignav.status === 'done' && ignav.data
-                ? ignavFreshnessLabel(ignav.data.observedAt)
-                : 'Live fares — checking now…'
-            }
-          >
-            {ignav.status === 'loading' && <p>Checking live fares from Ignav…</p>}
-            {ignav.status === 'done' && ignav.data && !ignav.data.live && (
-              <p>{ignavEmptyMessage(ignav.data.reason)}</p>
-            )}
-            {ignav.status === 'done' && !ignav.data && <p>Could not check live fares from Ignav right now.</p>}
+          {ignav.status === 'loading' && <p>Checking live fares from Ignav…</p>}
+          {ignav.status === 'done' && ignav.data && !ignav.data.live && (
+            <p>{ignavEmptyMessage(ignav.data.reason)}</p>
+          )}
+          {ignav.status === 'done' && !ignav.data && <p>Could not check live fares from Ignav right now.</p>}
             {ignav.status === 'done' && ignav.data?.live && tripType === 'oneway' && (
               <>
-                {liveFiltersActive && (
-                  <p className="fare-count">
-                    Showing {ignavItineraries.length} of {ignavFiltered.length} fares.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                      Clear filters
-                    </button>
-                  </p>
-                )}
                 <ul className="fare-list">
                   {ignavItineraries.map((it) => {
                     const leg = it.legs[0];
@@ -940,6 +936,7 @@ function FlightResults({
                         offer={leg}
                         travelers={query.travelers}
                         cabin={query.cabin}
+                        sourceLabel={ignavTag}
                         footer={<IgnavBookingLinks context={ignavBookingContext(it)} travelers={query.travelers} />}
                       />
                     );
@@ -947,7 +944,7 @@ function FlightResults({
                   {ignavItineraries.length === 0 && (
                     <li className="plan-muted">
                       No Ignav fares match the filters.{' '}
-                      <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                      <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                         Clear filters
                       </button>
                     </li>
@@ -963,21 +960,10 @@ function FlightResults({
                 {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
                   <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live fares from Ignav.</p>
                 )}
-                <p className="plan-muted">
-                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
-                </p>
               </>
             )}
             {ignav.status === 'done' && ignav.data?.live && tripType === 'roundtrip' && (
               <>
-                {liveFiltersActive && (
-                  <p className="fare-count">
-                    Showing {ignavItineraries.length} of {ignavFiltered.length} trips.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                      Clear filters
-                    </button>
-                  </p>
-                )}
                 {ignavItineraries.map((it) => (
                   <IgnavItineraryGroup
                     key={it.ignavId ?? `${it.price}-${it.legs[0]?.airline ?? ''}`}
@@ -985,12 +971,13 @@ function FlightResults({
                     travelers={query.travelers}
                     cabin={query.cabin}
                     labels={['Outbound', 'Return']}
+                    sourceLabel={ignavTag}
                   />
                 ))}
                 {ignavItineraries.length === 0 && (
                   <p className="plan-muted">
                     No Ignav fares match the filters.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                    <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                       Clear filters
                     </button>
                   </p>
@@ -1005,21 +992,10 @@ function FlightResults({
                 {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
                   <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
                 )}
-                <p className="plan-muted">
-                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
-                </p>
               </>
             )}
             {ignav.status === 'done' && ignav.data?.live && tripType === 'multicity' && ignav.data.itineraries.length > 0 && (
               <>
-                {liveFiltersActive && (
-                  <p className="fare-count">
-                    Showing {ignavItineraries.length} of {ignavFiltered.length} trips.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                      Clear filters
-                    </button>
-                  </p>
-                )}
                 {ignavItineraries.map((it) => (
                   <IgnavItineraryGroup
                     key={it.ignavId ?? `${it.price}-${it.legs[0]?.airline ?? ''}`}
@@ -1027,12 +1003,13 @@ function FlightResults({
                     travelers={query.travelers}
                     cabin={query.cabin}
                     labels={queryLegs.map((l, i) => `Leg ${i + 1} — ${l.from} → ${l.to} · ${l.depart}`)}
+                    sourceLabel={ignavTag}
                   />
                 ))}
                 {ignavItineraries.length === 0 && (
                   <p className="plan-muted">
                     No Ignav fares match the filters.{' '}
-                    <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                    <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                       Clear filters
                     </button>
                   </p>
@@ -1047,9 +1024,6 @@ function FlightResults({
                 {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
                   <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
                 )}
-                <p className="plan-muted">
-                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
-                </p>
               </>
             )}
             {ignav.status === 'done' && ignav.data?.live && tripType === 'multicity' && ignavLegLists.length > 0 && (
@@ -1059,14 +1033,6 @@ function FlightResults({
                     <h5>
                       Leg {i + 1} — {leg.origin} → {leg.destCity ?? leg.destination} · {leg.date}
                     </h5>
-                    {liveFiltersActive && leg.out.length > 0 && (
-                      <p className="fare-count">
-                        Showing {leg.offers.length} of {leg.out.length} fares.{' '}
-                        <button type="button" className="linklike" onClick={onClearLiveFilters}>
-                          Clear filters
-                        </button>
-                      </p>
-                    )}
                     <ul className="fare-list">
                       {leg.offers.map((o) => (
                         <FareCard
@@ -1074,6 +1040,7 @@ function FlightResults({
                           offer={o}
                           travelers={query.travelers}
                           cabin={query.cabin}
+                          sourceLabel={ignavTag}
                           footer={<IgnavBookingLinks context={ignavBookingContextForOffer(o)} travelers={query.travelers} />}
                         />
                       ))}
@@ -1083,7 +1050,7 @@ function FlightResults({
                             ? 'No live fares from Ignav for this leg.'
                             : 'No fares for this leg match the filters.'}{' '}
                           {leg.out.length > 0 && (
-                            <button type="button" className="linklike" onClick={onClearLiveFilters}>
+                            <button type="button" className="linklike" onClick={clearAllLiveFilters}>
                               Clear filters
                             </button>
                           )}
@@ -1099,24 +1066,24 @@ function FlightResults({
                     {query.travelers} traveler{query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed.
                   </p>
                 )}
-                <p className="plan-muted">
-                  Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
-                </p>
               </>
             )}
-          </FareSourceColumn>
-        )}
-        {competitor.status !== 'idle' && (
-          <FareSourceColumn
-            title="Other sites (cached)"
-            freshness={
-              competitor.status === 'loading'
-                ? 'Checking other sites…'
-                : competitor.data?.available
-                  ? competitor.data.label
-                  : 'Cached fares from other sites'
-            }
-          >
+            {ignav.status === 'done' && ignav.data?.live && (
+              <p className="plan-muted">
+                Live fares from Ignav — prices are approximate and can change; confirm on the booking site.
+              </p>
+            )}
+          </div>
+          {competitor.status !== 'idle' && (
+            <section className="fare-block" aria-label="Other sites (cached)">
+              <h4>Other sites (cached)</h4>
+              <p className="plan-muted">
+                {competitor.status === 'loading'
+                  ? 'Checking other sites…'
+                  : competitor.data?.available
+                    ? competitor.data.label
+                    : 'Cached fares from other sites'}
+              </p>
             {competitor.status === 'loading' && <p>Checking other sites…</p>}
             {competitor.status === 'done' && competitor.data?.available && (
               <p>
@@ -1127,9 +1094,8 @@ function FlightResults({
             {competitor.status === 'done' && competitor.data && !competitor.data.available && (
               <p className="plan-muted">{competitor.data.label}</p>
             )}
-          </FareSourceColumn>
+          </section>
         )}
-      </div>
       {known && tripType === 'roundtrip' && (
         <p>
           {budget.label}: <strong>${plannerFlight.toLocaleString()}</strong> · {query.travelers} traveler
@@ -2204,13 +2170,10 @@ export default function SearchResults({
   const label = HOME_TABS.find((t) => t.id === query.tab)?.label ?? query.tab;
   const [sort, setSort] = useState<RowSort>('best');
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
-  const [liveOptions, setLiveOptions] = useState<{
-    airlines: string[];
-    stops: number[];
-    counts: { airlines: Record<string, number>; stops: Record<number, number> };
-  } | null>(null);
+  const [liveOptions, setLiveOptions] = useState<LiveFilterOptions | null>(null);
   const [stopsFilter, setStopsFilter] = useState<number[]>([]);
   const [airlinesFilter, setAirlinesFilter] = useState<string[]>([]);
+  const [timesFilter, setTimesFilter] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Stays tier (Nov 15, 2026): which planner tier the stay list
   // prices in. It is filter state, not search state — a new search
@@ -2277,6 +2240,7 @@ export default function SearchResults({
   useEffect(() => {
     setStopsFilter([]);
     setAirlinesFilter([]);
+    setTimesFilter([]);
     setLiveOptions(null);
     setFiltersOpen(false);
     setStayTier(query.stayTier ?? 'best');
@@ -2409,6 +2373,17 @@ export default function SearchResults({
               </label>
             ))}
           </div>
+          {liveOptions.times.length > 0 && (
+            <div className="filter-group">
+              <h3>Departure time</h3>
+              {liveOptions.times.map((t) => (
+                <label key={t} className="filter-check">
+                  <input type="checkbox" checked={timesFilter.includes(t)} onChange={() => setTimesFilter((l) => toggleIn(l, t))} />
+                  {TIME_BUCKETS.find((b) => b.id === t)?.label ?? t} ({liveOptions.counts.times[t] ?? 0})
+                </label>
+              ))}
+            </div>
+          )}
         </>
       )}
     </>
@@ -2490,11 +2465,13 @@ export default function SearchResults({
                 maxPrice={maxPrice}
                 stopsFilter={stopsFilter}
                 airlinesFilter={airlinesFilter}
+                timesFilter={timesFilter}
                 onLiveOptions={setLiveOptions}
                 onSave={onSaveSearch}
                 onClearLiveFilters={() => {
                   setStopsFilter([]);
                   setAirlinesFilter([]);
+                  setTimesFilter([]);
                 }}
                 onClearPrice={() => setMaxPrice(null)}
               />

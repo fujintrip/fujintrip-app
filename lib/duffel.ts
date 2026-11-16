@@ -145,6 +145,26 @@ export function perTravelerPrice(total: number, travelers: number): number {
   return Math.round(total / travelers);
 };
 
+// Departure-time buckets for the flights filter (Nov 15, 2026):
+// the traveler filters live fares by when the flight leaves. The
+// buckets are fixed clock ranges, so a fare's bucket comes only from
+// its own departMinutes — never guessed. An offer with no departure
+// time has no bucket and matches no time filter.
+export const TIME_BUCKETS = [
+  { id: 'night', label: 'Night · 12–6 AM', min: 0, max: 359 },
+  { id: 'morning', label: 'Morning · 6 AM–12 PM', min: 360, max: 719 },
+  { id: 'afternoon', label: 'Afternoon · 12–6 PM', min: 720, max: 1079 },
+  { id: 'evening', label: 'Evening · 6 PM–12 AM', min: 1080, max: 1439 },
+] as const;
+export type TimeBucketId = (typeof TIME_BUCKETS)[number]['id'];
+
+export function timeBucketFor(departMinutes: number | undefined): TimeBucketId | null {
+  if (departMinutes === undefined || !Number.isFinite(departMinutes)) return null;
+  const m = ((Math.floor(departMinutes) % 1440) + 1440) % 1440;
+  for (const b of TIME_BUCKETS) if (m >= b.min && m <= b.max) return b.id;
+  return null;
+}
+
 export type LiveFares = {
   live: boolean;
   origin: string;
