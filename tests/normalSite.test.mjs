@@ -421,6 +421,7 @@ test('formValuesFromQuery: the widget fields for a query, both directions', () =
     tourTier: 'best',
     cruiseTier: 'best',
     busTier: 'best',
+    taxiTier: 'best',
   });
 });
 

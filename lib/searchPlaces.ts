@@ -469,6 +469,77 @@ export function busTierRows(tier: BusTier, travelers: number): BusTierRow[] {
     .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
 }
 
+// Taxis tiers (Nov 15, 2026 — the Taxis section, same standard as
+// the Stays, Car rental, Attractions, Cruises and Buses sections):
+// the three planner tiers, priced from the planner's own per-tier
+// totals — never a named company, route, timetable, rating, or live
+// quote. The planner breaks out no taxi leg (see noLegNote in
+// lib/homeTabs: taxi prices are not broken out yet), so the tier
+// figures are the per-tier FULL-TRIP totals — the same figures the
+// old taxi rows showed for Best value — and the results label them
+// as full-trip planning estimates, never as taxi prices. Inventing a
+// taxi leg from the trip total would break that rule. The tier is
+// part of the search (a ?tier= URL param, like the Stays, Car,
+// Attractions, Cruises and Buses tiers), so a tiered search is
+// shareable and renders its tier on first paint.
+export type TaxiTier = 'cheapest' | 'best' | 'premium';
+
+export const TAXI_TIERS: { id: TaxiTier; label: string }[] = [
+  { id: 'cheapest', label: 'Cheapest' },
+  { id: 'best', label: 'Best value' },
+  { id: 'premium', label: 'Premium' },
+];
+
+export function taxiTierFromValue(v: unknown): TaxiTier {
+  return v === 'cheapest' || v === 'premium' ? v : 'best';
+}
+
+export function taxiTierLabel(tier: TaxiTier): string {
+  return TAXI_TIERS.find((t) => t.id === tier)?.label ?? 'Best value';
+}
+
+// One tier's taxi figures for a destination — the planner's per-tier
+// full-trip total for the whole party (buildPlan's total is a party
+// total for the trip) plus the per-traveler share. The figures never
+// depend on the searched date or time: the planner prices the trip,
+// not the ride, so the total stays the planner's figure whatever
+// date or time the traveler picked — scaling it by a ride length
+// would invent a pricing model the planner does not have.
+export type TaxiTierOption = { tier: TaxiTier; label: string; total: number; perTraveler: number };
+
+export function taxiTierOptions(destination: string, travelers: number): TaxiTierOption[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  const options = buildPlan(destination, party, 3).options;
+  return TAXI_TIERS.map((t) => {
+    const total = options.find((o) => o.name === t.label)?.total ?? 0;
+    return { tier: t.id, label: t.label, total, perTraveler: Math.round(total / party) };
+  });
+}
+
+// One row per discovery destination in a tier — the taxi list the
+// Taxis results show. The shape is TabRow plus the party total, so
+// the shared sortTabRows re-orders it and the card can print the
+// total without re-deriving it from a rounded per-traveler figure
+// (perTraveler × travelers would drift from the total by rounding).
+// kind is 'full-trip': these are full-trip totals, not taxi prices.
+export type TaxiTierRow = TabRow & { total: number };
+
+export function taxiTierRows(tier: TaxiTier, travelers: number): TaxiTierRow[] {
+  const party = Math.min(9, Math.max(1, Math.floor(travelers) || 2));
+  return discoveryDestinations()
+    .map((e) => {
+      const opt = taxiTierOptions(e.destination, party).find((o) => o.tier === tier);
+      return {
+        destination: e.destination,
+        routeLine: routeLineFor(e.stops),
+        pricePerTraveler: opt?.perTraveler ?? 0,
+        kind: 'full-trip' as const,
+        total: opt?.total ?? 0,
+      };
+    })
+    .filter((r) => Number.isFinite(r.pricePerTraveler) && r.pricePerTraveler > 0);
+}
+
 export const FLIGHT_TRIP_TYPES: { id: FlightTripType; label: string }[] = [
   { id: 'roundtrip', label: 'Round-trip' },
   { id: 'oneway', label: 'One-way' },
@@ -574,6 +645,11 @@ export type SearchQuery = {
   // figures are the per-tier full-trip totals (the planner breaks
   // out no bus leg), labeled as such in the results.
   busTier: BusTier;
+  // Taxis only: which planner tier the taxi list prices in. Same
+  // three tiers, same ?tier= param, same Best value default. The
+  // figures are the per-tier full-trip totals (the planner breaks
+  // out no taxi leg), labeled as such in the results.
+  taxiTier: TaxiTier;
 };
 
 export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as const;
@@ -617,6 +693,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
   tourTier: TourTier;
   cruiseTier: CruiseTier;
   busTier: BusTier;
+  taxiTier: TaxiTier;
 } {
   return {
     place: q?.dest || q?.to || '',
@@ -639,6 +716,7 @@ export function formValuesFromQuery(q: SearchQuery | null): {
     tourTier: q?.tourTier ?? 'best',
     cruiseTier: q?.cruiseTier ?? 'best',
     busTier: q?.busTier ?? 'best',
+    taxiTier: q?.taxiTier ?? 'best',
   };
 }
 
@@ -666,6 +744,7 @@ export function emptySearchQuery(tab: HomeTabId): SearchQuery {
     tourTier: 'best',
     cruiseTier: 'best',
     busTier: 'best',
+    taxiTier: 'best',
   };
 }
 
@@ -693,6 +772,15 @@ function cleanInt(v: unknown, min: number, max: number, fallback: number): numbe
 export function todayIsoLocal(today: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${today.getFullYear()}-${p(today.getMonth() + 1)}-${p(today.getDate())}`;
+}
+
+// The local time right now (HH:MM) — the taxi form's past-time
+// check shares it with the date check: a ride today at a time that
+// already passed is not a ride. Zero-padded, so a plain string
+// comparison orders times correctly.
+export function nowTimeLocal(now: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(now.getHours())}:${p(now.getMinutes())}`;
 }
 
 // Parse URL params into a search query. Nothing is invented: an
@@ -790,6 +878,20 @@ export function searchQueryFromParams(
   if (tab === 'buses') {
     q.busTier = busTierFromValue(params.tier);
   }
+  // Taxis tier (Nov 15, 2026): the same ?tier= param, the
+  // same fallback — a tiered taxi search is shareable too.
+  if (tab === 'taxis') {
+    q.taxiTier = taxiTierFromValue(params.tier);
+    // A taxi link names the ride's ends as pick-up and drop-off.
+    // The widget writes &dropoff=, but a hand-shared link may name
+    // the drop-off &to= (the buses shape) — that is the same end,
+    // so it folds into dropoff instead of being lost. The widget
+    // never writes &to= for taxis, so a round-trip keeps dropoff.
+    if (!q.dropoff && q.to) {
+      q.dropoff = q.to;
+      q.to = '';
+    }
+  }
   // A deep link only counts as a search when it carries something to
   // search for — a bare ?tab= is just a tab, not a search.
   const hasSearch = Boolean(q.from || q.to || q.dest || q.depart || q.month);
@@ -813,6 +915,7 @@ export function searchQueryToParams(q: SearchQuery): string {
   if (q.tab === 'tours' && q.tourTier !== 'best') p.set('tier', q.tourTier);
   if (q.tab === 'cruises' && q.cruiseTier !== 'best') p.set('tier', q.cruiseTier);
   if (q.tab === 'buses' && q.busTier !== 'best') p.set('tier', q.busTier);
+  if (q.tab === 'taxis' && q.taxiTier !== 'best') p.set('tier', q.taxiTier);
   if (q.travelers !== 2) p.set('travelers', String(q.travelers));
   if (q.cabin !== 'Economy') p.set('cabin', q.cabin);
   if (q.guests !== 2) p.set('guests', String(q.guests));

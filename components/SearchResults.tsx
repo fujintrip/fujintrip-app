@@ -51,6 +51,10 @@ import {
   stayTierLabel,
   stayTierOptions,
   stayTierRows,
+  TAXI_TIERS,
+  taxiTierLabel,
+  taxiTierOptions,
+  taxiTierRows,
   TOUR_TIERS,
   tourDaysFor,
   tourTierLabel,
@@ -66,6 +70,8 @@ import {
   type CruiseTierRow,
   type StayTier,
   type StayTierRow,
+  type TaxiTier,
+  type TaxiTierRow,
   type TourTier,
   type TourTierRow,
 } from '../lib/searchPlaces';
@@ -1960,10 +1966,168 @@ function BusResults({
   );
 }
 
+// One taxi row: the destination, the searched ride and date/time, the
+// selected tier's per-traveler price and party total. No taxi
+// company, route, timetable, rating, or per-ride figure: the
+// planner has none of those, so the card shows none of those. The
+// price is the per-tier FULL-TRIP total, labeled as such — never a
+// taxi price.
+function TaxiCard({
+  row,
+  query,
+  onSave,
+}: {
+  row: TaxiTierRow;
+  query: SearchQuery;
+  onSave: (label: string) => void;
+}) {
+  const photo = destinationPhoto(row.destination);
+  const highlight = rowIncludesPlace(row.destination, query.dropoff || query.from);
+  const tierLabel = taxiTierLabel(query.taxiTier);
+  const dates = query.depart
+    ? `${query.depart}${query.pickupTime ? ` · ${query.pickupTime}` : ''}`
+    : 'Flexible dates';
+  return (
+    <article className={`result-card${highlight ? ' result-match' : ''}`}>
+      {photo && <SafeImg src={photo} alt={row.destination} label={row.destination} className="result-photo" />}
+      <div className="result-body">
+        <h3>{row.destination}</h3>
+        <p className="plan-muted">{row.routeLine}</p>
+        <p className="plan-muted">
+          {dates} · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
+        <p className="result-price">
+          from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
+          <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
+        </p>
+        <p className="plan-muted">
+          ${row.total.toLocaleString()} total for {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
+        </p>
+        <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, row.destination))}>
+          Save this search
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Taxis results (Nov 15, 2026 — the Taxis section, same standard
+// as the Stays, Car rental, Attractions, Cruises and Buses
+// sections): the searched ride's three planner tiers as taxi cards,
+// then the per-destination taxi list in the selected tier. Every
+// figure is the planner's own per-tier FULL-TRIP total — the planner
+// breaks out no taxi leg, so these are full-trip planning estimates,
+// never taxi prices, never a named company, route, or timetable. No
+// "Book now": no live supplier exists yet.
+function TaxiResults({
+  query,
+  sort,
+  maxPrice,
+  taxiTier,
+  onSave,
+  onClearPrice,
+  onClearTaxiFilters,
+}: {
+  query: SearchQuery;
+  sort: RowSort;
+  maxPrice: number | null;
+  taxiTier: TaxiTier;
+  onSave: (label: string) => void;
+  onClearPrice: () => void;
+  onClearTaxiFilters: () => void;
+}) {
+  const dropOff = query.dropoff || query.from;
+  const known = isKnownPlace(dropOff);
+  const tiers = known ? taxiTierOptions(dropOff, query.travelers) : null;
+  const allRows = useMemo(() => taxiTierRows(taxiTier, query.travelers), [taxiTier, query.travelers]);
+  const rows = useMemo(() => {
+    const sorted = sortTabRows(allRows, sort);
+    return maxPrice === null ? sorted : sorted.filter((r) => r.pricePerTraveler <= maxPrice);
+  }, [allRows, sort, maxPrice]);
+  const filtersActive = maxPrice !== null || taxiTier !== 'best';
+  const dates = query.depart
+    ? `${query.depart}${query.pickupTime ? ` · ${query.pickupTime}` : ''}`
+    : 'Flexible dates';
+  const travelers = `${query.travelers} traveler${query.travelers > 1 ? 's' : ''}`;
+  const tierLabel = taxiTierLabel(taxiTier);
+  const note = noLegNote('taxis');
+  return (
+    <div aria-label="Taxis results">
+      <h3>
+        Taxis · {query.from || 'Anywhere'} → {query.dropoff || 'Anywhere'} · {dates} · {travelers}
+      </h3>
+      <p className="plan-muted">Live taxi prices arrive when Uber / Lyft / Mozio connect.</p>
+      {note && <p className="results-note">{note}</p>}
+      <p className="plan-muted">
+        Taxi prices below are full-trip planning estimates from FujinTrip&apos;s planner — not taxi prices and not live
+        quotes, and no taxi company, route, or timetable is attached to them. Live bookable taxis open as suppliers connect.
+      </p>
+      {tiers && (
+        <>
+          <h4>Taxis to {dropOff} — full-trip planning estimates</h4>
+          <div className="result-cards">
+            {tiers.map((t) => (
+              <article key={t.tier} className={`result-card${t.tier === taxiTier ? ' result-match' : ''}`}>
+                <div className="result-body">
+                  <h3>
+                    {t.label}
+                    {t.tier === 'best' ? ' · Our pick' : ''}
+                  </h3>
+                  <p className="plan-muted">
+                    {query.from || 'Anywhere'} → {query.dropoff || 'Anywhere'} · {dates} · {travelers}
+                  </p>
+                  <p className="result-price">
+                    from ${t.perTraveler.toLocaleString()} per traveler{' '}
+                    <span className="plan-muted">· Full trip · planning estimate</span>
+                  </p>
+                  <p className="plan-muted">
+                    ${t.total.toLocaleString()} total for {travelers}
+                  </p>
+                  <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query, dropOff))}>
+                    Save this search
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </>
+      )}
+      {filtersActive && (
+        <p className="fare-count">
+          Showing {rows.length} of {allRows.length} destinations · {tierLabel} taxis.{' '}
+          <button type="button" className="linklike" onClick={onClearTaxiFilters}>
+            Clear filters
+          </button>
+        </p>
+      )}
+      <h4>Taxis by destination — full-trip planning estimates</h4>
+      {rows.length === 0 ? (
+        <p className="plan-muted">
+          No destinations under that price — raise the max price or clear it.{' '}
+          <button type="button" className="linklike" onClick={onClearPrice}>
+            Clear price filter
+          </button>
+        </p>
+      ) : (
+        <div className="result-cards">
+          {rows.map((r) => (
+            <TaxiCard key={r.destination} row={r} query={query} onSave={onSave} />
+          ))}
+        </div>
+      )}
+      <p className="plan-muted">
+        {tierLabel} full trip per traveler, {travelers} · planning estimate — not a live quote. Live comparison arrives as suppliers
+        connect.
+      </p>
+    </div>
+  );
+}
+
 // One tab's estimate results: the per-route planner numbers for this
-// category, per traveler, labeled planning estimate. Taxis carry the
-// honest note instead of a broken-out price (cruises have their own
-// CruiseResults and buses their own BusResults since Nov 15, 2026).
+// category, per traveler, labeled planning estimate. Every tab has
+// its own results component since Nov 15, 2026 — this is the
+// fallback for a tab without one.
 function CategoryResults({
   query,
   sort,
@@ -2064,6 +2228,9 @@ export default function SearchResults({
   // Buses tier (Nov 15, 2026): the same filter-state pattern
   // as the Stays, Car rental, Attractions and Cruises tiers, for the bus list.
   const [busTier, setBusTier] = useState<BusTier>(query.busTier ?? 'best');
+  // Taxis tier (Nov 15, 2026): the same filter-state pattern
+  // as the Stays, Car rental, Attractions, Cruises and Buses tiers, for the taxi list.
+  const [taxiTier, setTaxiTier] = useState<TaxiTier>(query.taxiTier ?? 'best');
   // The estimate rows behind the max-price counts — the counts on the
   // price options come from the same rows the list shows. Stays price
   // for the searched party (guests), in the selected tier — the
@@ -2074,6 +2241,8 @@ export default function SearchResults({
   // (full-trip totals — the planner breaks out no cruise leg).
   // Buses price for the searched travelers, in the selected tier
   // (full-trip totals — the planner breaks out no bus leg).
+  // Taxis price for the searched travelers, in the selected tier
+  // (full-trip totals — the planner breaks out no taxi leg).
   const estimateRows = useMemo(
     () =>
       query.tab === 'hotels'
@@ -2086,8 +2255,10 @@ export default function SearchResults({
               ? cruiseTierRows(cruiseTier, query.travelers)
               : query.tab === 'buses'
                 ? busTierRows(busTier, query.travelers)
-                : tabRowsFor(query.tab, query.travelers),
-    [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier, cruiseTier, busTier]
+                : query.tab === 'taxis'
+                  ? taxiTierRows(taxiTier, query.travelers)
+                  : tabRowsFor(query.tab, query.travelers),
+    [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier, cruiseTier, busTier, taxiTier]
   );
   const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
@@ -2100,7 +2271,7 @@ export default function SearchResults({
   const selectedDiscovery: DiscoveryEntry | null =
     discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
-  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.month || ''}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${query.cruiseTier ?? 'best'}|${query.busTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
+  const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.month || ''}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${query.cruiseTier ?? 'best'}|${query.busTier ?? 'best'}|${query.taxiTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
   // airlines do not carry over.
   useEffect(() => {
@@ -2113,6 +2284,7 @@ export default function SearchResults({
     setTourTier(query.tourTier ?? 'best');
     setCruiseTier(query.cruiseTier ?? 'best');
     setBusTier(query.busTier ?? 'best');
+    setTaxiTier(query.taxiTier ?? 'best');
   }, [queryKey]);
 
   const primaryPlace =
@@ -2198,6 +2370,18 @@ export default function SearchResults({
           <h3>Bus price</h3>
           <select value={busTier} onChange={(e) => setBusTier(e.target.value as BusTier)} aria-label="Bus price tier">
             {BUS_TIERS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {query.tab === 'taxis' && (
+        <div className="filter-group">
+          <h3>Taxi price</h3>
+          <select value={taxiTier} onChange={(e) => setTaxiTier(e.target.value as TaxiTier)} aria-label="Taxi price tier">
+            {TAXI_TIERS.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}
               </option>
@@ -2377,6 +2561,19 @@ export default function SearchResults({
                 onClearBusFilters={() => {
                   setMaxPrice(null);
                   setBusTier('best');
+                }}
+              />
+            ) : query.tab === 'taxis' ? (
+              <TaxiResults
+                query={query}
+                sort={sort}
+                maxPrice={maxPrice}
+                taxiTier={taxiTier}
+                onSave={onSaveSearch}
+                onClearPrice={() => setMaxPrice(null)}
+                onClearTaxiFilters={() => {
+                  setMaxPrice(null);
+                  setTaxiTier('best');
                 }}
               />
             ) : (

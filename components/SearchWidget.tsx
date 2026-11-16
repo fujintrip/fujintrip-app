@@ -19,6 +19,7 @@ import {
   searchButtonLabel,
   searchQueryToParams,
   todayIsoLocal,
+  nowTimeLocal,
   type FlightLeg,
   type FlightTripType,
   type SearchQuery,
@@ -26,6 +27,7 @@ import {
   type CarTier,
   type CruiseTier,
   type StayTier,
+  type TaxiTier,
   type TourTier,
 } from '../lib/searchPlaces';
 import { MONTH_NAMES } from '../lib/planner';
@@ -216,6 +218,10 @@ export default function SearchWidget({
   // Stays, Car rental, Attractions and Cruises tiers, for the same
   // reason.
   const [busTier, setBusTier] = useState<BusTier>(initialSearch?.busTier ?? 'best');
+  // Taxis tier (Nov 15, 2026): the same carry-through as the
+  // Stays, Car rental, Attractions, Cruises and Buses tiers, for
+  // the same reason.
+  const [taxiTier, setTaxiTier] = useState<TaxiTier>(initialSearch?.taxiTier ?? 'best');
 
   // A multi-city search always has 2–4 legs. A fresh multi-city
   // form starts from the route already typed (leg 1) plus one empty
@@ -299,6 +305,7 @@ export default function SearchWidget({
     setTourTier(v.tourTier);
     setCruiseTier(v.cruiseTier);
     setBusTier(v.busTier);
+    setTaxiTier(v.taxiTier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 
@@ -465,7 +472,22 @@ export default function SearchWidget({
         return;
       }
     }
-    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && tab !== 'cruises' && tab !== 'buses' && (tab !== 'flights' || tripType !== 'multicity')) {
+    // Taxis date/time name the ride: a ride date in the past is not
+    // a ride, and a ride today at a time that already passed is not
+    // a ride either. A time with no date is flexible — there is no
+    // day to compare it against. The generic block below would only
+    // repeat the date verdict in vaguer words, so taxis skip it.
+    if (tab === 'taxis') {
+      if (depart && depart < now) {
+        setNote('That ride date is in the past — pick a date from today on.');
+        return;
+      }
+      if (depart && depart === now && pickupTime && pickupTime <= nowTimeLocal()) {
+        setNote('That pick-up time has already passed — pick a later time.');
+        return;
+      }
+    }
+    if (tab !== 'hotels' && tab !== 'cars' && tab !== 'tours' && tab !== 'cruises' && tab !== 'buses' && tab !== 'taxis' && (tab !== 'flights' || tripType !== 'multicity')) {
       if (depart && depart < now) {
         setNote('That date is in the past — pick a date from today on.');
         return;
@@ -509,6 +531,7 @@ export default function SearchWidget({
       tourTier: tab === 'tours' ? tourTier : 'best',
       cruiseTier: tab === 'cruises' ? cruiseTier : 'best',
       busTier: tab === 'buses' ? busTier : 'best',
+      taxiTier: tab === 'taxis' ? taxiTier : 'best',
     };
     if (tab === 'flights' && tripType === 'oneway') q.ret = '';
     if (tab === 'flights' && tripType === 'multicity') {
@@ -717,16 +740,16 @@ export default function SearchWidget({
           )}
           {tab === 'taxis' && (
             <>
-              <Field label="Pick-up">
+              <Field label="Pick-up" icon="pin">
                 <PlaceField id="taxis-pickup" label="Pick-up" value={from} onChange={setFrom} placeholder="Pick-up place" />
               </Field>
-              <Field label="Drop-off">
+              <Field label="Drop-off" icon="pin">
                 <PlaceField id="taxis-dropoff" label="Drop-off" value={dropoff} onChange={setDropoff} placeholder="Drop-off place" />
               </Field>
-              <Field label="Date">
+              <Field label="Date" icon="calendar">
                 <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
               </Field>
-              <Field label="Time">
+              <Field label="Time" icon="clock">
                 <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} aria-label="Time" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Passengers" />

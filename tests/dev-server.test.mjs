@@ -504,6 +504,62 @@ test('buses form: icons on the fields, departure and return dates, travelers sel
   assert.ok(html.includes('Search buses'), 'the buses search button renders');
 });
 
+test('search deep link: taxis renders the honest not-broken-out note and full-trip totals', async () => {
+  const r = await fetch(`${BASE}/?tab=taxis&from=New%20York&dropoff=Central%20Europe&depart=2027-01-15&time=09:30&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes("aren't broken out"), 'the gap is named');
+  assert.ok(html.includes('Full trip · planning estimate'), 'the rows say they are full-trip totals');
+  assert.ok(html.includes('from $1,800 per traveler'), 'Central Europe full trip $1,800 per traveler');
+  assert.ok(html.includes('2027-01-15 · 09:30'), 'the heading shows the searched date and time');
+  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  assert.ok(html.includes('Live taxi prices arrive when Uber / Lyft / Mozio connect.'), 'the honest supplier line renders');
+  assert.ok(!html.includes('Book now'), 'no Book now in the Taxis results');
+});
+
+test('search deep link: a tiered taxi link renders that tier on first paint', async () => {
+  const r = await fetch(`${BASE}/?tab=taxis&from=New%20York&dropoff=Central%20Europe&depart=2027-01-15&time=09:30&travelers=2&tier=cheapest`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // The list prices in the Cheapest tier, and the tier is named on
+  // every card and in the count line — a tiered search is shareable.
+  assert.ok(html.includes('Cheapest · Full trip · planning estimate'), 'the list labels the Cheapest tier');
+  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
+  assert.ok(html.includes('Cheapest taxis'), 'the count line names the tier');
+  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  assert.ok(html.includes('Taxi price'), 'the tier filter renders');
+  // The Best value figure is still there — on the tier cards, where
+  // all three tiers always show.
+  assert.ok(html.includes('from $1,800 per traveler'), 'the Best value tier card still renders');
+  assert.ok(html.includes('from $1,152 per traveler'), 'the Cheapest tier card is $1,152 per traveler');
+  assert.ok(html.includes('from $2,952 per traveler'), 'the Premium tier card is $2,952 per traveler');
+  assert.ok(html.includes('$3,600 total for 2 travelers'), 'the Best value total is the party total, not the rounded share times two');
+  assert.ok(html.includes('Best value · Our pick'), 'Best value carries Our pick');
+});
+
+test('search deep link: taxis with past dates falls back to flexible dates', async () => {
+  const r = await fetch(`${BASE}/?tab=taxis&from=New%20York&dropoff=Central%20Europe&depart=2020-01-04&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  const visible = html.replace(/<script[\s\S]*?<\/script>/g, '');
+  assert.ok(!visible.includes('2020-01-04'), 'the past ride date never appears in visible content');
+  assert.ok(visible.includes('Flexible dates'), 'the heading falls back to flexible dates');
+  assert.ok(visible.includes('aria-label="Date" value=""'), 'the Date field is empty, not pre-filled with a past date');
+  assert.ok(html.includes('Save this search'), 'the primary action is still Save this search');
+});
+
+test('taxis form: icons on the fields, pickup and drop-off, date and time, passengers select', async () => {
+  const r = await fetch(`${BASE}/?tab=taxis`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('Pick-up'), 'the pick-up field renders');
+  assert.ok(html.includes('Drop-off'), 'the drop-off field renders');
+  assert.ok(html.includes('aria-label="Date"'), 'the date field renders');
+  assert.ok(html.includes('aria-label="Time"'), 'the time field renders');
+  assert.ok(html.includes('aria-label="Passengers"'), 'the Passengers field renders on the taxis form');
+  assert.ok(html.includes('Search taxis'), 'the taxis search button renders');
+});
+
 test('tabs: ?tab=bogus falls back to Flights', async () => {
   const r = await fetch(`${BASE}/?tab=bogus`);
   assert.equal(r.status, 200);
