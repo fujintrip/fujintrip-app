@@ -565,11 +565,17 @@ test('time filter: an itinerary matches on its outbound departure bucket only', 
 });
 
 test('source tag: every live fare is labelled with its source and when it was checked', () => {
-  assert.equal(
-    ignavSourceTag('2026-11-15T21:17:00.000Z'),
-    'Ignav · live, checked Nov 15 9:17 PM',
-    'the tag carries the freshness time'
-  );
+  // The tag shows the freshness time in the viewer's local timezone
+  // (the live site renders it in the traveler's browser), so the
+  // expected clock reading is derived from the same instant — a
+  // hardcoded '9:17 PM' only passes when the process runs in UTC.
+  const ts = '2026-11-15T21:17:00.000Z';
+  const d = new Date(ts);
+  const expected = `Ignav · live, checked ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(
+    'en-US',
+    { hour: 'numeric', minute: '2-digit' }
+  )}`;
+  assert.equal(ignavSourceTag(ts), expected, 'the tag carries the freshness time');
   assert.equal(ignavSourceTag(undefined), 'Ignav · live fare', 'no timestamp is still a live tag, never a fake time');
   assert.equal(ignavSourceTag('not-a-date'), 'Ignav · live fare', 'an unparseable timestamp is never shown');
 });
