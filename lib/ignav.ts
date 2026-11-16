@@ -413,9 +413,13 @@ export function ignavFreshnessLabel(observedAt: string | null): string {
   if (!observedAt) return 'Live fares from Ignav';
   const d = new Date(observedAt);
   if (Number.isNaN(d.getTime())) return 'Live fares from Ignav';
+  // The zone is named (Nov 16, 2026): the tag renders in the
+  // viewer's browser, so a bare "4:40 PM" reads as UTC in one
+  // browser and local time in another — "4:40 PM UTC" is never
+  // mistaken for the traveler's own clock.
   return `Live · checked ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(
     'en-US',
-    { hour: 'numeric', minute: '2-digit' }
+    { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
   )}`;
 }
 
@@ -427,9 +431,11 @@ export function ignavSourceTag(observedAt: string | null): string {
   if (!observedAt) return 'Ignav · live fare';
   const d = new Date(observedAt);
   if (Number.isNaN(d.getTime())) return 'Ignav · live fare';
+  // The zone is named — see ignavFreshnessLabel: a bare clock time
+  // is UTC in one browser and local time in another.
   return `Ignav · live, checked ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(
     'en-US',
-    { hour: 'numeric', minute: '2-digit' }
+    { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
   )}`;
 }
 
@@ -451,18 +457,30 @@ export function sortIgnavItineraries(list: IgnavItinerary[], sort: RowSort): Ign
   return [...list].sort((a, b) => a.price - b.price);
 }
 
+// The trip's stop count — the OUTBOUND leg's stops (Nov 16, 2026).
+// A round trip is "1-stop" when the way out stops once, whatever the
+// return does: the same outbound-first rule the time filter and the
+// departure sort already use. The old rule — every leg must agree on
+// one stop count — left a 1-stop-out / nonstop-back trip in NO stops
+// bucket at all: uncountable and unfilterable, so the panel read
+// "1 stop (0)" next to three 1-stop-via-Madrid trips.
+export function ignavItineraryStops(it: IgnavItinerary): number {
+  return it.legs[0]?.stops ?? 0;
+}
+
 // Does this itinerary survive the panel's stops/airline/time
-// filters? Every leg must match — a round-trip with a nonstop out and
-// a 1-stop return does not pass a "Nonstop" filter. The time filter
-// reads the OUTBOUND departure only: the traveler picks when the trip
-// leaves, and the return leaves when it leaves.
+// filters? The stops filter reads the outbound only (see
+// ignavItineraryStops); the airline filter still needs every leg to
+// match — a BA-out / AA-back trip is genuinely two airlines. The
+// time filter reads the OUTBOUND departure only: the traveler picks
+// when the trip leaves, and the return leaves when it leaves.
 export function ignavItineraryMatches(
   it: IgnavItinerary,
   stopsFilter: number[],
   airlinesFilter: string[],
   timesFilter: string[] = []
 ): boolean {
-  if (stopsFilter.length && !it.legs.every((l) => stopsFilter.includes(l.stops))) return false;
+  if (stopsFilter.length && !stopsFilter.includes(ignavItineraryStops(it))) return false;
   if (airlinesFilter.length && !it.legs.every((l) => airlinesFilter.includes(l.airline))) return false;
   if (timesFilter.length) {
     const bucket = timeBucketFor(it.legs[0]?.departMinutes);

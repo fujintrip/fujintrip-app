@@ -12,8 +12,8 @@ import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES, buildPlan } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
-import { cabinClassFor, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
-import type { IgnavItinerary } from './ignav';
+import { cabinClassFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
+import { ignavItineraryStops, type IgnavItinerary } from './ignav';
 
 let placeCache: string[] | null = null;
 
@@ -1086,23 +1086,37 @@ export function sortFareOffers(offers: DuffelFareOffer[], sort: RowSort): Duffel
   return [...offers].sort((a, b) => a.price - b.price);
 }
 
-// The flights filter options + counts (Nov 15, 2026): the filter
-// checkboxes list every value the FULL live result holds — filtering
-// re-slices Ignav, so a value that only appears in a later itinerary
-// is still filterable — but every COUNT comes only from the offers
-// actually shown on screen: the Duffel legs and the Ignav itineraries
-// on screen (the Nov 15 defect: counts came from every leg of every
-// Ignav itinerary the API returned — Nonstop (277) against 9 shown
-// options). An itinerary counts toward a stops/airline value only
-// when every leg agrees — the filter itself needs every leg to match
-// — and its time bucket is the outbound departure. `totalVisible` is
-// the unfiltered visible count (Duffel legs + sliced Ignav trips);
-// null when there is nothing visible to filter at all.
+// The flights filter options + counts (Nov 16, 2026): every facet
+// count comes from the FULL unfiltered live inventory — all Duffel
+// offers and all Ignav itineraries the API returned, each itinerary
+// counted once as a trip. The Nov 15 rule (counts from the offers on
+// screen only) was wrong in the other direction: the Ignav list is
+// sliced to the 3 cheapest for display, and filtering re-slices over
+// the whole response — so British Airways read (1) before filtering
+// and the filter then revealed 4 BA fares. A facet count is a promise
+// about what the filter shows, so it is counted over the same
+// inventory the filter searches. The Nov 15 defect the shown-only
+// rule fixed (Nonstop (277) against 9 shown) stays fixed because an
+// itinerary counts once per trip — never once per leg — and its stops
+// are the trip's stops (outbound, see ignavItineraryStops). The
+// price bands count flight fares only, per traveler, the same unit
+// the max-price filter applies — never the estimate rows below the
+// results. `shownCount` / `totalCount` are different numbers on
+// purpose: the summary line counts what is actually on screen
+// (filtered, Ignav sliced to 3), while the facets count the full
+// inventory. Null when there is nothing to filter at all.
+export const LIVE_PRICE_BANDS = [1000, 1500, 2000];
+
 export type LiveFilterOptions = {
   airlines: string[];
   stops: number[];
   times: string[];
-  counts: { airlines: Record<string, number>; stops: Record<number, number>; times: Record<string, number> };
+  counts: {
+    airlines: Record<string, number>;
+    stops: Record<number, number>;
+    times: Record<string, number>;
+    prices: Record<number, number>;
+  };
   shownCount: number;
   totalCount: number;
 };
@@ -1113,6 +1127,7 @@ export function liveFilterOptions(args: {
   allOffers: DuffelFareOffer[];
   allItineraries: IgnavItinerary[];
   totalVisible: number;
+  travelers: number;
 }): LiveFilterOptions | null {
   if (args.totalVisible === 0) return null;
   const optionAirlines = new Set<string>();
@@ -1127,31 +1142,39 @@ export function liveFilterOptions(args: {
   for (const it of args.allItineraries) {
     for (const l of it.legs) {
       optionAirlines.add(l.airline);
-      optionStops.add(l.stops);
     }
+    optionStops.add(ignavItineraryStops(it));
     const b = timeBucketFor(it.legs[0]?.departMinutes);
     if (b) optionTimes.add(b);
   }
-  const counts: LiveFilterOptions['counts'] = { airlines: {}, stops: {}, times: {} };
-  let shownCount = 0;
-  const countOffer = (stops: number[], airlines: string[], bucket: string | null) => {
-    shownCount += 1;
+  const counts: LiveFilterOptions['counts'] = { airlines: {}, stops: {}, times: {}, prices: {} };
+  for (const band of LIVE_PRICE_BANDS) counts.prices[band] = 0;
+  const countFare = (stops: number[], airlines: string[], bucket: string | null, price: number) => {
     for (const s of stops) counts.stops[s] = (counts.stops[s] ?? 0) + 1;
     for (const a of airlines) counts.airlines[a] = (counts.airlines[a] ?? 0) + 1;
     if (bucket) counts.times[bucket] = (counts.times[bucket] ?? 0) + 1;
+    const perTraveler = perTravelerPrice(price, args.travelers);
+    for (const band of LIVE_PRICE_BANDS) {
+      if (perTraveler <= band) counts.prices[band] += 1;
+    }
   };
-  for (const o of args.shownOffers) {
-    countOffer([o.stops], [o.airline], timeBucketFor(o.departMinutes));
+  for (const o of args.allOffers) {
+    countFare([o.stops], [o.airline], timeBucketFor(o.departMinutes), o.price);
   }
-  for (const it of args.shownItineraries) {
-    const stops = [...new Set(it.legs.map((l) => l.stops))];
+  for (const it of args.allItineraries) {
     const airlines = [...new Set(it.legs.map((l) => l.airline))];
-    countOffer(
-      stops.length === 1 ? stops : [],
+    countFare(
+      [ignavItineraryStops(it)],
       airlines.length === 1 ? airlines : [],
-      timeBucketFor(it.legs[0]?.departMinutes)
+      timeBucketFor(it.legs[0]?.departMinutes),
+      it.price
     );
   }
+  // The summary line counts what is actually on screen — the
+  // filtered lists, Ignav sliced — not the full inventory above.
+  let shownCount = 0;
+  for (const o of args.shownOffers) shownCount += 1;
+  for (const it of args.shownItineraries) shownCount += 1;
   return {
     airlines: [...optionAirlines].sort(),
     stops: [...optionStops].sort((a, b) => a - b),

@@ -29,6 +29,7 @@ import {
   flightLegsFromSearch,
   isKnownPlace,
   liveFilterOptions,
+  LIVE_PRICE_BANDS,
   rowIncludesPlace,
   searchRequestLabel,
   sortFareOffers,
@@ -460,7 +461,10 @@ function FlightResults({
   airlinesFilter: string[];
   // Departure-time buckets the traveler picked ('' when none) — the
   // filter system, Nov 15 2026: airline, stops, price and times all
-  // narrow the live offers, and every count matches what is shown.
+  // narrow the live offers. The facet counts come from the full
+  // unfiltered inventory (Nov 16, 2026 — see liveFilterOptions), so a
+  // count is what the filter actually shows; only the "Showing X of
+  // Y" line counts what is on screen.
   timesFilter: string[];
   onLiveOptions: (opts: LiveFilterOptions | null) => void;
   onSave: (label: string) => void;
@@ -682,9 +686,10 @@ function FlightResults({
   }, [fares.data, ignav.data, stopsFilter, airlinesFilter, timesFilter, maxPrice, sort, query.travelers]);
   const { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists } = visibleLive;
 
-  // The filter options + counts (Nov 15, 2026): the options come from
-  // the full live result, the counts only from the offers on screen —
-  // see liveFilterOptions. The JSON-key guard keeps the parent from
+  // The filter options + counts (Nov 16, 2026): the options and the
+  // facet counts come from the full live result, while shownCount /
+  // totalCount count what is actually on screen — see
+  // liveFilterOptions. The JSON-key guard keeps the parent from
   // re-rendering on an identical value.
   const liveOptionsValue = useMemo(() => {
     const totalVisible =
@@ -709,8 +714,9 @@ function FlightResults({
       ],
       allItineraries: ignav.data?.itineraries ?? [],
       totalVisible,
+      travelers: query.travelers,
     });
-  }, [visibleLive, fares.data, ignav.data]);
+  }, [visibleLive, fares.data, ignav.data, query.travelers]);
   const liveOptionsKeyRef = useRef('');
   useEffect(() => {
     const key = liveOptionsValue === null ? 'null' : JSON.stringify(liveOptionsValue);
@@ -2223,7 +2229,15 @@ export default function SearchResults({
                   : tabRowsFor(query.tab, query.travelers),
     [query.tab, query.travelers, query.guests, stayTier, carTier, tourTier, cruiseTier, busTier, taxiTier]
   );
-  const underCount = (max: number) => estimateRows.filter((r) => r.pricePerTraveler <= max).length;
+  // The max-price counts (Nov 16, 2026): on the flights tab with
+  // live fares loaded, the bands count LIVE FARES per traveler —
+  // the same unit the filter applies — never the estimate rows below
+  // the results (the old code counted those 21 destination cards, so
+  // every band read (21) and picking one changed nothing visible).
+  // While the fares are still loading, or on any other tab, the
+  // bands count the estimate rows the price filter actually narrows.
+  const underCount = (max: number) =>
+    query.tab === 'flights' && liveOptions ? liveOptions.counts.prices[max] ?? 0 : estimateRows.filter((r) => r.pricePerTraveler <= max).length;
   // The map toggle (defect, Nov 14 2026: the live flights results
   // page had no "map" at all — the toggle existed only on Stays). It
   // lives here now, shared by Flights and Stays: the discovery pins
@@ -2276,9 +2290,11 @@ export default function SearchResults({
           aria-label="Maximum price per traveler"
         >
           <option value="">Any price</option>
-          <option value="1000">Under $1,000 ({underCount(1000)})</option>
-          <option value="1500">Under $1,500 ({underCount(1500)})</option>
-          <option value="2000">Under $2,000 ({underCount(2000)})</option>
+          {LIVE_PRICE_BANDS.map((band) => (
+            <option key={band} value={band}>
+              Under ${band.toLocaleString()} ({underCount(band)})
+            </option>
+          ))}
         </select>
       </div>
       {query.tab === 'hotels' && (

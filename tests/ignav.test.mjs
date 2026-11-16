@@ -17,6 +17,7 @@ import {
   ignavEmptyMessage,
   ignavFreshnessLabel,
   ignavItineraryMatches,
+  ignavItineraryStops,
   ignavSourceTag,
   parseIgnavBookingLinksResponse,
   parseIgnavFareSearchResponse,
@@ -520,6 +521,15 @@ test('errors: 401/402/network map to honest reasons, never a retry loop', async 
 test('freshness label: observed_at becomes a checked time, null stays generic', () => {
   assert.ok(ignavFreshnessLabel('2026-11-15T18:00:00Z').startsWith('Live · checked'), 'a timestamp labels the check');
   assert.ok(ignavFreshnessLabel('2026-11-15T18:00:00Z').includes('Nov 15'), 'the check date is visible');
+  // The zone is named (Nov 16, 2026): a bare clock time is UTC in
+  // one browser and local time in another, so the label carries the
+  // zone the time was rendered in.
+  const d = new Date('2026-11-15T18:00:00Z');
+  const zone = d
+    .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    .split(' ')
+    .pop();
+  assert.ok(ignavFreshnessLabel('2026-11-15T18:00:00Z').endsWith(zone), 'the checked time names its timezone');
   assert.equal(ignavFreshnessLabel(null), 'Live fares from Ignav');
   assert.equal(ignavFreshnessLabel('not-a-date'), 'Live fares from Ignav');
 });
@@ -550,6 +560,33 @@ test('sort + filter: itineraries sort by price/duration/departure and match the 
   assert.equal(cheapestIgnavItinerary([]), 0);
 });
 
+test('stops: a trip counts by its outbound — a 1-stop-out / nonstop-back trip is 1-stop', () => {
+  // The live Nov 16 defect: three BA trips 1-stop via Madrid read
+  // "1 stop (0)" because the old rule needed every leg to agree on
+  // one stop count, and a 1-stop out + nonstop back agreed on none.
+  const mixed = {
+    price: 900,
+    ignavId: 'mix',
+    legs: [
+      { airline: 'British Airways', stops: 1, departMinutes: 500, price: 900 },
+      { airline: 'British Airways', stops: 0, departMinutes: 600, price: 900 },
+    ],
+  };
+  assert.equal(ignavItineraryStops(mixed), 1, 'the trip is 1-stop — the way out stops once');
+  assert.equal(ignavItineraryMatches(mixed, [1], []), true, 'the 1-stop trip passes a 1-stop filter');
+  assert.equal(ignavItineraryMatches(mixed, [0], []), false, 'the 1-stop trip does not pass a Nonstop filter');
+  const nonstop = {
+    price: 800,
+    ignavId: 'ns',
+    legs: [
+      { airline: 'British Airways', stops: 0, departMinutes: 500, price: 800 },
+      { airline: 'British Airways', stops: 0, departMinutes: 600, price: 800 },
+    ],
+  };
+  assert.equal(ignavItineraryStops(nonstop), 0, 'nonstop both ways is nonstop');
+  assert.equal(ignavItineraryMatches(nonstop, [0], []), true, 'the nonstop passes a Nonstop filter');
+});
+
 test('time filter: an itinerary matches on its outbound departure bucket only', () => {
   const parsed = parseIgnavFareSearchResponse(ONEWAY_SAMPLE);
   const its = parsed.itineraries;
@@ -569,13 +606,15 @@ test('source tag: every live fare is labelled with its source and when it was ch
   // (the live site renders it in the traveler's browser), so the
   // expected clock reading is derived from the same instant — a
   // hardcoded '9:17 PM' only passes when the process runs in UTC.
+  // The zone is named too (Nov 16, 2026): a bare time is UTC in one
+  // browser and local time in another.
   const ts = '2026-11-15T21:17:00.000Z';
   const d = new Date(ts);
   const expected = `Ignav · live, checked ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(
     'en-US',
-    { hour: 'numeric', minute: '2-digit' }
+    { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }
   )}`;
-  assert.equal(ignavSourceTag(ts), expected, 'the tag carries the freshness time');
+  assert.equal(ignavSourceTag(ts), expected, 'the tag carries the freshness time and its zone');
   assert.equal(ignavSourceTag(undefined), 'Ignav · live fare', 'no timestamp is still a live tag, never a fake time');
   assert.equal(ignavSourceTag('not-a-date'), 'Ignav · live fare', 'an unparseable timestamp is never shown');
 });
