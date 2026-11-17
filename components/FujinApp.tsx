@@ -72,7 +72,7 @@ const CATEGORY_TILES: { id: HomeTabId; label: string; icon: IconName; blurb: str
 const SHELF_COPY: Record<HomeTabId, { heading: string; line: string }> = {
   flights: {
     heading: 'Flights',
-    line: 'Live fares arrive as suppliers connect — these are planner flight legs, planning estimates.',
+    line: 'Live fares from Ignav and LetsFG appear in the flight results — the figures below are planner flight legs, planning estimates.',
   },
   hotels: {
     heading: 'Stays',
@@ -841,7 +841,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               section stops dominating the homepage. The content is
               still in the page — collapsed, not removed. */}
           <details>
-            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Your travel preferences</h3></summary>
+            <summary><span className="details-heading">Your travel preferences</span></summary>
           <p className="plan-muted">What you tell Fujin here carries across trips — on this device, no account. Only what you picked or said in the chat is ever used; nothing is guessed. Tap a chip again to clear it.</p>
           {profileSummary(profile) ? (
             <p style={{ fontSize: 14 }}>Now using: <strong>{profileSummary(profile)}</strong></p>
@@ -887,7 +887,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           </div>
           </details>
           <details>
-            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Emergency contact</h3></summary>
+            <summary><span className="details-heading">Emergency contact</span></summary>
             <p className="plan-muted">For solo trips — who should be reached if something goes wrong? Stored on this device only, shown on your solo trip cards.</p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <input value={emergencyContact.name} onChange={(e) => setEmergencyContact({ ...emergencyContact, name: e.target.value })} placeholder="Name" aria-label="Emergency contact name" />
@@ -895,14 +895,14 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           </div>
           </details>
           <details>
-            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Embassy / consulate</h3></summary>
+            <summary><span className="details-heading">Embassy / consulate</span></summary>
             <p className="plan-muted">Your embassy or consulate&apos;s number for the country you&apos;re visiting — yours to type in, saved on this device only. The SOS sheet can call it.</p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <input value={embassyNumber} onChange={(e) => setEmbassyNumber(e.target.value)} placeholder="Embassy number" aria-label="Embassy or consulate phone number" />
           </div>
           </details>
           <details>
-            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Price watches</h3></summary>
+            <summary><span className="details-heading">Price watches</span></summary>
             <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. The plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
           {watches.length === 0 ? <p style={{ color: 'var(--muted)' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>

@@ -642,3 +642,23 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   assert.ok(css.includes("--font-display:'DM Sans'"), 'the display face is still DM Sans, not Expedia’s');
   assert.ok(css.includes("--font-body:'Inter'"), 'the body face is still Inter');
 });
+
+// Review fixes (Nov 16, 2026 — second pair of eyes on the interface
+// round): the flights shelf must not claim live fares don't exist yet
+// (Ignav and LetsFG are live), no <h3> may sit inside a <summary>
+// (invalid HTML — a styled span carries the heading look), and no
+// result-price line may sit at column 0.
+test('review fixes: flights shelf copy, summary headings, price indentation', () => {
+  const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.ok(!app.includes('Live fares arrive as suppliers connect'), 'the flights shelf never claims live fares are still coming');
+  assert.ok(
+    app.includes('Live fares from Ignav and LetsFG appear in the flight results'),
+    'the flights shelf names the live fare sources',
+  );
+  assert.ok(!app.includes('<summary><h3'), 'no heading sits inside a summary element');
+  assert.ok(app.includes('className="details-heading"'), 'the summary headings use the styled span');
+  assert.ok(css.includes('.details-heading{'), 'the details heading style exists');
+  assert.ok(!/^<p className="result-price">/m.test(results), 'no result-price line sits at column 0');
+});

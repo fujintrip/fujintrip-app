@@ -2310,7 +2310,7 @@ function CruiseCard({
         </p>
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
         <p className="card-note">Full-trip total — not a cruise price.</p>
-<p className="result-price">
+        <p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
           <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
         </p>
@@ -2388,7 +2388,7 @@ function CruiseResults({
                     {monthLabel} · {travelers}
                   </p>
                   <p className="card-note">Full-trip total — not a cruise price.</p>
-<p className="result-price">
+                  <p className="result-price">
                     from ${t.perTraveler.toLocaleString()} per traveler{' '}
                     <span className="plan-muted">· Full trip · planning estimate</span>
                   </p>
@@ -2465,7 +2465,7 @@ function BusCard({
         </p>
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
         <p className="card-note">Full-trip total — not a bus price.</p>
-<p className="result-price">
+        <p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
           <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
         </p>
@@ -2543,7 +2543,7 @@ function BusResults({
                     {query.from || 'Anywhere'} → {query.to} · {dates} · {travelers}
                   </p>
                   <p className="card-note">Full-trip total — not a bus price.</p>
-<p className="result-price">
+                  <p className="result-price">
                     from ${t.perTraveler.toLocaleString()} per traveler{' '}
                     <span className="plan-muted">· Full trip · planning estimate</span>
                   </p>
@@ -2622,7 +2622,7 @@ function TaxiCard({
         </p>
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
         <p className="card-note">Full-trip total — not a taxi price.</p>
-<p className="result-price">
+        <p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
           <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
         </p>
@@ -2910,7 +2910,7 @@ function TaxiResults({
                     {query.from || 'Anywhere'} → {query.dropoff || 'Anywhere'} · {dates} · {travelers}
                   </p>
                   <p className="card-note">Full-trip total — not a taxi price.</p>
-<p className="result-price">
+                  <p className="result-price">
                     from ${t.perTraveler.toLocaleString()} per traveler{' '}
                     <span className="plan-muted">· Full trip · planning estimate</span>
                   </p>
