@@ -614,3 +614,27 @@ test('restructure: the new grids stack to one column at 390px', () => {
   assert.ok(css.includes('.fares-strip{display:flex'), 'the fares strip scrolls horizontally on a phone');
   assert.ok(css.includes('.pkg-actions button{min-height:44px'), 'package actions are 44px touch targets');
 });
+
+// Expedia restyle (Nov 16, 2026 — "copy everything"): the design
+// language is Expedia's — a wide 1200px container with 24px gutters,
+// one radius scale (8px fields, 12px bars, 16px cards), barely-there
+// resting shadows, and 20px gaps between cards. Visual layer only:
+// no layout, copy, or behavior changes. Brand, fonts, and the white
+// hero are FujinTrip's own.
+test('expedia restyle: wide container, one radius scale, airy grids', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  assert.ok(css.includes('.wrap{max-width:1200px;margin:0 auto;padding:0 24px}'), 'the container is 1200px with 24px gutters');
+  assert.ok(css.includes('calc((100vw - 1200px)/2 + 24px)'), 'the sticky header caps at the same 1200px container');
+  for (const cls of ['.card', '.search-widget', '.result-card', '.pkg-card', '.fare-card', '.flight-option-card', '.step', '.voices-teaser']) {
+    assert.ok(new RegExp(`\\${cls}\\{[^}]*border-radius:16px`).test(css), `${cls} uses the 16px card radius`);
+  }
+  assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:8px/.test(css), 'search fields use the 8px radius');
+  assert.ok(/\.results-bar\{[^}]*border-radius:12px/.test(css), 'the results bar uses the 12px radius');
+  assert.ok(/\.flight-filter-bar\{[^}]*border-radius:16px/.test(css), 'the flights filter bar uses the 16px radius');
+  for (const grid of ['.result-cards', '.pkg-grid', '.deals-grid', '.flight-card-grid', '.cat-tiles']) {
+    assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:20px`).test(css), `${grid} breathes at a 20px gap`);
+  }
+  assert.ok(css.includes('footer{border-top:1px solid var(--line);padding:48px 0 64px;color:var(--muted);font-size:13px;background:var(--surface)}'), 'the footer is a roomy surface band');
+  assert.ok(css.includes("--font-display:'DM Sans'"), 'the display face is still DM Sans, not Expedia’s');
+  assert.ok(css.includes("--font-body:'Inter'"), 'the body face is still Inter');
+});

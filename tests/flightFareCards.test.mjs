@@ -313,7 +313,7 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
 
 test('fare cards: the time row wraps as a unit — no overlap at desktop width', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  assert.ok(css.includes('.fare-card{border:1px solid var(--line);border-radius:20px'), 'the card is a 20px-rounded card, not a bare row');
+  assert.ok(css.includes('.fare-card{border:1px solid var(--line);border-radius:16px'), 'the card is a 16px-rounded card, not a bare row');
   assert.ok(css.includes('.fare-card-price strong{display:block;font-size:22px'), 'the total is the largest type on the card');
   assert.ok(css.includes('.fare-card-toggle{'), 'the details toggle is styled');
   assert.ok(css.includes('min-height:44px'), 'the toggle is a 44px touch target');
