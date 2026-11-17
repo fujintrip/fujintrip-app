@@ -1155,7 +1155,12 @@ test('discovery map (direction v3): off the homepage, kept for the Stays results
   const html = (await r.text()).replace(/<!-- -->/g, '');
   // The homepage is a search-and-browse site now — no map section.
   assert.ok(!html.includes('Where to go — explore the map'), 'no discovery map section on the homepage');
-  assert.ok(!html.includes('Best month to go:'), 'no pin panel on the homepage');
+  // The pin panel is gone too: the map container class only appears
+  // where a DiscoveryMap mounts (results map toggle, destination
+  // pages). The 'Best month to go:' line is no longer a map marker —
+  // the Local Voices section carries best-time lines now (interface
+  // round, Nov 16 2026, P1 #11).
+  assert.ok(!html.includes('discover-map'), 'no map container on the homepage');
   assert.ok(!html.includes('Central Europe · $3,600'), 'no pin chip list on the homepage');
   // The map survives where it belongs: the Stays results toggle.
   const stays = await fetch(`${BASE}/?tab=hotels&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&guests=2&rooms=1`);
@@ -1558,27 +1563,28 @@ test('mobile: the served stylesheet carries the phone rules', async () => {
   assert.ok(css.includes('.results-bar{top:65px}'), 'the results bar clears the phone header');
 });
 
-test('homepage restructure: sections in order — packages, fares, deals, destinations, tiles, how it works, stories, voices, near you, trust (Nov 15 2026)', async () => {
+test('homepage restructure: sections in order — trust under the hero/results, tiles, packages, fares, deals, destinations, how it works, stories, voices, near you, My Trips (Nov 16 2026)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The order is the restructure: the hero + widget first, then the
-  // packages centerpiece, the fares strip, the deals, and only then
-  // the browse sections — Travelers' stories moved up, the trust
-  // strip now closes the page after My Trips.
+  // The order is the interface round (Nov 16 2026): the trust strip
+  // sits directly under the hero (under the results when a search is
+  // active), the category tiles come first in the page body, and only
+  // then the packages centerpiece, the fares strip, the deals, and
+  // the browse sections. The trust lines repeat in the footer.
   const order = [
     'Where to?',
+    'All-in prices — the price you see is the price you pay',
+    'What do you need for your trip?',
     'Ready-made packages',
     'The lowest prices across our routes',
     'Our lowest prices this week',
     'Popular destinations',
-    'What do you need for your trip?',
     'Plan, book, follow',
     "Travelers' stories",
     'What travelers say, from the places you go',
     'Weekend trips near you',
     'id="mytrips"',
-    'All-in prices — the price you see is the price you pay',
   ];
   let prev = -1;
   for (const marker of order) {
@@ -1586,6 +1592,42 @@ test('homepage restructure: sections in order — packages, fares, deals, destin
     assert.ok(i > prev, `${marker} renders after the previous section (at ${i}, prev ${prev})`);
     prev = i;
   }
+});
+
+test('destination page: /destination/Paris renders the guide from lib data, never a Book now (Nov 16 2026)', async () => {
+  const r = await fetch(`${BASE}/destination/Paris`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Paris'), 'destination name renders');
+  assert.ok(html.includes('Plan it in three ways'), 'tier cards render');
+  assert.ok(html.includes('Best month to go:'), 'best-time line renders');
+  assert.ok(html.includes('Local voices'), 'local voices section renders');
+  assert.ok(html.includes('Related destinations'), 'related destinations render');
+  assert.ok(html.includes('Plan with AI'), 'the header pill is the only AI entry');
+  assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on a destination page');
+});
+
+test('destination page: an unknown destination says so honestly, never an invented guide (Nov 16 2026)', async () => {
+  const r = await fetch(`${BASE}/destination/Nowhereville`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('No guide for Nowhereville yet'), 'unknown destination gets an honest empty');
+});
+
+test('hotel detail page: without keys the sandbox search answers honestly empty, never an invented hotel (Nov 16 2026)', async () => {
+  const r = await fetch(`${BASE}/hotels/1067?dest=Paris&checkIn=2027-01-15&checkOut=2027-01-22&guests=2&rooms=1`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('No sandbox hotel found'), 'no keys means an honest empty, not a fake hotel');
+  assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on a hotel detail page');
+});
+
+test('activity detail page: without keys the sandbox search answers honestly empty, never an invented tour (Nov 16 2026)', async () => {
+  const r = await fetch(`${BASE}/activities/E-E10-PARHOPONHO?dest=Paris&from=2027-01-15&to=2027-01-22&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = await r.text();
+  assert.ok(html.includes('No sandbox activity found'), 'no keys means an honest empty, not a fake activity');
+  assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on an activity detail page');
 });
 
 test('homepage restructure: package cards are honest — planning estimates, Save first, never Book now (Nov 15 2026)', async () => {

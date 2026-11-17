@@ -114,6 +114,44 @@ export type HotelbedsTransfersInput = {
   adults: number;
 };
 
+// --- Filters ---------------------------------------------------------
+// Private/shared + capacity filters (interface round, Nov 16 2026):
+// transferType is the split (PRIVATE vs SHARED shuttle) and
+// maxPaxCapacity is the party it fits. Options and counts come from
+// the transfers actually returned — never invented. A transfer with
+// no capacity only matches when the capacity filter is unset.
+export type HotelbedsTransferFilter = {
+  type: 'ALL' | 'PRIVATE' | 'SHARED';
+  minCapacity: number | null;
+  maxPrice: number | null;
+};
+
+export function transferTypeOptions(
+  transfers: HotelbedsTransfer[]
+): Array<{ value: 'PRIVATE' | 'SHARED'; label: string; count: number }> {
+  const counts = new Map<'PRIVATE' | 'SHARED', number>();
+  for (const t of transfers) counts.set(t.transferType, (counts.get(t.transferType) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({
+      value: type,
+      label: type === 'PRIVATE' ? 'Private transfer' : 'Shared shuttle',
+      count,
+    }));
+}
+
+export function filterHotelbedsTransfers(
+  transfers: HotelbedsTransfer[],
+  f: HotelbedsTransferFilter
+): HotelbedsTransfer[] {
+  return transfers.filter((t) => {
+    if (f.type !== 'ALL' && t.transferType !== f.type) return false;
+    if (f.minCapacity !== null && !(t.maxPaxCapacity !== undefined && t.maxPaxCapacity >= f.minCapacity)) return false;
+    if (f.maxPrice !== null && t.perTraveler > f.maxPrice) return false;
+    return true;
+  });
+}
+
 // The sandbox tag on every transfer card and on the section
 // header: source + test-data warning, always visible — it is the
 // honesty label, not a source tag, so it never hides behind a

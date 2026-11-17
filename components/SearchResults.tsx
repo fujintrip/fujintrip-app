@@ -105,14 +105,35 @@ import {
   sortLetsfgItineraries,
 } from '../lib/letsfg';
 import type { HotelbedsHotel, HotelbedsSearchResult } from '../lib/hotelbeds';
-import { hotelbedsEmptyMessage, hotelbedsProductEnabled, hotelbedsSandboxTag } from '../lib/hotelbeds';
+import {
+  filterHotelbedsHotels,
+  hotelbedsBoardOptions,
+  hotelbedsEmptyMessage,
+  hotelbedsProductEnabled,
+  hotelbedsSandboxTag,
+  hotelbedsStarOptions,
+  hotelbedsStars,
+  hotelbedsZoneOptions,
+} from '../lib/hotelbeds';
 import type { HotelbedsActivity, HotelbedsActivitiesResult } from '../lib/hotelbeds-activities';
-import { hotelbedsActivitiesEmptyMessage, hotelbedsActivitiesSandboxTag } from '../lib/hotelbeds-activities';
+import {
+  activityModalityOptions,
+  filterHotelbedsActivities,
+  hotelbedsActivitiesEmptyMessage,
+  hotelbedsActivitiesSandboxTag,
+  type HotelbedsActivityDuration,
+} from '../lib/hotelbeds-activities';
 import type { HotelbedsTransfer, HotelbedsTransfersResult } from '../lib/hotelbeds-transfers';
-import { hotelbedsTransfersEmptyMessage, hotelbedsTransfersSandboxTag } from '../lib/hotelbeds-transfers';
+import {
+  filterHotelbedsTransfers,
+  hotelbedsTransfersEmptyMessage,
+  hotelbedsTransfersSandboxTag,
+  transferTypeOptions,
+} from '../lib/hotelbeds-transfers';
 import { serviceFee } from '../lib/planner';
 import { mergeFlightOptions, type FlightOption } from '../lib/flightOptions';
 import { SafeImg } from './FujinChat';
+import HotelGallery from './HotelGallery';
 import { AirlineLogo } from './AirlineLogo';
 import { Icon } from './icons';
 
@@ -1426,6 +1447,15 @@ function StayCard({
 // label (test data, not a bookable room), not a source tag. No
 // "Book now": sandbox rooms cannot be booked, so the primary
 // action is "Save this search" like every other card.
+// One Hotelbeds sandbox hotel as a card: the gallery (ContentAPI,
+// up to 6 photos — the card is no longer one photo), the name
+// linked to its detail page, the star class, zone, room + board,
+// and the total test price for the whole stay (per night + per
+// traveler beside it). The sandbox tag is on EVERY card and never
+// hides behind a filter — it is the honesty label (test data, not a
+// bookable room), not a source tag. No "Book now": sandbox hotels
+// cannot be booked, so the primary action is "Save this search"
+// like every other card.
 function HotelbedsHotelCard({
   hotel,
   query,
@@ -1440,11 +1470,17 @@ function HotelbedsHotelCard({
   const money = (n: number) =>
     hotel.currency === 'USD' ? `$${n.toLocaleString()}` : `${n.toLocaleString()} ${hotel.currency}`;
   const place = [hotel.zoneName, hotel.destinationName].filter(Boolean).join(' · ');
+  const stars = hotelbedsStars(hotel);
+  const gallery = hotel.images && hotel.images.length > 0 ? hotel.images : hotel.imageUrl ? [hotel.imageUrl] : [];
+  const detailHref = `/hotels/${hotel.code}?dest=${encodeURIComponent(query.dest)}&checkIn=${query.depart}&checkOut=${query.ret}&guests=${query.guests}&rooms=${query.rooms}`;
   return (
     <article className="result-card">
-      {hotel.imageUrl && <SafeImg src={hotel.imageUrl} alt={hotel.name} label={hotel.name} className="result-photo" />}
+      <HotelGallery images={gallery} name={hotel.name} />
       <div className="result-body">
-        <h3>{hotel.name}</h3>
+        <h3>
+          <a href={detailHref}>{hotel.name}</a>
+          {stars !== null ? ` · ${'★'.repeat(stars)}` : ''}
+        </h3>
         {(hotel.categoryName || place) && (
           <p className="plan-muted">
             {[hotel.categoryName, place].filter(Boolean).join(' · ')}
@@ -1483,12 +1519,20 @@ function HotelbedsStays({
   query,
   sort,
   maxPrice,
+  starFilter,
+  zoneFilter,
+  boardFilter,
   onSave,
+  onHotels,
 }: {
   query: SearchQuery;
   sort: RowSort;
   maxPrice: number | null;
+  starFilter: number | null;
+  zoneFilter: string | null;
+  boardFilter: string | null;
   onSave: (label: string) => void;
+  onHotels: (hotels: HotelbedsHotel[]) => void;
 }) {
   const [state, setState] = useState<{ status: 'idle' | 'loading' | 'done'; data: HotelbedsSearchResult | null }>({
     status: 'idle',
@@ -1525,13 +1569,21 @@ function HotelbedsStays({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  // The hotels lift up to the results shell: the sidebar facets
+  // (star, zone, board) and the map price pins both read the full
+  // list, while this section only renders the filtered view.
+  const hotels = state.data?.hotels ?? [];
+  useEffect(() => {
+    onHotels(state.data?.live ? hotels : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.data]);
   const visible = useMemo(() => {
-    const list = state.data?.hotels ?? [];
-    const filtered = maxPrice === null ? list : list.filter((h) => h.perTraveler <= maxPrice);
+    const filtered = filterHotelbedsHotels(hotels, { star: starFilter, zone: zoneFilter, board: boardFilter, maxPrice });
     if (sort === 'cheapest' || sort === 'best') return [...filtered].sort((a, b) => a.price - b.price);
     return filtered;
-  }, [state.data, maxPrice, sort]);
+  }, [hotels, maxPrice, sort, starFilter, zoneFilter, boardFilter]);
   const nights = state.data?.nights ?? null;
+  const anyFilter = maxPrice !== null || starFilter !== null || zoneFilter !== null || boardFilter !== null;
   return (
     <div aria-label="Hotelbeds sandbox hotels">
       <h4>Hotels in {query.dest || 'your destination'} — Hotelbeds sandbox</h4>
@@ -1548,13 +1600,13 @@ function HotelbedsStays({
       )}
       {state.status === 'done' && state.data && state.data.live && (
         <>
-          {maxPrice !== null && (
+          {anyFilter && (
             <p className="fare-count">
               Showing {visible.length} of {state.data.hotels.length} sandbox hotels.
             </p>
           )}
           {visible.length === 0 ? (
-            <p className="plan-muted">No sandbox hotels under that price — raise the max price or clear it.</p>
+            <p className="plan-muted">No sandbox hotels match those filters — clear them or raise the max price.</p>
           ) : (
             <div className="result-cards">
               {visible.map((h) => (
@@ -1591,17 +1643,25 @@ function StayResults({
   sort,
   maxPrice,
   stayTier,
+  starFilter,
+  zoneFilter,
+  boardFilter,
   onSave,
   onClearPrice,
   onClearStayFilters,
+  onHotels,
 }: {
   query: SearchQuery;
   sort: RowSort;
   maxPrice: number | null;
   stayTier: StayTier;
+  starFilter: number | null;
+  zoneFilter: string | null;
+  boardFilter: string | null;
   onSave: (label: string) => void;
   onClearPrice: () => void;
   onClearStayFilters: () => void;
+  onHotels: (hotels: HotelbedsHotel[]) => void;
 }) {
   const known = isKnownPlace(query.dest);
   const tiers = known ? stayTierOptions(query.dest, query.guests) : null;
@@ -1670,7 +1730,16 @@ function StayResults({
         </p>
       )}
       {hotelbedsProductEnabled('hotel') && (
-        <HotelbedsStays query={query} sort={sort} maxPrice={maxPrice} onSave={onSave} />
+        <HotelbedsStays
+          query={query}
+          sort={sort}
+          maxPrice={maxPrice}
+          starFilter={starFilter}
+          zoneFilter={zoneFilter}
+          boardFilter={boardFilter}
+          onSave={onSave}
+          onHotels={onHotels}
+        />
       )}
       <h4>Stays by destination — planning estimates</h4>
       {rows.length === 0 ? (
@@ -1925,11 +1994,14 @@ function HotelbedsActivityCard({
   const money = (n: number) =>
     activity.currency === 'USD' ? `$${n.toLocaleString()}` : `${n.toLocaleString()} ${activity.currency}`;
   const place = [activity.destinationName, activity.countryName].filter(Boolean).join(' · ');
+  const detailHref = `/activities/${encodeURIComponent(activity.code)}?dest=${encodeURIComponent(query.dest)}&from=${query.depart}&to=${query.ret}&travelers=${query.travelers}`;
   return (
     <article className="result-card">
       {activity.imageUrl && <SafeImg src={activity.imageUrl} alt={activity.name} label={activity.name} className="result-photo" />}
       <div className="result-body">
-        <h3>{activity.name}</h3>
+        <h3>
+          <a href={detailHref}>{activity.name}</a>
+        </h3>
         {place && <p className="plan-muted">{place}</p>}
         {(activity.modalityName || activity.durationDays !== undefined) && (
           <p className="plan-muted">
@@ -1979,6 +2051,12 @@ function HotelbedsActivities({
     status: 'idle',
     data: null,
   });
+  // Modality chips + duration filter (interface round, Nov 16 2026):
+  // local filter state — the planner attraction list has no modality
+  // or duration data, so the chips narrow the sandbox activities
+  // only. Counts come from the full result set.
+  const [modality, setModality] = useState<string | null>(null);
+  const [duration, setDuration] = useState<HotelbedsActivityDuration>('any');
   const key = `${query.dest}|${query.depart}|${query.ret}|${query.travelers}`;
   const fetchedKeyRef = useRef('');
   useEffect(() => {
@@ -2009,12 +2087,14 @@ function HotelbedsActivities({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  const activities = state.data?.activities ?? [];
+  const modalityOptions = useMemo(() => activityModalityOptions(activities), [activities]);
   const visible = useMemo(() => {
-    const list = state.data?.activities ?? [];
-    const filtered = maxPrice === null ? list : list.filter((a) => a.perTraveler <= maxPrice);
+    const filtered = filterHotelbedsActivities(activities, { modality, duration, maxPrice });
     if (sort === 'cheapest' || sort === 'best') return [...filtered].sort((a, b) => a.price - b.price);
     return filtered;
-  }, [state.data, maxPrice, sort]);
+  }, [activities, maxPrice, sort, modality, duration]);
+  const anyFilter = maxPrice !== null || modality !== null || duration !== 'any';
   return (
     <div aria-label="Hotelbeds sandbox activities">
       <h4>Activities in {query.dest || 'your destination'} — Hotelbeds sandbox</h4>
@@ -2031,13 +2111,47 @@ function HotelbedsActivities({
       )}
       {state.status === 'done' && state.data && state.data.live && (
         <>
-          {maxPrice !== null && (
+          <div className="filter-chips" role="group" aria-label="Filter sandbox activities by type">
+            <button
+              type="button"
+              className={`chip${modality === null ? ' selected' : ''}`}
+              onClick={() => setModality(null)}
+              aria-pressed={modality === null}
+            >
+              All types ({activities.length})
+            </button>
+            {modalityOptions.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                className={`chip${modality === o.value ? ' selected' : ''}`}
+                onClick={() => setModality(modality === o.value ? null : o.value)}
+                aria-pressed={modality === o.value}
+              >
+                {o.label} ({o.count})
+              </button>
+            ))}
+            <label className="filter-chip-select">
+              <span>Duration</span>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(e.target.value as HotelbedsActivityDuration)}
+                aria-label="Filter sandbox activities by duration"
+              >
+                <option value="any">Any duration</option>
+                <option value="1">1 day or less</option>
+                <option value="2">2 days</option>
+                <option value="3plus">3 days or more</option>
+              </select>
+            </label>
+          </div>
+          {anyFilter && (
             <p className="fare-count">
               Showing {visible.length} of {state.data.activities.length} sandbox activities.
             </p>
           )}
           {visible.length === 0 ? (
-            <p className="plan-muted">No sandbox activities under that price — raise the max price or clear it.</p>
+            <p className="plan-muted">No sandbox activities match those filters — clear them or raise the max price.</p>
           ) : (
             <div className="result-cards">
               {visible.map((a) => (
@@ -2195,7 +2309,8 @@ function CruiseCard({
           {monthLabel} · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
         </p>
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
-        <p className="result-price">
+        <p className="card-note">Full-trip total — not a cruise price.</p>
+<p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
           <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
         </p>
@@ -2272,7 +2387,8 @@ function CruiseResults({
                   <p className="plan-muted">
                     {monthLabel} · {travelers}
                   </p>
-                  <p className="result-price">
+                  <p className="card-note">Full-trip total — not a cruise price.</p>
+<p className="result-price">
                     from ${t.perTraveler.toLocaleString()} per traveler{' '}
                     <span className="plan-muted">· Full trip · planning estimate</span>
                   </p>
@@ -2348,7 +2464,8 @@ function BusCard({
           {dates} · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
         </p>
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
-        <p className="result-price">
+        <p className="card-note">Full-trip total — not a bus price.</p>
+<p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
           <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
         </p>
@@ -2425,7 +2542,8 @@ function BusResults({
                   <p className="plan-muted">
                     {query.from || 'Anywhere'} → {query.to} · {dates} · {travelers}
                   </p>
-                  <p className="result-price">
+                  <p className="card-note">Full-trip total — not a bus price.</p>
+<p className="result-price">
                     from ${t.perTraveler.toLocaleString()} per traveler{' '}
                     <span className="plan-muted">· Full trip · planning estimate</span>
                   </p>
@@ -2503,7 +2621,8 @@ function TaxiCard({
           {dates} · {query.travelers} traveler{query.travelers > 1 ? 's' : ''}
         </p>
         {highlight && <p className="result-match-line">Includes the place you searched for.</p>}
-        <p className="result-price">
+        <p className="card-note">Full-trip total — not a taxi price.</p>
+<p className="result-price">
           from ${row.pricePerTraveler.toLocaleString()} per traveler{' '}
           <span className="plan-muted">· {tierLabel} · Full trip · planning estimate</span>
         </p>
@@ -2605,6 +2724,12 @@ function HotelbedsTransfers({
     status: 'idle',
     data: null,
   });
+  // Private/shared + capacity filters (interface round, Nov 16
+  // 2026): local filter state — the planner taxi list has no
+  // transfer type or capacity data, so the filters narrow the
+  // sandbox transfers only. Counts come from the full result set.
+  const [transferType, setTransferType] = useState<'ALL' | 'PRIVATE' | 'SHARED'>('ALL');
+  const [minCapacity, setMinCapacity] = useState<number | null>(null);
   const key = `${query.from}|${query.dropoff}|${query.depart}|${query.pickupTime}|${query.travelers}`;
   const fetchedKeyRef = useRef('');
   useEffect(() => {
@@ -2636,12 +2761,14 @@ function HotelbedsTransfers({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  const transfers = state.data?.transfers ?? [];
+  const typeOptions = useMemo(() => transferTypeOptions(transfers), [transfers]);
   const visible = useMemo(() => {
-    const list = state.data?.transfers ?? [];
-    const filtered = maxPrice === null ? list : list.filter((t) => t.perTraveler <= maxPrice);
+    const filtered = filterHotelbedsTransfers(transfers, { type: transferType, minCapacity, maxPrice });
     if (sort === 'cheapest' || sort === 'best') return [...filtered].sort((a, b) => a.price - b.price);
     return filtered;
-  }, [state.data, maxPrice, sort]);
+  }, [transfers, maxPrice, sort, transferType, minCapacity]);
+  const anyFilter = maxPrice !== null || transferType !== 'ALL' || minCapacity !== null;
   return (
     <div aria-label="Hotelbeds sandbox transfers">
       <h4>
@@ -2660,13 +2787,48 @@ function HotelbedsTransfers({
       )}
       {state.status === 'done' && state.data && state.data.live && (
         <>
-          {maxPrice !== null && (
+          <div className="filter-chips" role="group" aria-label="Filter sandbox transfers by type">
+            <button
+              type="button"
+              className={`chip${transferType === 'ALL' ? ' selected' : ''}`}
+              onClick={() => setTransferType('ALL')}
+              aria-pressed={transferType === 'ALL'}
+            >
+              All transfers ({transfers.length})
+            </button>
+            {typeOptions.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                className={`chip${transferType === o.value ? ' selected' : ''}`}
+                onClick={() => setTransferType(transferType === o.value ? 'ALL' : o.value)}
+                aria-pressed={transferType === o.value}
+              >
+                {o.label} ({o.count})
+              </button>
+            ))}
+            <label className="filter-chip-select">
+              <span>Fits at least</span>
+              <select
+                value={minCapacity === null ? '' : String(minCapacity)}
+                onChange={(e) => setMinCapacity(e.target.value === '' ? null : Number(e.target.value))}
+                aria-label="Filter sandbox transfers by passenger capacity"
+              >
+                <option value="">Any capacity</option>
+                <option value="2">2 passengers</option>
+                <option value="4">4 passengers</option>
+                <option value="6">6 passengers</option>
+                <option value="8">8 passengers</option>
+              </select>
+            </label>
+          </div>
+          {anyFilter && (
             <p className="fare-count">
               Showing {visible.length} of {state.data.transfers.length} sandbox transfers.
             </p>
           )}
           {visible.length === 0 ? (
-            <p className="plan-muted">No sandbox transfers under that price — raise the max price or clear it.</p>
+            <p className="plan-muted">No sandbox transfers match those filters — clear them or raise the max price.</p>
           ) : (
             <div className="result-cards">
               {visible.map((t) => (
@@ -2747,7 +2909,8 @@ function TaxiResults({
                   <p className="plan-muted">
                     {query.from || 'Anywhere'} → {query.dropoff || 'Anywhere'} · {dates} · {travelers}
                   </p>
-                  <p className="result-price">
+                  <p className="card-note">Full-trip total — not a taxi price.</p>
+<p className="result-price">
                     from ${t.perTraveler.toLocaleString()} per traveler{' '}
                     <span className="plan-muted">· Full trip · planning estimate</span>
                   </p>
@@ -2901,6 +3064,16 @@ export default function SearchResults({
   // Taxis tier (Nov 15, 2026): the same filter-state pattern
   // as the Stays, Car rental, Attractions, Cruises and Buses tiers, for the taxi list.
   const [taxiTier, setTaxiTier] = useState<TaxiTier>(query.taxiTier ?? 'best');
+  // Stays facets (interface round, Nov 16 2026): star rating, zone,
+  // board/meal plan for the Hotelbeds sandbox hotels. The hotels
+  // lift up from HotelbedsStays so the sidebar facets and the map
+  // price pins both read the full list; the planner stay cards have
+  // no star/zone/board data, so the facets narrow the sandbox
+  // hotels only.
+  const [hbHotels, setHbHotels] = useState<HotelbedsHotel[]>([]);
+  const [starFilter, setStarFilter] = useState<number | null>(null);
+  const [zoneFilter, setZoneFilter] = useState<string | null>(null);
+  const [boardFilter, setBoardFilter] = useState<string | null>(null);
   // The estimate rows behind the max-price counts — the counts on the
   // price options come from the same rows the list shows. Stays price
   // for the searched party (guests), in the selected tier — the
@@ -2939,6 +3112,11 @@ export default function SearchResults({
   // bands count the estimate rows the price filter actually narrows.
   const underCount = (max: number) =>
     query.tab === 'flights' && liveOptions ? liveOptions.counts.prices[max] ?? 0 : estimateRows.filter((r) => r.pricePerTraveler <= max).length;
+  // The Stays facet options, from the full sandbox list — counts
+  // are what the filter reveals, the same rule as the flight facets.
+  const starOptions = useMemo(() => hotelbedsStarOptions(hbHotels), [hbHotels]);
+  const zoneOptions = useMemo(() => hotelbedsZoneOptions(hbHotels), [hbHotels]);
+  const boardOptions = useMemo(() => hotelbedsBoardOptions(hbHotels), [hbHotels]);
   // The map toggle (defect, Nov 14 2026: the live flights results
   // page had no "map" at all — the toggle existed only on Stays). It
   // lives here now, shared by Flights and Stays: the discovery pins
@@ -2946,8 +3124,6 @@ export default function SearchResults({
   const [showMap, setShowMap] = useState(false);
   const [selectedPin, setSelectedPin] = useState<string | null>(null);
   const discovery = useMemo(() => discoveryDestinations(), []);
-  const selectedDiscovery: DiscoveryEntry | null =
-    discovery.find((d) => d.key === selectedPin) ?? discovery[0] ?? null;
   const showMapToggle = query.tab === 'flights' || query.tab === 'hotels';
   const queryKey = `${query.tab}|${query.tripType ?? 'roundtrip'}|${query.from}|${query.to}|${query.dest}|${query.depart}|${query.ret}|${query.month || ''}|${query.travelers}|${query.guests}|${query.rooms}|${query.stayTier ?? 'best'}|${query.carTier ?? 'best'}|${query.tourTier ?? 'best'}|${query.cruiseTier ?? 'best'}|${query.busTier ?? 'best'}|${query.taxiTier ?? 'best'}|${(query.legs ?? []).map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
   // A new search resets the filters — last search's stops and
@@ -2964,6 +3140,10 @@ export default function SearchResults({
     setCruiseTier(query.cruiseTier ?? 'best');
     setBusTier(query.busTier ?? 'best');
     setTaxiTier(query.taxiTier ?? 'best');
+    setHbHotels([]);
+    setStarFilter(null);
+    setZoneFilter(null);
+    setBoardFilter(null);
   }, [queryKey]);
 
   const primaryPlace =
@@ -2974,30 +3154,38 @@ export default function SearchResults({
 
   const filtersBody = (
     <>
-      <div className="filter-group">
-        <h3>Sort</h3>
-        <select value={sort} onChange={(e) => setSort(e.target.value as RowSort)} aria-label="Sort results">
-          <option value="best">Best value first</option>
-          <option value="cheapest">Cheapest first</option>
-          {query.tab === 'flights' && <option value="duration">Shortest first</option>}
-          {query.tab === 'flights' && <option value="departure">Earliest departure</option>}
-        </select>
-      </div>
-      <div className="filter-group">
-        <h3>Max price per traveler</h3>
-        <select
-          value={maxPrice === null ? '' : String(maxPrice)}
-          onChange={(e) => setMaxPrice(e.target.value === '' ? null : Number(e.target.value))}
-          aria-label="Maximum price per traveler"
-        >
-          <option value="">Any price</option>
-          {LIVE_PRICE_BANDS.map((band) => (
-            <option key={band} value={band}>
-              Under ${band.toLocaleString()} ({underCount(band)})
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* Sort + max price live above the list on the Stays tab
+          (interface round, Nov 16 2026 — the Expedia pattern, same
+          as the flights top bar); the sidebar keeps them for the
+          other tabs. */}
+      {query.tab !== 'hotels' && (
+        <>
+          <div className="filter-group">
+            <h3>Sort</h3>
+            <select value={sort} onChange={(e) => setSort(e.target.value as RowSort)} aria-label="Sort results">
+              <option value="best">Best value first</option>
+              <option value="cheapest">Cheapest first</option>
+              {query.tab === 'flights' && <option value="duration">Shortest first</option>}
+              {query.tab === 'flights' && <option value="departure">Earliest departure</option>}
+            </select>
+          </div>
+          <div className="filter-group">
+            <h3>Max price per traveler</h3>
+            <select
+              value={maxPrice === null ? '' : String(maxPrice)}
+              onChange={(e) => setMaxPrice(e.target.value === '' ? null : Number(e.target.value))}
+              aria-label="Maximum price per traveler"
+            >
+              <option value="">Any price</option>
+              {LIVE_PRICE_BANDS.map((band) => (
+                <option key={band} value={band}>
+                  Under ${band.toLocaleString()} ({underCount(band)})
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
       {query.tab === 'hotels' && (
         <div className="filter-group">
           <h3>Stay price</h3>
@@ -3009,6 +3197,61 @@ export default function SearchResults({
             ))}
           </select>
         </div>
+      )}
+      {/* Stays facets (interface round, Nov 16 2026): star rating,
+          zone, board/meal plan — from the Hotelbeds sandbox hotels
+          actually returned, with counts. They narrow the sandbox
+          hotels only; the planner stay cards carry no star, zone, or
+          meal-plan data. The groups appear once the hotels load. */}
+      {query.tab === 'hotels' && hbHotels.length > 0 && (
+        <>
+          <p className="plan-muted">Star, area and meal plan narrow the Hotelbeds sandbox hotels below.</p>
+          <div className="filter-group">
+            <h3>Star rating</h3>
+            <select
+              value={starFilter === null ? '' : String(starFilter)}
+              onChange={(e) => setStarFilter(e.target.value === '' ? null : Number(e.target.value))}
+              aria-label="Star rating"
+            >
+              <option value="">Any rating</option>
+              {starOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label} ({o.count})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-group">
+            <h3>Area</h3>
+            <select
+              value={zoneFilter ?? ''}
+              onChange={(e) => setZoneFilter(e.target.value === '' ? null : e.target.value)}
+              aria-label="Area"
+            >
+              <option value="">Any area</option>
+              {zoneOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label} ({o.count})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-group">
+            <h3>Meal plan</h3>
+            <select
+              value={boardFilter ?? ''}
+              onChange={(e) => setBoardFilter(e.target.value === '' ? null : e.target.value)}
+              aria-label="Meal plan"
+            >
+              <option value="">Any meal plan</option>
+              {boardOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label} ({o.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
       {query.tab === 'cars' && (
         <div className="filter-group">
@@ -3166,40 +3409,149 @@ export default function SearchResults({
     </div>
   );
 
+  // The Stays filter bar (interface round, Nov 16 2026): sort above
+  // the list, the Expedia pattern — the same sort + max-price
+  // controls the sidebar carries for the other tabs, moved above
+  // the stay cards. Clear resets sort, price, tier and the three
+  // sandbox facets, so the source tags come back too.
+  const stayFiltersActive =
+    sort !== 'best' || maxPrice !== null || stayTier !== 'best' || starFilter !== null || zoneFilter !== null || boardFilter !== null;
+  const clearAllStayFilters = () => {
+    setSort('best');
+    setMaxPrice(null);
+    setStayTier('best');
+    setStarFilter(null);
+    setZoneFilter(null);
+    setBoardFilter(null);
+  };
+  const stayFilterBar = (
+    <div className="stay-filter-bar" aria-label="Stay filters">
+      <label className="filter-bar-field">
+        <span>Sort</span>
+        <select value={sort} onChange={(e) => setSort(e.target.value as RowSort)} aria-label="Sort results">
+          <option value="best">Best value first</option>
+          <option value="cheapest">Cheapest first</option>
+        </select>
+      </label>
+      <label className="filter-bar-field">
+        <span>Max price per traveler</span>
+        <select
+          value={maxPrice === null ? '' : String(maxPrice)}
+          onChange={(e) => setMaxPrice(e.target.value === '' ? null : Number(e.target.value))}
+          aria-label="Maximum price per traveler"
+        >
+          <option value="">Any price</option>
+          {LIVE_PRICE_BANDS.map((band) => (
+            <option key={band} value={band}>
+              Under ${band.toLocaleString()} ({underCount(band)})
+            </option>
+          ))}
+        </select>
+      </label>
+      {stayFiltersActive && (
+        <button type="button" className="linklike" onClick={clearAllStayFilters}>
+          Clear filters
+        </button>
+      )}
+    </div>
+  );
+
   // The map toggle + map (Nov 14, 2026): shared by the flights
   // full-width branch and the sidebar layout's main column — the
   // discovery pins are destinations with trip totals, which is what
   // both Flights and Stays show.
+  // Stays map price pins (interface round, Nov 16 2026): on the
+  // Stays tab, once the sandbox hotels load, the map shows one
+  // price pin per hotel (total for the stay, from the hotel's own
+  // lat/lng) instead of the discovery trip pins. Tapping a pin
+  // selects that hotel; the panel beside the map shows the hotel,
+  // its sandbox tag, and Save — never a trip total, never a live
+  // claim. Before the hotels load (or on Flights) the map keeps the
+  // discovery pins.
+  const hotelPins = useMemo<DiscoveryEntry[]>(() => {
+    if (query.tab !== 'hotels') return [];
+    return hbHotels
+      .filter((h) => h.latitude !== undefined && h.longitude !== undefined)
+      .map((h) => ({
+        key: `hb-${h.code}`,
+        destination: h.name,
+        kind: 'place' as const,
+        tag: 'Hotelbeds sandbox',
+        pinCity: h.zoneName ?? query.dest,
+        lat: h.latitude as number,
+        lng: h.longitude as number,
+        stops: [],
+        days: h.nights,
+        nights: h.nights,
+        experiences: 0,
+        stays: 1,
+        transports: 0,
+        price: h.price,
+        bestMonth: 0,
+        bestNote: '',
+      }));
+  }, [query.tab, hbHotels, query.dest]);
+  const mapPins = query.tab === 'hotels' && hotelPins.length > 0 ? hotelPins : discovery;
+  const selectedMapEntry: DiscoveryEntry | null = mapPins.find((d) => d.key === selectedPin) ?? mapPins[0] ?? null;
+  const selectedHotel: HotelbedsHotel | null =
+    selectedMapEntry && selectedMapEntry.key.startsWith('hb-')
+      ? (hbHotels.find((h) => `hb-${h.code}` === selectedMapEntry.key) ?? null)
+      : null;
   const mapToggle = showMapToggle && (
     <p>
       <button type="button" className="ghost" aria-expanded={showMap} onClick={() => setShowMap((s) => !s)}>
-        {showMap ? 'Hide map' : 'Show on map'}
+        {showMap ? 'Hide map' : query.tab === 'hotels' && hotelPins.length > 0 ? 'Show hotels on map' : 'Show on map'}
       </button>
     </p>
   );
   const mapBlock = showMapToggle && showMap && (
     <div className="discover" style={{ marginBottom: 20 }}>
       <div className="discover-map">
-        <DiscoveryMap pins={discovery} selectedKey={selectedDiscovery?.key ?? null} onSelect={(e) => setSelectedPin(e.key)} dark={dark} />
+        <DiscoveryMap pins={mapPins} selectedKey={selectedMapEntry?.key ?? null} onSelect={(e) => setSelectedPin(e.key)} dark={dark} />
       </div>
-      {selectedDiscovery && (
+      {selectedHotel ? (
         <article className="card discover-panel">
           <div className="body">
-            <span className="pill">{selectedDiscovery.tag}</span>
-            <h3>{selectedDiscovery.destination}</h3>
+            <span className="pill">Hotelbeds sandbox</span>
+            <h3>{selectedHotel.name}</h3>
             <p>
-              {selectedDiscovery.days} days · {selectedDiscovery.nights} nights · Best value · 2 travelers · planning estimate
+              {selectedHotel.zoneName ? `${selectedHotel.zoneName} · ` : ''}
+              {selectedHotel.nights} night{selectedHotel.nights > 1 ? 's' : ''} · {selectedHotel.roomName ?? 'Room'}
+              {selectedHotel.boardName ? ` · ${selectedHotel.boardName}` : ''}
             </p>
-            {selectedDiscovery.price !== null && <p className="price">from ${selectedDiscovery.price.toLocaleString()} total</p>}
+            <p className="price">
+              from ${selectedHotel.price.toLocaleString()} total · ${selectedHotel.perNight.toLocaleString()}/night
+            </p>
+            <p className="plan-muted">{hotelbedsSandboxTag(null)}</p>
             <button
               type="button"
               className="primary"
-              onClick={() => onSaveSearch(searchRequestLabel(query, selectedDiscovery.destination))}
+              onClick={() => onSaveSearch(searchRequestLabel(query, selectedHotel.name))}
             >
               Save this search
             </button>
           </div>
         </article>
+      ) : (
+        selectedMapEntry && (
+          <article className="card discover-panel">
+            <div className="body">
+              <span className="pill">{selectedMapEntry.tag}</span>
+              <h3>{selectedMapEntry.destination}</h3>
+              <p>
+                {selectedMapEntry.days} days · {selectedMapEntry.nights} nights · Best value · 2 travelers · planning estimate
+              </p>
+              {selectedMapEntry.price !== null && <p className="price">from ${selectedMapEntry.price.toLocaleString()} total</p>}
+              <button
+                type="button"
+                className="primary"
+                onClick={() => onSaveSearch(searchRequestLabel(query, selectedMapEntry.destination))}
+              >
+                Save this search
+              </button>
+            </div>
+          </article>
+        )
       )}
     </div>
   );
@@ -3274,18 +3626,28 @@ export default function SearchResults({
             {mapToggle}
             {mapBlock}
             {query.tab === 'hotels' ? (
-              <StayResults
-                query={query}
-                sort={sort}
-                maxPrice={maxPrice}
-                stayTier={stayTier}
-                onSave={onSaveSearch}
-                onClearPrice={() => setMaxPrice(null)}
-                onClearStayFilters={() => {
-                  setMaxPrice(null);
-                  setStayTier('best');
-                }}
-              />
+              <>
+                {stayFilterBar}
+                <StayResults
+                  query={query}
+                  sort={sort}
+                  maxPrice={maxPrice}
+                  stayTier={stayTier}
+                  starFilter={starFilter}
+                  zoneFilter={zoneFilter}
+                  boardFilter={boardFilter}
+                  onSave={onSaveSearch}
+                  onClearPrice={() => setMaxPrice(null)}
+                  onClearStayFilters={() => {
+                    setMaxPrice(null);
+                    setStayTier('best');
+                    setStarFilter(null);
+                    setZoneFilter(null);
+                    setBoardFilter(null);
+                  }}
+                  onHotels={setHbHotels}
+                />
+              </>
             ) : query.tab === 'cars' ? (
               <CarResults
                 query={query}

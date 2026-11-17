@@ -1,5 +1,6 @@
 // Hotelbeds sandbox activities (Nov 16, 2026): the Attractions
-// tab's live activity source, in TEST mode — wired, toggle OFF.
+// tab's live activity source, in TEST mode — wired, toggle ON
+// (interface round, Nov 16 2026, P0 #8).
 // The sample payloads below are built from Hotelbeds' own
 // Activities docs (availability page + OpenAPI spec, read live
 // Nov 16, 2026) — not from live calls: the keys do not exist in
@@ -13,7 +14,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HOTELBEDS_PRODUCTS } from '../lib/hotelbeds.ts';
 import {
+  activityModalityOptions,
   clearHotelbedsActivitiesCache,
+  filterHotelbedsActivities,
   hotelbedsActivitiesEmptyMessage,
   hotelbedsActivitiesSandboxTag,
   mapAvailabilityActivities,
@@ -28,7 +31,9 @@ const realSecret = process.env.HOTELBEDS_ACTIVITIES_API_SECRET;
 function restore() {
   globalThis.fetch = realFetch;
   clearHotelbedsActivitiesCache();
-  HOTELBEDS_PRODUCTS.activities = false;
+  // The shipped default is ON (interface round, Nov 16 2026 —
+  // P0 #8): restore puts the toggle back on, not off.
+  HOTELBEDS_PRODUCTS.activities = true;
   if (realKey === undefined) delete process.env.HOTELBEDS_ACTIVITIES_API_KEY;
   else process.env.HOTELBEDS_ACTIVITIES_API_KEY = realKey;
   if (realSecret === undefined) delete process.env.HOTELBEDS_ACTIVITIES_API_SECRET;
@@ -143,8 +148,8 @@ const BARCELONA = {
   travelers: 2,
 };
 
-test('toggle: activities is wired but switched off by default', () => {
-  assert.equal(HOTELBEDS_PRODUCTS.activities, false);
+test('toggle: activities is wired and switched on (interface round, Nov 16 2026 — P0 #8)', () => {
+  assert.equal(HOTELBEDS_PRODUCTS.activities, true);
 });
 
 test('mapping: cheapest first, ADULT from-price, modality + photo + summary carried', () => {
@@ -180,6 +185,28 @@ test('mapping: malformed responses are null, never guessed tours', () => {
   assert.equal(parseActivitiesResponse(null), null);
 });
 
+test('filters: modality options from the returned activities, with counts', () => {
+  const activities = mapAvailabilityActivities(AVAILABILITY_SAMPLE, 2);
+  assert.deepEqual(activityModalityOptions(activities), [
+    { value: 'Standard ticket', label: 'Standard ticket', count: 1 },
+    { value: 'Sunset cruise', label: 'Sunset cruise', count: 1 },
+  ]);
+});
+
+test('filters: modality + duration + max price narrow together; unknown values never match', () => {
+  const activities = mapAvailabilityActivities(AVAILABILITY_SAMPLE, 2);
+  const none = { modality: null, duration: 'any', maxPrice: null };
+  assert.equal(filterHotelbedsActivities(activities, none).length, 2);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, modality: 'Sunset cruise' }).length, 1);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, modality: 'Sunset cruise' })[0].code, 'E-E10-CRUISE');
+  assert.equal(filterHotelbedsActivities(activities, { ...none, modality: 'Walking tour' }).length, 0);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, duration: '1' }).length, 2);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, duration: '2' }).length, 0);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, duration: '3plus' }).length, 0);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, maxPrice: 30 }).length, 1);
+  assert.equal(filterHotelbedsActivities(activities, { ...none, maxPrice: 30 })[0].code, 'E-E10-CRUISE');
+});
+
 test('sandbox labeling: every tag says sandbox + test data + not bookable, with the check date', () => {
   const tag = hotelbedsActivitiesSandboxTag('2027-01-15');
   assert.match(tag, /Hotelbeds/i);
@@ -205,6 +232,8 @@ test('search: switched off means disabled and no network call, whatever the keys
   };
   try {
     withKeys();
+    // The shipped default is ON — this case flips it off itself.
+    HOTELBEDS_PRODUCTS.activities = false;
     const res = await searchHotelbedsActivities(BARCELONA);
     assert.equal(res.live, false);
     assert.equal(res.enabled, false);

@@ -630,7 +630,11 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   }
   assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:8px/.test(css), 'search fields use the 8px radius');
   assert.ok(/\.results-bar\{[^}]*border-radius:12px/.test(css), 'the results bar uses the 12px radius');
-  assert.ok(/\.flight-filter-bar\{[^}]*border-radius:16px/.test(css), 'the flights filter bar uses the 16px radius');
+  // The flights and stays filter bars share one rule (interface
+  // round, Nov 16 2026 — sort above the list on stays, same bar as
+  // flights): the regex tolerates the shared selector.
+  assert.ok(/\.flight-filter-bar(?:,\.stay-filter-bar)?\{[^}]*border-radius:16px/.test(css), 'the flights filter bar uses the 16px radius');
+  assert.ok(css.includes('.stay-filter-bar'), 'the stays filter bar shares the flights bar rule');
   for (const grid of ['.result-cards', '.pkg-grid', '.deals-grid', '.flight-card-grid', '.cat-tiles']) {
     assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:20px`).test(css), `${grid} breathes at a 20px gap`);
   }

@@ -13,8 +13,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   clearHotelbedsCache,
+  filterHotelbedsHotels,
   HOTELBEDS_MAX_HOTELS,
   HOTELBEDS_PRODUCTS,
+  hotelbedsBoardOptions,
   hotelbedsConfigured,
   hotelbedsEmptyMessage,
   hotelbedsImageUrl,
@@ -23,9 +25,13 @@ import {
   hotelbedsProductEnabled,
   hotelbedsSandboxTag,
   hotelbedsSignature,
+  hotelbedsStarOptions,
+  hotelbedsStars,
+  hotelbedsZoneOptions,
   mapAvailabilityHotel,
   mapAvailabilityHotels,
   parseAvailabilityResponse,
+  parseContentDetailsImages,
   parseContentDetailsResponse,
   searchHotelbedsStays,
 } from '../lib/hotelbeds.ts';
@@ -252,6 +258,62 @@ test('content details mapping: lowest-order image wins, imageless hotels map to 
   assert.equal(single.get(7), 'https://photos.hotelbeds.com/giata/a/b.jpg');
 });
 
+test('content details gallery: ordered URLs, imageless hotels map to nothing', () => {
+  const galleries = parseContentDetailsImages(DETAILS_SAMPLE);
+  assert.deepEqual(galleries.get(1067), [
+    'https://photos.hotelbeds.com/giata/00/000112/000112a_hb_a_001.jpg',
+    'https://photos.hotelbeds.com/giata/00/000112/000112a_hb_ro_025.jpg',
+  ]);
+  assert.equal(galleries.has(2050), false);
+  assert.equal(parseContentDetailsImages({}).size, 0);
+  // Single-hotel form, more than 6 images caps at 6.
+  const single = parseContentDetailsImages({
+    hotel: {
+      code: 7,
+      images: Array.from({ length: 8 }, (_, i) => ({ path: `a/${i}.jpg`, order: i })),
+    },
+  });
+  assert.equal(single.get(7)?.length, 6);
+  assert.equal(single.get(7)?.[0], 'https://photos.hotelbeds.com/giata/a/0.jpg');
+});
+
+test('stars: categoryCode EST wins, categoryName is the fallback, non-star codes have none', () => {
+  assert.equal(hotelbedsStars({ categoryCode: '4EST' }), 4);
+  assert.equal(hotelbedsStars({ categoryCode: '5EST', categoryName: '1 star' }), 5);
+  assert.equal(hotelbedsStars({ categoryCode: 'APART', categoryName: '3 stars' }), 3);
+  assert.equal(hotelbedsStars({ categoryCode: 'HOSTEL' }), null);
+  assert.equal(hotelbedsStars({}), null);
+});
+
+test('facets: star/zone/board options from the returned hotels, with counts', () => {
+  const hotels = mapAvailabilityHotels(AVAILABILITY_SAMPLE, 7, 2);
+  assert.deepEqual(hotelbedsStarOptions(hotels), [
+    { value: '4', label: '4 stars', count: 1 },
+    { value: '2', label: '2 stars', count: 1 },
+  ]);
+  assert.deepEqual(hotelbedsZoneOptions(hotels), [{ value: 'Palma', label: 'Palma', count: 2 }]);
+  assert.deepEqual(hotelbedsBoardOptions(hotels), [{ value: 'ROOM ONLY', label: 'ROOM ONLY', count: 2 }]);
+});
+
+test('facets: star + zone + board + max price narrow together; unknown values never match', () => {
+  const hotels = mapAvailabilityHotels(AVAILABILITY_SAMPLE, 7, 2);
+  const none = { star: null, zone: null, board: null, maxPrice: null };
+  assert.equal(filterHotelbedsHotels(hotels, none).length, 2);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, star: 4 }).length, 1);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, star: 4 })[0].code, 1067);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, star: 5 }).length, 0);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, zone: 'Palma' }).length, 2);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, zone: 'Soller' }).length, 0);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, board: 'ROOM ONLY' }).length, 2);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, board: 'HALF BOARD' }).length, 0);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, maxPrice: 150 }).length, 1);
+  assert.equal(filterHotelbedsHotels(hotels, { ...none, maxPrice: 150 })[0].code, 2050);
+  assert.equal(
+    filterHotelbedsHotels(hotels, { star: 4, zone: 'Palma', board: 'ROOM ONLY', maxPrice: 300 }).length,
+    1
+  );
+});
+
 test('sandbox labeling: every tag says sandbox + test data + not bookable, with the check date', () => {
   const tag = hotelbedsSandboxTag('2027-01-15');
   assert.match(tag, /Hotelbeds/i);
@@ -421,7 +483,10 @@ test('wiring: the Stays tab renders the sandbox section with Save this search, n
   const cardEnd = src.indexOf('function HotelbedsStays');
   assert.ok(cardStart > -1 && cardEnd > cardStart, 'hotel card component exists');
   const card = src.slice(cardStart, cardEnd);
-  assert.ok(card.includes('SafeImg'), 'hotel cards show the ContentAPI photo');
+  // The photo renders through the shared gallery (interface round,
+  // Nov 16 2026 — P1 #12): one photo or the full ContentAPI set,
+  // same component as the detail page.
+  assert.ok(card.includes('HotelGallery'), 'hotel cards show the ContentAPI photo gallery');
   assert.ok(card.includes('Save this search'), 'hotel cards keep Save this search');
   assert.ok(!/Book now/i.test(card), 'no Book now on a sandbox hotel card');
   const route = readFileSync(new URL('../app/api/hotelbeds-stays/route.ts', import.meta.url), 'utf8');
@@ -429,16 +494,16 @@ test('wiring: the Stays tab renders the sandbox section with Save this search, n
   assert.ok(route.includes("sandbox: true"), 'the route marks every response sandbox');
 });
 
-test('toggles: hotel on, activities/transfers/bundle off — one place flips a product', () => {
+test('toggles: hotel, activities and transfers on, bundle off — one place flips a product (Nov 16 2026, P0 #8)', () => {
   assert.deepEqual(HOTELBEDS_PRODUCTS, {
     hotel: true,
-    activities: false,
-    transfers: false,
+    activities: true,
+    transfers: true,
     bundle: false,
   });
   assert.equal(hotelbedsProductEnabled('hotel'), true);
-  assert.equal(hotelbedsProductEnabled('activities'), false);
-  assert.equal(hotelbedsProductEnabled('transfers'), false);
+  assert.equal(hotelbedsProductEnabled('activities'), true);
+  assert.equal(hotelbedsProductEnabled('transfers'), true);
   assert.equal(hotelbedsProductEnabled('bundle'), false);
 });
 
@@ -463,15 +528,21 @@ test('toggles: a product is active only when its toggle is on AND its keys are s
     assert.equal(hotelbedsProductActive('hotel'), false);
     assert.equal(hotelbedsProductConfigured('activities'), false);
     assert.equal(hotelbedsProductActive('activities'), false);
-    // Keys set but toggle off: configured, never active.
+    // Keys set with the toggles on: configured AND active.
     process.env.HOTELBEDS_ACTIVITIES_API_KEY = 'test-act-key';
     process.env.HOTELBEDS_ACTIVITIES_API_SECRET = 'test-act-secret';
     process.env.HOTELBEDS_TRANSFERS_API_KEY = 'test-trf-key';
     process.env.HOTELBEDS_TRANSFERS_API_SECRET = 'test-trf-secret';
     assert.equal(hotelbedsProductConfigured('activities'), true);
-    assert.equal(hotelbedsProductActive('activities'), false, 'toggle off wins over set keys');
+    assert.equal(hotelbedsProductActive('activities'), true, 'toggle on + keys = active');
     assert.equal(hotelbedsProductConfigured('transfers'), true);
-    assert.equal(hotelbedsProductActive('transfers'), false, 'toggle off wins over set keys');
+    assert.equal(hotelbedsProductActive('transfers'), true, 'toggle on + keys = active');
+    // Keys set but toggle off (bundle is still off): configured,
+    // never active — the toggle wins over set keys.
+    process.env.HOTELBEDS_BUNDLE_API_KEY = 'test-bundle-key';
+    process.env.HOTELBEDS_BUNDLE_API_SECRET = 'test-bundle-secret';
+    assert.equal(hotelbedsProductConfigured('bundle'), true);
+    assert.equal(hotelbedsProductActive('bundle'), false, 'toggle off wins over set keys');
     // Hotel: toggle on + keys = active.
     withKeys();
     assert.equal(hotelbedsProductConfigured('hotel'), true);

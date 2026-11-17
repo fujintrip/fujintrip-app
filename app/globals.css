@@ -853,6 +853,32 @@ button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:no
 
 /* Trust strip: one row under the hero, three honest lines. */
 .trust-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:32px 0 8px}
+/* "Continue where you left off" strip (interface round, Nov 16
+   2026 — P0 #2): small cards under the hero, same card grammar as
+   the destination cards. */
+.continue-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px}
+.continue-card{display:flex;flex-direction:column;gap:4px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;font-family:inherit;color:var(--ink)}
+button.continue-card{cursor:pointer}
+button.continue-card:hover{border-color:var(--ink)}
+.continue-card-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.continue-card strong{font-size:15px}
+.continue-card .plan-muted{font-size:13px}
+/* Local Voices inspiration grid (interface round, Nov 16 2026 —
+   P1 #11): the guide cards sit under the teaser, same grid as the
+   destination cards. */
+.voices-grid{margin-top:20px}
+/* Footer link hub (interface round, Nov 16 2026 — P1 #10): top
+   destinations × categories, as a compact link grid above the
+   brand lines. */
+.footer-hub{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px 24px;margin:24px 0}
+.footer-hub-dest strong{font-size:15px}
+.footer-hub-dest ul{list-style:none;padding:6px 0 0;margin:0;display:flex;flex-wrap:wrap;gap:4px 12px}
+.footer-hub-dest li{font-size:13px}
+/* My Trips progressive disclosure (interface round, Nov 16 2026 —
+   P1 #20): the collapsed subsections read as headings, not hidden
+   controls. */
+#mytrips details{margin-top:20px}
+#mytrips details summary{cursor:pointer;list-style:revert}
 .trust-item{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:600}
 .trust-item .trust-icon{font-size:20px;line-height:1.2}
 
@@ -899,6 +925,27 @@ button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:no
 .result-price{font-size:16px;font-weight:700}
 .result-price .plan-muted{font-weight:400}
 .result-match-line{font-size:13px;font-weight:600;color:var(--accent-text)}
+/* The honest note above a card's price (interface round, Nov 16
+   2026 — P0 #1): the qualifier reads BEFORE the loud number on
+   Cruises/Buses/Taxis cards, where the price is a full-trip total,
+   never a category price. Small muted type, not a warn box — the
+   section-level warn note still sits at the top of the results. */
+.card-note{font-size:13px;color:var(--muted)}
+/* Hotel photo gallery (interface round, Nov 16 2026 — P1 #12): the
+   main photo plus a thumbnail row; tapping a thumb switches the
+   main photo. Thumbs are 56px squares, the selected one carries the
+   accent border. */
+.result-gallery .result-photo{height:160px;width:100%;object-fit:cover;display:block}
+.gallery-thumbs{display:flex;gap:8px;padding:10px 12px 0;overflow-x:auto}
+.gallery-thumb{flex:0 0 auto;width:56px;height:56px;padding:0;border:2px solid transparent;border-radius:8px;overflow:hidden;cursor:pointer;background:var(--card)}
+.gallery-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.gallery-thumb.selected{border-color:var(--accent-text)}
+/* Modality / transfer-type chip rows above the sandbox lists
+   (interface round, Nov 16 2026): chips with counts, plus a compact
+   duration/capacity select at the end of the row. */
+.filter-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px}
+.filter-chip-select{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted)}
+.filter-chip-select select{border:1px solid var(--line);border-radius:8px;padding:8px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink)}
 .result-body .primary{margin-top:auto;align-self:flex-start}
 .filters-sheet{display:none}
 
@@ -911,7 +958,7 @@ button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:no
    each card a complete trip option with its own small source tag.
    Other tabs keep the sidebar layout. */
 .results-section--flights{margin-left:calc(-50vw + 50%);margin-right:calc(-50vw + 50%);padding-left:20px;padding-right:20px}
-.flight-filter-bar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin:0 0 16px;background:var(--card)}
+.flight-filter-bar,.stay-filter-bar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin:0 0 16px;background:var(--card)}
 .filter-bar-field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
 .filter-bar-field select{border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink)}
 .filter-bar-group{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}

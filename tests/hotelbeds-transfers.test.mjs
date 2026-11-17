@@ -1,5 +1,6 @@
 // Hotelbeds sandbox transfers (Nov 16, 2026): the Taxis tab's
-// airport-transfer source, in TEST mode — wired, toggle OFF.
+// airport-transfer source, in TEST mode — wired, toggle ON
+// (interface round, Nov 16 2026, P0 #8).
 // The sample payloads below are built from Hotelbeds' own
 // Transfers docs (Availability Simple page + OpenAPI spec, read
 // live Nov 16, 2026) — not from live calls: the keys do not exist
@@ -15,12 +16,14 @@ import { readFileSync } from 'node:fs';
 import { HOTELBEDS_PRODUCTS } from '../lib/hotelbeds.ts';
 import {
   clearHotelbedsTransfersCache,
+  filterHotelbedsTransfers,
   hotelbedsTransfersEmptyMessage,
   hotelbedsTransfersSandboxTag,
   mapAvailabilityTransfers,
   parseTransfersResponse,
   searchHotelbedsTransfers,
   transferAvailabilityPath,
+  transferTypeOptions,
 } from '../lib/hotelbeds-transfers.ts';
 
 const realFetch = globalThis.fetch;
@@ -30,7 +33,9 @@ const realSecret = process.env.HOTELBEDS_TRANSFERS_API_SECRET;
 function restore() {
   globalThis.fetch = realFetch;
   clearHotelbedsTransfersCache();
-  HOTELBEDS_PRODUCTS.transfers = false;
+  // The shipped default is ON (interface round, Nov 16 2026 —
+  // P0 #8): restore puts the toggle back on, not off.
+  HOTELBEDS_PRODUCTS.transfers = true;
   if (realKey === undefined) delete process.env.HOTELBEDS_TRANSFERS_API_KEY;
   else process.env.HOTELBEDS_TRANSFERS_API_KEY = realKey;
   if (realSecret === undefined) delete process.env.HOTELBEDS_TRANSFERS_API_SECRET;
@@ -134,8 +139,8 @@ const PARIS_AIRPORT = {
   adults: 2,
 };
 
-test('toggle: transfers is wired but switched off by default', () => {
-  assert.equal(HOTELBEDS_PRODUCTS.transfers, false);
+test('toggle: transfers is wired and switched on (interface round, Nov 16 2026 — P0 #8)', () => {
+  assert.equal(HOTELBEDS_PRODUCTS.transfers, true);
 });
 
 test('endpoint: the Availability Simple path matches the docs shape exactly', () => {
@@ -175,6 +180,31 @@ test('mapping: malformed responses are null, never guessed transfers', () => {
   assert.equal(parseTransfersResponse(null), null);
 });
 
+test('filters: type options from the returned transfers, with counts', () => {
+  const transfers = mapAvailabilityTransfers(AVAILABILITY_SAMPLE, 2);
+  assert.deepEqual(transferTypeOptions(transfers), [
+    { value: 'SHARED', label: 'Shared shuttle', count: 1 },
+    { value: 'PRIVATE', label: 'Private transfer', count: 1 },
+  ]);
+});
+
+test('filters: private/shared + capacity + max price narrow together; a small car never fits a big party', () => {
+  const transfers = mapAvailabilityTransfers(AVAILABILITY_SAMPLE, 2);
+  const none = { type: 'ALL', minCapacity: null, maxPrice: null };
+  assert.equal(filterHotelbedsTransfers(transfers, none).length, 2);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, type: 'PRIVATE' }).length, 1);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, type: 'PRIVATE' })[0].id, 1);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, type: 'SHARED' })[0].id, 2);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, minCapacity: 2 }).length, 2);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, minCapacity: 4 }).length, 1);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, minCapacity: 4 })[0].id, 2);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, minCapacity: 6 }).length, 1);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, minCapacity: 9 }).length, 0);
+  assert.equal(filterHotelbedsTransfers(transfers, { type: 'PRIVATE', minCapacity: 4, maxPrice: null }).length, 0);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, maxPrice: 20 }).length, 1);
+  assert.equal(filterHotelbedsTransfers(transfers, { ...none, maxPrice: 20 })[0].id, 2);
+});
+
 test('sandbox labeling: every tag says sandbox + test data + not bookable, with the check date', () => {
   const tag = hotelbedsTransfersSandboxTag('2027-01-15');
   assert.match(tag, /Hotelbeds/i);
@@ -201,6 +231,8 @@ test('search: switched off means disabled and no network call, whatever the keys
   };
   try {
     withKeys();
+    // The shipped default is ON — this case flips it off itself.
+    HOTELBEDS_PRODUCTS.transfers = false;
     const res = await searchHotelbedsTransfers(PARIS_AIRPORT);
     assert.equal(res.live, false);
     assert.equal(res.enabled, false);

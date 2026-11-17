@@ -6,6 +6,78 @@
 // pill stays the site's only "Plan with AI" wording.
 'use client';
 import { Icon } from './icons';
+import { HOME_TABS } from '../lib/homeTabs';
+import { bestTimeLine } from '../lib/bestTime';
+import { guideFor } from '../lib/localGuides';
+import type { SearchQuery } from '../lib/searchPlaces';
+import type { PriceWatch, Trip } from './FujinChat';
+
+// "Continue where you left off" (interface round, Nov 16 2026 —
+// P0 #2): Expedia's Fall 2026 headline feature, from local data
+// only — the last search, saved trips, and price watches, all
+// already in localStorage. Nothing is fetched, nothing is guessed:
+// a strip with nothing to continue renders nothing at all.
+function continueLabel(q: SearchQuery): string {
+  const tabLabel = HOME_TABS.find((t) => t.id === q.tab)?.label ?? q.tab;
+  const place =
+    q.tab === 'flights' || q.tab === 'buses'
+      ? `${q.from || 'Anywhere'} → ${q.to || 'Anywhere'}`
+      : q.tab === 'taxis'
+        ? `${q.from || 'Anywhere'} → ${q.dropoff || 'Anywhere'}`
+        : q.dest || 'Anywhere';
+  const dates = q.depart ? `${q.depart}${q.ret ? ` – ${q.ret}` : ''}` : 'Flexible dates';
+  return `${tabLabel} · ${place} · ${dates} · ${q.travelers} traveler${q.travelers > 1 ? 's' : ''}`;
+}
+
+export function ContinueStrip({
+  trips,
+  watches,
+  lastSearch,
+  onResumeSearch,
+  onGoToTrips,
+}: {
+  trips: Trip[];
+  watches: PriceWatch[];
+  lastSearch: SearchQuery | null;
+  onResumeSearch: (q: SearchQuery) => void;
+  onGoToTrips: () => void;
+}) {
+  if (!lastSearch && trips.length === 0 && watches.length === 0) return null;
+  return (
+    <section className="home-section continue-strip" aria-label="Continue where you left off">
+      <p className="eyebrow">Continue where you left off</p>
+      <h2>Pick up your trip</h2>
+      <div className="continue-cards">
+        {lastSearch && (
+          <button type="button" className="continue-card" onClick={() => onResumeSearch(lastSearch)}>
+            <span className="continue-card-label">Continue your search</span>
+            <strong>{continueLabel(lastSearch)}</strong>
+            <span className="plan-muted">Tap to see the results again</span>
+          </button>
+        )}
+        {trips.slice(0, 3).map((t) => (
+          <button key={t.id} type="button" className="continue-card" onClick={onGoToTrips}>
+            <span className="continue-card-label">Saved trip</span>
+            <strong>{t.label}</strong>
+            <span className="plan-muted">
+              {t.status} · {t.date}
+            </span>
+          </button>
+        ))}
+        {watches.slice(0, 3).map((w) => (
+          <article key={w.id} className="continue-card">
+            <span className="continue-card-label">Price watch</span>
+            <strong>{w.destination}</strong>
+            <span className="plan-muted">
+              {w.baseline !== null ? `Watching from $${w.baseline.toLocaleString()}` : 'Waiting for a live fare'}
+              {w.lastTotal !== null ? ` · now $${w.lastTotal.toLocaleString()}` : ''}
+            </span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export function HowItWorksSection() {
   const steps = [
@@ -72,6 +144,54 @@ export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) =>
             </a>
           </p>
         </div>
+      </div>
+      {/* Grown into a real inspiration section (interface round, Nov
+          16 2026 — P1 #11): one card per place with the best time to
+          go and, where a researched guide exists, what to eat and
+          where to go — all real data (lib/localGuides.ts,
+          lib/bestTime.ts). A place with no researched guide says so
+          plainly instead of getting invented editorial. The "See it
+          in a plan" link stays — its removal is an open decision for
+          the user, not this round's call. */}
+      <div className="grid voices-grid">
+        {places.map((p) => {
+          const guide = guideFor(p);
+          return (
+            <article className="card" key={p}>
+              <div className="body">
+                <span className="pill">Local voices</span>
+                <h3>{p}</h3>
+                <p className="plan-muted">{bestTimeLine(p)}</p>
+                {guide ? (
+                  <>
+                    <p>
+                      <strong>To try</strong>
+                    </p>
+                    <ul style={{ fontSize: 13, paddingLeft: 18, margin: '4px 0' }}>
+                      {guide.dishes.slice(0, 3).map((d) => (
+                        <li key={d}>{d}</li>
+                      ))}
+                    </ul>
+                    <p>
+                      <strong>Where to go</strong>
+                    </p>
+                    <ul style={{ fontSize: 13, paddingLeft: 18, margin: '4px 0' }}>
+                      {guide.places.slice(0, 2).map((pl) => (
+                        <li key={pl}>{pl}</li>
+                      ))}
+                    </ul>
+                    <p className="plan-muted">{guide.source}</p>
+                  </>
+                ) : (
+                  <p className="plan-muted">No researched local guide for {p} yet — the best time above is from our planner.</p>
+                )}
+                <button className="primary" onClick={() => onPick(p)}>
+                  Search {p}
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

@@ -7,7 +7,16 @@ import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
 import { appendObservation, trendLine } from '../lib/duffel';
 import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
-import { type SearchQuery, searchQueryToParams } from '../lib/searchPlaces';
+import {
+  busTierOptions,
+  carTierOptions,
+  cruiseTierOptions,
+  stayTierOptions,
+  taxiTierOptions,
+  tourTierOptions,
+  type SearchQuery,
+  searchQueryToParams,
+} from '../lib/searchPlaces';
 import { DIETARY_OPTIONS, parseProfile, profileSummary, type TravelerProfile } from '../lib/preferences';
 import { useTheme } from '../lib/theme';
 import { mergeOfferNeeded, readMergeRecord, recordMerge, type MergeRecord } from '../lib/auth';
@@ -25,7 +34,7 @@ import SearchResults from './SearchResults';
 import PackagesSection from './PackagesSection';
 import FaresStrip from './FaresStrip';
 import DealsSection from './DealsSection';
-import { HowItWorksSection, LocalVoicesTeaser } from './HomeSections';
+import { ContinueStrip, HowItWorksSection, LocalVoicesTeaser } from './HomeSections';
 import { Icon, type IconName } from './icons';
 import type { Package } from '../lib/packages';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
@@ -55,6 +64,41 @@ const CATEGORY_TILES: { id: HomeTabId; label: string; icon: IconName; blurb: str
   { id: 'buses', label: 'Buses', icon: 'bus', blurb: 'Intercity buses' },
   { id: 'taxis', label: 'Taxis', icon: 'taxi', blurb: 'Airport transfers and rides' },
 ];
+
+// Per-category landing shelf copy (interface round, Nov 16 2026 —
+// P1 #17): one honest line per category — what is live, what is
+// still an estimate. The wording reuses the results pages' own
+// lines, so the shelf never promises more than the results do.
+const SHELF_COPY: Record<HomeTabId, { heading: string; line: string }> = {
+  flights: {
+    heading: 'Flights',
+    line: 'Live fares arrive as suppliers connect — these are planner flight legs, planning estimates.',
+  },
+  hotels: {
+    heading: 'Stays',
+    line: 'Live hotel prices arrive when Expedia Rapid / Duffel Stays connect. Hotelbeds sandbox hotels appear once you search.',
+  },
+  cars: {
+    heading: 'Car rental',
+    line: 'Live car prices arrive when Rentalcars / CarTrawler connect — these are planner car legs, planning estimates.',
+  },
+  tours: {
+    heading: 'Attractions',
+    line: 'Live tours arrive when Viator / GetYourGuide / Klook connect — these are planner activity legs, planning estimates.',
+  },
+  cruises: {
+    heading: 'Cruises',
+    line: 'Live cruise prices arrive when Traveltek connects — these are full-trip planning estimates, not cruise prices.',
+  },
+  buses: {
+    heading: 'Buses',
+    line: 'Live bus prices arrive when Distribusion / Busbud / FlixBus connect — these are full-trip planning estimates, not bus prices.',
+  },
+  taxis: {
+    heading: 'Taxis',
+    line: 'Live taxi prices arrive when Uber / Lyft / Mozio connect — these are full-trip planning estimates, not taxi prices.',
+  },
+};
 
 export default function FujinApp({ variant, initialTab, initialSearch }: { variant: 'home' | 'chat'; initialTab?: HomeTabId; initialSearch?: SearchQuery | null }) {
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -219,6 +263,24 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // button, and the homepage never writes the seed keys.
   const [widgetTab, setWidgetTab] = useState<HomeTabId>(initialTab ?? 'flights');
   const [search, setSearch] = useState<SearchQuery | null>(initialSearch ?? null);
+  // "Continue where you left off" (interface round, Nov 16 2026 —
+  // P0 #2): the last submitted search, on this device only. The
+  // strip reads it on mount; a corrupt or foreign value is dropped,
+  // never rendered.
+  const [lastSearch, setLastSearch] = useState<SearchQuery | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('fujintrip-last-search');
+      if (!raw) return;
+      const q = JSON.parse(raw) as Partial<SearchQuery>;
+      if (q && typeof q === 'object' && HOME_TABS.some((t) => t.id === q.tab)) setLastSearch(q as SearchQuery);
+    } catch {}
+  }, []);
+  // The category landing shelf (interface round, Nov 16 2026 —
+  // P1 #17): which tab the URL (or a tile/header tap) landed on.
+  // The shelf renders while a tab is landed on; a bare homepage
+  // load with no ?tab= shows none.
+  const [landingTab, setLandingTab] = useState<HomeTabId | null>(initialTab ?? null);
   // A shared deep link followed while already on the page (or Back)
   // changes initialSearch without remounting — the results follow the
   // link instead of the stale search from the first load. A bare
@@ -234,17 +296,33 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   }, [initialSearchKey]);
   const [prefill, setPrefill] = useState<{ destination: string; nonce: number } | null>(null);
   const [showAllDestinations, setShowAllDestinations] = useState(false);
+  // My Trips progressive disclosure (interface round, Nov 16 2026 —
+  // P1 #20): the trips list shows the first 5 until the traveler
+  // asks for the rest, so the section stops dominating the page.
+  const [showAllTrips, setShowAllTrips] = useState(false);
   const selectCategory = (id: HomeTabId) => {
     setWidgetTab(id);
+    setLandingTab(id);
     try { router.replace(`/?tab=${id}`, { scroll: false }); } catch {}
     document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const changeTab = (id: HomeTabId) => {
     setWidgetTab(id);
+    setLandingTab(id);
     try { router.replace(`/?tab=${id}`, { scroll: false }); } catch {}
   };
   const handleSearchSubmit = (q: SearchQuery) => {
     setSearch(q);
+    setLastSearch(q);
+    try { localStorage.setItem('fujintrip-last-search', JSON.stringify(q)); } catch {}
+    setTimeout(() => document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+  // Resume a search from the continue strip: the results render
+  // again and the widget prefills with the destination, so the
+  // traveler can edit it rather than retyping it.
+  const resumeSearch = (q: SearchQuery) => {
+    setSearch(q);
+    if (q.dest) setPrefill({ destination: q.dest, nonce: Date.now() });
     setTimeout(() => document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
   const prefillDestination = (name: string) => {
@@ -424,6 +502,61 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // in the entry is the 2-traveler total); a card with no planner
   // total shows no price line, never a guessed one.
   const visibleEntries = showAllDestinations ? libraryEntries : libraryEntries.slice(0, 8);
+  // The category shelf's figures (interface round, Nov 16 2026 —
+  // P1 #17): the top destinations with that category's Best value
+  // figure for 2 travelers — the planner's own leg (flight, hotel,
+  // car, activities) or the full-trip total for cruises, buses and
+  // taxis, which have no leg. A destination the planner cannot
+  // price, or a leg of $0, is skipped, never shown as $0.
+  const shelfEntries = useMemo(() => {
+    if (!landingTab) return [];
+    const out: Array<{ name: string; photo?: string; perTraveler: number; legLabel: string }> = [];
+    for (const e of libraryEntries.slice(0, 6)) {
+      try {
+        let perTraveler = 0;
+        let legLabel = '';
+        if (landingTab === 'flights') {
+          const opt = buildPlan(e.name, 2, 3).options.find((o) => o.name === 'Best value');
+          perTraveler = Math.round((opt?.flight ?? 0) / 2);
+          legLabel = 'flight leg';
+        } else if (landingTab === 'hotels') {
+          perTraveler = stayTierOptions(e.name, 2)[1]?.perTraveler ?? 0;
+          legLabel = 'stay';
+        } else if (landingTab === 'cars') {
+          perTraveler = carTierOptions(e.name, 2)[1]?.perTraveler ?? 0;
+          legLabel = 'car rental';
+        } else if (landingTab === 'tours') {
+          perTraveler = tourTierOptions(e.name, 2)[1]?.perTraveler ?? 0;
+          legLabel = 'attractions';
+        } else if (landingTab === 'cruises') {
+          perTraveler = cruiseTierOptions(e.name, 2)[1]?.perTraveler ?? 0;
+          legLabel = 'full-trip total';
+        } else if (landingTab === 'buses') {
+          perTraveler = busTierOptions(e.name, 2)[1]?.perTraveler ?? 0;
+          legLabel = 'full-trip total';
+        } else {
+          perTraveler = taxiTierOptions(e.name, 2)[1]?.perTraveler ?? 0;
+          legLabel = 'full-trip total';
+        }
+        if (perTraveler <= 0) continue;
+        out.push({ name: e.name, photo: e.photos[0], perTraveler, legLabel });
+      } catch {
+        continue;
+      }
+    }
+    return out;
+  }, [landingTab, libraryEntries]);
+  // Trust strip (interface round, Nov 16 2026 — P0 #3): moved from
+  // the bottom of the page to directly under the search results (or
+  // under the hero when no search is active) — trust belongs where
+  // the traveler decides. The same three lines repeat in the footer.
+  const trustStrip = (label: string) => (
+    <div className="trust-strip" aria-label={label}>
+      <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>All-in prices — the price you see is the price you pay</span>
+      <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>No hidden fees — our flight service fee is shown separately at checkout</span>
+      <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>Compare prices from different sources</span>
+    </div>
+  );
   // The reels composer panel — opened from the trip-card strip, the
   // feed, or a booked trip in My Trips. It lives in both variants:
   // on /chat under the app, on the homepage at the top of the page.
@@ -477,6 +610,17 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           </div>
         </section>
       )}
+      {variant === 'home' && (
+        <div className="wrap">
+          <ContinueStrip
+            trips={trips}
+            watches={watches}
+            lastSearch={lastSearch}
+            onResumeSearch={resumeSearch}
+            onGoToTrips={() => document.getElementById('mytrips')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          />
+        </div>
+      )}
       {variant === 'home' && search && (
         <div className="wrap">
           <SearchResults
@@ -487,8 +631,61 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           />
         </div>
       )}
+      {/* Trust strip (interface round, Nov 16 2026 — P0 #3): directly
+          under the search results when a search is active, directly
+          under the hero otherwise. */}
+      {variant === 'home' && (
+        <div className="wrap">{trustStrip('Why book with FujinTrip')}</div>
+      )}
       {variant === 'home' && (
       <main className="wrap">
+        {/* Category tiles (interface round, Nov 16 2026 — P1 #9):
+            moved from position 8 to directly under the hero — the
+            category entry points come first, as on Expedia. They
+            still switch the widget tab; position is the only change. */}
+        <section>
+          <h2>What do you need for your trip?</h2>
+          <p className="sub">Pick a category — the search above switches to it.</p>
+          <div className="cat-tiles">
+            {CATEGORY_TILES.map((t) => (
+              <button key={t.id} type="button" className="cat-tile" onClick={() => selectCategory(t.id)}>
+                <span className="cat-icon" aria-hidden="true">
+                  <Icon name={t.icon} size={26} />
+                </span>
+                <strong>{t.label}</strong>
+                <span>{t.blurb}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Per-category landing shelf (interface round, Nov 16 2026
+            — P1 #17, option (a)): when a tab is landed on (?tab=),
+            the category's own shelf renders under the tiles — top
+            destinations with that category's Best value figure, from
+            the planner's own legs, labelled planning estimates. No
+            new routes. */}
+        {landingTab && shelfEntries.length > 0 && (
+          <section aria-label={`${SHELF_COPY[landingTab].heading} destinations`}>
+            <h2>Top {SHELF_COPY[landingTab].heading.toLowerCase()} destinations</h2>
+            <p className="sub">{SHELF_COPY[landingTab].line}</p>
+            <div className="grid">
+              {shelfEntries.map((s) => (
+                <article className="card" key={s.name}>
+                  {s.photo && <SafeImg src={s.photo} alt={s.name} label={s.name} />}
+                  <div className="body">
+                    <h3>{s.name}</h3>
+                    <p className="price">from ${s.perTraveler.toLocaleString()} per traveler</p>
+                    <p className="plan-muted">Best value · {s.legLabel} · planning estimate</p>
+                    <button className="primary" onClick={() => prefillDestination(s.name)}>Search this destination</button>{' '}
+                    <a href={`/destination/${encodeURIComponent(s.name)}`}>Destination guide →</a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Homepage restructure (Nov 15, 2026): ready-made packages
             first, then the cheapest fares and the deals — the search
             results still render directly under the hero, above main. */}
@@ -513,6 +710,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                     <p className="plan-muted">No planning estimate for this one yet</p>
                   )}
                   <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>{' '}
+                  <a href={`/destination/${encodeURIComponent(e.name)}`}>Destination guide →</a>{' '}
                   <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} />
                 </div>
               </article>
@@ -525,22 +723,6 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               </button>
             </p>
           )}
-        </section>
-
-        <section>
-          <h2>What do you need for your trip?</h2>
-          <p className="sub">Pick a category — the search above switches to it.</p>
-          <div className="cat-tiles">
-            {CATEGORY_TILES.map((t) => (
-              <button key={t.id} type="button" className="cat-tile" onClick={() => selectCategory(t.id)}>
-                <span className="cat-icon" aria-hidden="true">
-                  <Icon name={t.icon} size={26} />
-                </span>
-                <strong>{t.label}</strong>
-                <span>{t.blurb}</span>
-              </button>
-            ))}
-          </div>
         </section>
 
         <HowItWorksSection />
@@ -585,6 +767,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
                   <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>{' '}
+                  <a href={`/destination/${encodeURIComponent(d.name)}`}>Destination guide →</a>{' '}
                   <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} />
                 </div>
               </article>
@@ -639,11 +822,26 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           </div>
           <p className="plan-muted">“Mark as booked” is set by you or the FujinTrip team when a booking request is confirmed — it is not a live booking. A booked trip’s plan PDF is free; other plans cost $1 to download.</p>
           {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet — tell Fujin AI where to go and it will appear here.</p> : (
-            <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
-              {trips.map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
-            </ul>
+            <>
+              <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
+                {(showAllTrips ? trips : trips.slice(0, 5)).map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
+              </ul>
+              {trips.length > 5 && (
+                <p style={{ marginTop: 8 }}>
+                  <button type="button" className="ghost" onClick={() => setShowAllTrips((s) => !s)}>
+                    {showAllTrips ? 'Show fewer trips' : `Show all ${trips.length} trips (${trips.length - 5} more)`}
+                  </button>
+                </p>
+              )}
+            </>
           )}
-          <h3 style={{ marginTop: 20 }}>Your travel preferences</h3>
+          {/* Progressive disclosure (interface round, Nov 16 2026 —
+              P1 #20): the preferences, emergency contact, embassy
+              number and price watches sit behind <details> so the
+              section stops dominating the homepage. The content is
+              still in the page — collapsed, not removed. */}
+          <details>
+            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Your travel preferences</h3></summary>
           <p className="plan-muted">What you tell Fujin here carries across trips — on this device, no account. Only what you picked or said in the chat is ever used; nothing is guessed. Tap a chip again to clear it.</p>
           {profileSummary(profile) ? (
             <p style={{ fontSize: 14 }}>Now using: <strong>{profileSummary(profile)}</strong></p>
@@ -687,19 +885,25 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             </label>
             <button type="button" className={`chip${profile.napWindow ? ' selected' : ''}`} onClick={() => setProfile({ ...profile, napWindow: profile.napWindow ? undefined : true })}>Nap window after lunch</button>
           </div>
-          <h3 style={{ marginTop: 20 }}>Emergency contact</h3>
-          <p className="plan-muted">For solo trips — who should be reached if something goes wrong? Stored on this device only, shown on your solo trip cards.</p>
+          </details>
+          <details>
+            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Emergency contact</h3></summary>
+            <p className="plan-muted">For solo trips — who should be reached if something goes wrong? Stored on this device only, shown on your solo trip cards.</p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <input value={emergencyContact.name} onChange={(e) => setEmergencyContact({ ...emergencyContact, name: e.target.value })} placeholder="Name" aria-label="Emergency contact name" />
             <input value={emergencyContact.phone} onChange={(e) => setEmergencyContact({ ...emergencyContact, phone: e.target.value })} placeholder="Phone" aria-label="Emergency contact phone" />
           </div>
-          <h3 style={{ marginTop: 20 }}>Embassy / consulate</h3>
-          <p className="plan-muted">Your embassy or consulate&apos;s number for the country you&apos;re visiting — yours to type in, saved on this device only. The SOS sheet can call it.</p>
+          </details>
+          <details>
+            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Embassy / consulate</h3></summary>
+            <p className="plan-muted">Your embassy or consulate&apos;s number for the country you&apos;re visiting — yours to type in, saved on this device only. The SOS sheet can call it.</p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <input value={embassyNumber} onChange={(e) => setEmbassyNumber(e.target.value)} placeholder="Embassy number" aria-label="Embassy or consulate phone number" />
           </div>
-          <h3 style={{ marginTop: 20 }}>Price watches</h3>
-          <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. The plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
+          </details>
+          <details>
+            <summary><h3 style={{ display: 'inline', marginTop: 20 }}>Price watches</h3></summary>
+            <p className="plan-muted">A watch measures the live fare against the fare when you started watching. When it drops below that, it shows here. The plan&apos;s own prices are estimates and never move, so they are never the baseline.</p>
           {watches.length === 0 ? <p style={{ color: 'var(--muted)' }}>No price watches yet. Build a plan in the chat, then tap “Watch this trip&apos;s prices”.</p> : (
             <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
               {watches.map((w) => {
@@ -726,17 +930,8 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               })}
             </ul>
           )}
+          </details>
         </section>
-
-        {/* Trust strip (restructure, Nov 15, 2026): moved from the top
-            of the page to after My Trips — the packages and the search
-            lead now, the trust lines close the page. Three honest
-            lines, no invented numbers. */}
-        <div className="trust-strip" aria-label="Why book with FujinTrip">
-          <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>All-in prices — the price you see is the price you pay</span>
-          <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>No hidden fees — our flight service fee is shown separately at checkout</span>
-          <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>Compare prices from different sources</span>
-        </div>
 
         {/* Ad slot: above the footer, content area only. Dormant until AdSense is configured. */}
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_ABOVE_FOOTER ?? ''} />
@@ -796,6 +991,28 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               </ul>
             </div>
           </div>
+          {/* Footer link hub (interface round, Nov 16 2026 — P1 #10):
+              top destinations × the 7 categories as /?tab= links,
+              built from discovery data. A destination name links to
+              its guide page; a category link lands on that tab with
+              the destination prefilled in the search widget. */}
+          <div className="footer-hub" aria-label="Top destinations by category">
+            {discovery.slice(0, 6).map((d) => (
+              <div key={d.key} className="footer-hub-dest">
+                <strong>
+                  <a href={`/destination/${encodeURIComponent(d.destination)}`}>{d.destination}</a>
+                </strong>
+                <ul>
+                  {HOME_TABS.map((t) => (
+                    <li key={t.id}>
+                      <a href={`/?tab=${t.id}&plan=${encodeURIComponent(d.destination)}`}>{t.label}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          {trustStrip('Why book with FujinTrip — footer')}
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Travel globally, act locally. Named for Fujin, Japan’s wind god.</p>
           <p>No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>

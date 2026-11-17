@@ -104,6 +104,48 @@ export type HotelbedsActivitiesInput = {
   travelers: number;
 };
 
+// --- Filters ---------------------------------------------------------
+// Modality chips + duration filter (interface round, Nov 16 2026):
+// the modality is the activity's category (the chip row), the
+// duration comes from durationDays. Options and counts come from
+// the activities actually returned — never invented. An activity
+// with no modality or no duration only matches when that filter is
+// unset.
+export type HotelbedsActivityDuration = 'any' | '1' | '2' | '3plus';
+
+export type HotelbedsActivityFilter = {
+  modality: string | null;
+  duration: HotelbedsActivityDuration;
+  maxPrice: number | null;
+};
+
+export function activityModalityOptions(
+  activities: HotelbedsActivity[]
+): Array<{ value: string; label: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const a of activities) {
+    if (!a.modalityName) continue;
+    counts.set(a.modalityName, (counts.get(a.modalityName) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([modality, count]) => ({ value: modality, label: modality, count }));
+}
+
+export function filterHotelbedsActivities(
+  activities: HotelbedsActivity[],
+  f: HotelbedsActivityFilter
+): HotelbedsActivity[] {
+  return activities.filter((a) => {
+    if (f.modality !== null && a.modalityName !== f.modality) return false;
+    if (f.duration === '1' && !(a.durationDays !== undefined && a.durationDays <= 1)) return false;
+    if (f.duration === '2' && a.durationDays !== 2) return false;
+    if (f.duration === '3plus' && !(a.durationDays !== undefined && a.durationDays >= 3)) return false;
+    if (f.maxPrice !== null && a.perTraveler > f.maxPrice) return false;
+    return true;
+  });
+}
+
 // The sandbox tag on every activity card and on the section
 // header: source + test-data warning, always visible — it is the
 // honesty label, not a source tag, so it never hides behind a

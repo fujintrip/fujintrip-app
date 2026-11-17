@@ -80,6 +80,10 @@ export type HotelbedsHotel = {
   boardName?: string;
   rateType?: 'BOOKABLE' | 'RECHECK';
   imageUrl?: string;
+  // The ContentAPI gallery for this hotel (up to 6 photos, lowest
+  // order first); imageUrl is images[0]. A hotel with no usable
+  // photo has neither.
+  images?: string[];
 };
 
 export type HotelbedsReason =
@@ -136,8 +140,8 @@ export type HotelbedsProduct = 'hotel' | 'activities' | 'transfers' | 'bundle';
 
 export const HOTELBEDS_PRODUCTS: Record<HotelbedsProduct, boolean> = {
   hotel: true,
-  activities: false,
-  transfers: false,
+  activities: true,
+  transfers: true,
   bundle: false,
 };
 
@@ -215,6 +219,80 @@ export function hotelbedsImageUrl(path: string | undefined): string | undefined 
   const p = path.trim();
   if (/^https?:\/\//i.test(p)) return p;
   return `https://photos.hotelbeds.com/giata/${p.replace(/^\/+/, '')}`;
+}
+
+// --- Star class + facets ------------------------------------------------
+// Hotelbeds category codes carry the star class: "3EST" is 3 stars,
+// "5EST" is 5. Anything else (APART, HOSTEL, VILLA…) has no star
+// class — the facet never invents one. categoryName ("4 stars") is
+// the fallback when the code is not a star code.
+export function hotelbedsStars(hotel: { categoryCode?: string; categoryName?: string }): number | null {
+  const code = (hotel.categoryCode ?? '').trim().toUpperCase();
+  const codeMatch = code.match(/^([1-5])EST$/);
+  if (codeMatch) return Number(codeMatch[1]);
+  const nameMatch = (hotel.categoryName ?? '').match(/([1-5])\s*stars?/i);
+  if (nameMatch) return Number(nameMatch[1]);
+  return null;
+}
+
+export type HotelbedsFacetOption = { value: string; label: string; count: number };
+
+// Facet options from the hotels actually returned — counts from the
+// full result set, never invented, sorted most-common first (stars
+// highest first). A facet with no matching hotel in the set does not
+// appear.
+export function hotelbedsStarOptions(hotels: HotelbedsHotel[]): HotelbedsFacetOption[] {
+  const counts = new Map<number, number>();
+  for (const h of hotels) {
+    const s = hotelbedsStars(h);
+    if (s !== null) counts.set(s, (counts.get(s) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([stars, count]) => ({ value: String(stars), label: `${stars} star${stars === 1 ? '' : 's'}`, count }));
+}
+
+export function hotelbedsZoneOptions(hotels: HotelbedsHotel[]): HotelbedsFacetOption[] {
+  const counts = new Map<string, number>();
+  for (const h of hotels) {
+    if (!h.zoneName) continue;
+    counts.set(h.zoneName, (counts.get(h.zoneName) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([zone, count]) => ({ value: zone, label: zone, count }));
+}
+
+export function hotelbedsBoardOptions(hotels: HotelbedsHotel[]): HotelbedsFacetOption[] {
+  const counts = new Map<string, number>();
+  for (const h of hotels) {
+    if (!h.boardName) continue;
+    counts.set(h.boardName, (counts.get(h.boardName) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([board, count]) => ({ value: board, label: board, count }));
+}
+
+export type HotelbedsHotelFilter = {
+  star: number | null;
+  zone: string | null;
+  board: string | null;
+  maxPrice: number | null;
+};
+
+// The Stays facets, applied together: star class, zone, meal plan
+// (board), and the max-price band (per traveler). A hotel with no
+// star class, zone, or board only matches that facet when the facet
+// is unset — an unknown value never claims to match a filter.
+export function filterHotelbedsHotels(hotels: HotelbedsHotel[], f: HotelbedsHotelFilter): HotelbedsHotel[] {
+  return hotels.filter((h) => {
+    if (f.star !== null && hotelbedsStars(h) !== f.star) return false;
+    if (f.zone !== null && h.zoneName !== f.zone) return false;
+    if (f.board !== null && h.boardName !== f.board) return false;
+    if (f.maxPrice !== null && h.perTraveler > f.maxPrice) return false;
+    return true;
+  });
 }
 
 // --- Labels ----------------------------------------------------------
@@ -447,10 +525,43 @@ export function parseContentDetailsResponse(value: unknown): Map<number, string>
   return out;
 }
 
+// The ContentAPI details response as a gallery: code → up to 6
+// image URLs, lowest order first. Same validation as the
+// single-photo parser above; a hotel with no usable image maps to
+// no entry, and the card renders its first photo (or none) rather
+// than a broken one.
+export function parseContentDetailsImages(value: unknown): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  if (!isObj(value)) return out;
+  const list: unknown[] = Array.isArray(value.hotels)
+    ? (value.hotels as unknown[])
+    : isObj(value.hotel)
+      ? [value.hotel]
+      : [];
+  for (const entry of list) {
+    if (!isObj(entry)) continue;
+    const code = asNum((entry as HotelbedsContentHotelRaw).code);
+    if (code === undefined || out.has(code)) continue;
+    const images = (
+      Array.isArray((entry as HotelbedsContentHotelRaw).images)
+        ? ((entry as HotelbedsContentHotelRaw).images as unknown[])
+        : []
+    ).filter(isObj) as HotelbedsImageRaw[];
+    const urls = images
+      .map((img) => ({ url: hotelbedsImageUrl(asStr(img.path)), order: asNum(img.order) ?? Number.MAX_SAFE_INTEGER }))
+      .filter((img): img is { url: string; order: number } => !!img.url)
+      .sort((a, b) => a.order - b.order)
+      .map((img) => img.url)
+      .slice(0, 6);
+    if (urls.length) out.set(code, urls);
+  }
+  return out;
+}
+
 // --- Live calls ------------------------------------------------------
 
 const searchCache = new Map<string, { ts: number; result: HotelbedsSearchResult }>();
-const contentCache = new Map<number, { ts: number; imageUrl: string }>();
+const contentCache = new Map<number, { ts: number; images: string[] }>();
 // The evaluation quota is 50 requests/day: after a 403 the client
 // stops calling until this timestamp instead of burning the quota
 // on retries that cannot succeed.
@@ -528,12 +639,12 @@ async function fetchWithTimeout(
 // the whole list (comma-separated codes). Hotels already in the
 // 24h content cache are skipped, so a repeat search for the same
 // hotels costs no ContentAPI call at all.
-async function fetchHotelImages(codes: number[]): Promise<Map<number, string>> {
-  const out = new Map<number, string>();
+async function fetchHotelImages(codes: number[]): Promise<Map<number, string[]>> {
+  const out = new Map<number, string[]>();
   const missing = codes.filter((c) => {
     const hit = contentCache.get(c);
     if (hit && Date.now() - hit.ts < CONTENT_CACHE_TTL_MS) {
-      out.set(c, hit.imageUrl);
+      out.set(c, hit.images);
       return false;
     }
     return true;
@@ -548,10 +659,10 @@ async function fetchHotelImages(codes: number[]): Promise<Map<number, string>> {
       FETCH_TIMEOUT_MS
     );
     if (!r.ok) return out;
-    const parsed = parseContentDetailsResponse(r.json);
-    for (const [code, imageUrl] of parsed) {
-      out.set(code, imageUrl);
-      contentCache.set(code, { ts: Date.now(), imageUrl });
+    const parsed = parseContentDetailsImages(r.json);
+    for (const [code, images] of parsed) {
+      out.set(code, images);
+      contentCache.set(code, { ts: Date.now(), images });
     }
   } catch {
     // Photos are an enhancement, never the search: a failed
@@ -629,9 +740,12 @@ export async function searchHotelbedsStays(input: HotelbedsSearchInput): Promise
   const hotels = mapAvailabilityHotels(availability.json, nights, input.guests);
   if (!hotels) return { ...base, reason: 'bad_response' };
   if (!hotels.length) return { ...base, reason: 'no_hotels' };
-  // Photos, one ContentAPI call for the hotels on screen.
+  // Photos, one ContentAPI call for the hotels on screen — the
+  // gallery per hotel, first photo as the card image.
   const images = await fetchHotelImages(hotels.map((h) => h.code));
-  const withImages = hotels.map((h) => (images.has(h.code) ? { ...h, imageUrl: images.get(h.code) } : h));
+  const withImages = hotels.map((h) =>
+    images.has(h.code) ? { ...h, imageUrl: images.get(h.code)![0], images: images.get(h.code) } : h
+  );
   const result: HotelbedsSearchResult = {
     ...base,
     live: true,
