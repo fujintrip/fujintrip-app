@@ -182,6 +182,13 @@ button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink
 .map-skeleton{height:100%;min-height:320px;display:flex;flex-direction:column;gap:12px}
 .card .body h3{font-size:20px}
 .card .body p{font-size:14px;color:var(--muted)}
+/* Photo-led destination cards (review round, Nov 17 2026 — gap 2):
+   the name + from-price sit overlaid on the photo, Expedia's
+   destination-card pattern, instead of a second white card body. */
+.dest-card--photo{position:relative}
+.dest-overlay{position:absolute;left:0;right:0;top:0;height:180px;display:flex;flex-direction:column;justify-content:flex-end;padding:12px 20px;background:linear-gradient(transparent,rgba(0,0,0,.62));color:#fff;pointer-events:none;z-index:1}
+.dest-overlay h3{margin:0;font-size:20px;color:#fff}
+.dest-overlay p{margin:2px 0 0;font-size:13px;color:rgba(255,255,255,.92)}
 .price{font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
 .pill{display:inline-block;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:8px}
 section{padding:64px 0}
@@ -900,8 +907,8 @@ button.continue-card:hover{border-color:var(--ink)}
    "Flights" heading slid underneath the bar). 61px header + ~50px
    bar + margin. */
 #results{scroll-margin-top:140px}
-.results-bar{position:sticky;top:61px;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sticky-bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:16px;backdrop-filter:blur(8px)}
-.results-honesty{color:var(--muted);font-size:14px}
+.results-bar{position:sticky;top:61px;z-index:40;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;background:var(--sticky-bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:16px;backdrop-filter:blur(8px)}
+.results-bar-note{flex-basis:100%;font-size:13px;color:var(--muted)}
 .results-note{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn-ink);border-radius:12px;padding:12px 16px;font-size:14px}
 .results-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:32px;align-items:start}
 .results-filters{position:sticky;top:140px}
@@ -916,14 +923,27 @@ button.continue-card:hover{border-color:var(--ink)}
 .filter-check input{flex:none;width:auto;padding:0}
 .filters-open-row{display:none}
 .result-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
+.result-cards--wide{grid-template-columns:1fr}
 .result-card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(15,15,15,.05);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
 .result-card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(15,15,15,.10)}
 .result-card.result-match{border-color:var(--accent-text);box-shadow:0 0 0 1px var(--accent-text)}
 .result-card .result-photo{height:160px;width:100%;object-fit:cover;display:block}
+/* Horizontal hotel rows (review round, Nov 17 2026 — gap 5):
+   photo left, body middle, price + action in a fixed right column. */
+.result-card--wide{display:grid;grid-template-columns:280px 1fr 220px}
+.result-card--wide .result-photo{height:220px}
+.result-wide-side{padding:20px;display:flex;flex-direction:column;gap:8px;border-left:1px solid var(--line)}
+.result-wide-side .result-price{margin:0}
+.result-wide-side .primary{align-self:flex-start;margin-top:auto}
+@media (max-width:640px){
+  .result-card--wide{grid-template-columns:1fr}
+  .result-card--wide .result-photo{height:180px}
+  .result-wide-side{border-left:0;border-top:1px solid var(--line)}
+}
 .result-body{padding:20px;display:flex;flex-direction:column;gap:6px;flex:1}
 .result-body h3{font-size:18px;margin:0}
 .result-body p{margin:0;font-size:14px}
-.result-price{font-size:16px;font-weight:700}
+.result-price{font-size:22px;font-weight:700}
 .result-price .plan-muted{font-weight:400}
 .result-match-line{font-size:13px;font-weight:600;color:var(--accent-text)}
 /* The honest note above a card's price (interface round, Nov 16
@@ -959,7 +979,12 @@ button.continue-card:hover{border-color:var(--ink)}
    each card a complete trip option with its own small source tag.
    Other tabs keep the sidebar layout. */
 .results-section--flights{margin-left:calc(-50vw + 50%);margin-right:calc(-50vw + 50%);padding-left:20px;padding-right:20px}
-.flight-filter-bar,.stay-filter-bar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin:0 0 16px;background:var(--card)}
+.flight-filter-bar{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin:0 0 16px;background:var(--card)}
+/* Facet checkbox lists (review round, Nov 17 2026 — gap 6):
+   star / area / meal plan as checkbox lists with counts, the
+   Expedia pattern, instead of <select> dropdowns. */
+.facet-check{display:flex;align-items:center;gap:8px;font-size:14px;padding:5px 0;cursor:pointer}
+.facet-check input{accent-color:var(--ink)}
 .filter-bar-field{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
 .filter-bar-field select{border:1px solid var(--line);border-radius:8px;padding:10px;font-size:14px;font-family:inherit;background:var(--card);color:var(--ink)}
 .filter-bar-group{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
@@ -1100,6 +1125,11 @@ button.continue-card:hover{border-color:var(--ink)}
 .pkg-card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(15,15,15,.05);transition:transform 200ms ease}
 .pkg-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(15,15,15,.10)}
 .pkg-card--hero{grid-column:span 2;grid-row:span 2}
+/* Horizontal package rows (review round, Nov 17 2026 — gap 2): the
+   deals shelf renders the same card as a wide row, photo left. */
+.pkg-card--row{display:grid;grid-template-columns:280px 1fr}
+.pkg-card--row .pkg-photo{height:100%;min-height:200px}
+.pkg-card--row .pkg-photo-fallback{height:100%;min-height:200px}
 .pkg-photo{width:100%;height:180px;object-fit:cover;display:block}
 .pkg-card--hero .pkg-photo{height:300px}
 .pkg-photo-fallback{display:flex;align-items:center;justify-content:center;height:180px;background:var(--accent-soft);color:var(--accent-text);font-family:var(--font-display);font-size:20px;font-weight:800;padding:16px;text-align:center}
@@ -1114,6 +1144,13 @@ button.continue-card:hover{border-color:var(--ink)}
 .pkg-includes li{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
 .pkg-tiers{display:flex;flex-wrap:wrap;gap:4px 14px;font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:var(--muted);margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)}
 .pkg-tiers strong{color:var(--ink)}
+/* "See what's included" expander (review round, Nov 17 2026 —
+   gap 3): the includes breakdown + tier row hide behind a details
+   so the card shows one loud price. */
+.pkg-details{margin-top:14px}
+.pkg-details summary{cursor:pointer;font-weight:600;font-size:13px}
+.pkg-details .pkg-includes{margin-top:10px}
+.pkg-details .pkg-tiers{margin-top:10px}
 .pkg-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .pkg-actions button{min-height:44px;transition:transform 150ms ease}
 .pkg-actions button:active{transform:scale(.98)}
@@ -1125,8 +1162,8 @@ button.continue-card:hover{border-color:var(--ink)}
 .fare-chip-route{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:15px}
 .fare-chip-price{font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .fare-chip-label{font-size:12px;color:var(--muted)}
-/* Deals of the week: three cards, same card as the packages shelf. */
-.deals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+/* Deals of the week: wide horizontal rows, not another card grid. */
+.deals-grid{display:grid;grid-template-columns:1fr;gap:20px}
 /* How it works: three steps, one per job — Plan, Book, Follow. */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .step{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
@@ -1145,7 +1182,7 @@ button.continue-card:hover{border-color:var(--ink)}
   .pkg-grid{grid-template-columns:repeat(2,1fr)}
   .pkg-card--hero{grid-column:span 2;grid-row:auto}
   .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:220px}
-  .deals-grid{grid-template-columns:repeat(2,1fr)}
+  .deals-grid{grid-template-columns:1fr}
   .steps{grid-template-columns:1fr}
 }
 @media (max-width:640px){
@@ -1153,6 +1190,8 @@ button.continue-card:hover{border-color:var(--ink)}
   .pkg-grid,.deals-grid{grid-template-columns:1fr}
   .pkg-card--hero{grid-column:auto}
   .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:200px}
+  .pkg-card--row{grid-template-columns:1fr}
+  .pkg-card--row .pkg-photo,.pkg-card--row .pkg-photo-fallback{height:200px;min-height:0}
   .pkg-price{font-size:28px}
   .voices-teaser{flex-direction:column;padding:20px}
   .trust-strip{grid-template-columns:1fr;gap:12px}

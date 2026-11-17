@@ -573,7 +573,9 @@ test('restructure: the header, the widget tabs and the category tiles share one 
   const fujinApp = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
   assert.ok(fujinApp.includes('<Icon name={t.icon} size={26} />'), 'category tiles render the shared key');
   const header = readFileSync(new URL('../components/SiteHeader.tsx', import.meta.url), 'utf8');
-  assert.ok(header.includes('<Icon name={t.icon} size={15} />'), 'header nav renders the shared key');
+  // The header nav is text-only (review round, Nov 17 2026 — gap 12):
+  // the category tiles below the hero already carry the icons.
+  assert.ok(!header.includes('<Icon name={t.icon}'), 'no category icon in the header nav');
   const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
   assert.ok(widget.includes('<Icon name={t.icon} size={16} />'), 'widget tabs render the shared key');
 });
@@ -630,11 +632,12 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   }
   assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:8px/.test(css), 'search fields use the 8px radius');
   assert.ok(/\.results-bar\{[^}]*border-radius:12px/.test(css), 'the results bar uses the 12px radius');
-  // The flights and stays filter bars share one rule (interface
-  // round, Nov 16 2026 — sort above the list on stays, same bar as
-  // flights): the regex tolerates the shared selector.
-  assert.ok(/\.flight-filter-bar(?:,\.stay-filter-bar)?\{[^}]*border-radius:16px/.test(css), 'the flights filter bar uses the 16px radius');
-  assert.ok(css.includes('.stay-filter-bar'), 'the stays filter bar shares the flights bar rule');
+  // The stays top bar is gone (review round, Nov 17 2026 — gap 6:
+  // sort, max price, tier and the sandbox facets all live in the
+  // sidebar now — one filter surface). The flights bar keeps the
+  // 16px radius on its own rule.
+  assert.ok(/\.flight-filter-bar\{[^}]*border-radius:16px/.test(css), 'the flights filter bar uses the 16px radius');
+  assert.ok(!css.includes('.stay-filter-bar'), 'the stays filter bar is gone — its filters live in the sidebar');
   for (const grid of ['.result-cards', '.pkg-grid', '.deals-grid', '.flight-card-grid', '.cat-tiles']) {
     assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:20px`).test(css), `${grid} breathes at a 20px gap`);
   }
@@ -661,4 +664,72 @@ test('review fixes: flights shelf copy, summary headings, price indentation', ()
   assert.ok(app.includes('className="details-heading"'), 'the summary headings use the styled span');
   assert.ok(css.includes('.details-heading{'), 'the details heading style exists');
   assert.ok(!/^<p className="result-price">/m.test(results), 'no result-price line sits at column 0');
+});
+
+// Review round (Nov 17, 2026 — second pair of eyes, Expedia re-study):
+// 12 ranked gaps, each pinned here so the next round cannot silently
+// reintroduce them.
+test('review round Nov 17: the 12 interface fixes are in place', () => {
+  const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+  const homeTabs = readFileSync(new URL('../lib/homeTabs.ts', import.meta.url), 'utf8');
+  const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const pkgs = readFileSync(new URL('../components/PackagesSection.tsx', import.meta.url), 'utf8');
+  const deals = readFileSync(new URL('../components/DealsSection.tsx', import.meta.url), 'utf8');
+  const data = readFileSync(new URL('../lib/data.ts', import.meta.url), 'utf8');
+  const voices = readFileSync(new URL('../components/HomeSections.tsx', import.meta.url), 'utf8');
+  const strip = readFileSync(new URL('../components/FaresStrip.tsx', import.meta.url), 'utf8');
+  const header = readFileSync(new URL('../components/SiteHeader.tsx', import.meta.url), 'utf8');
+  // 1 — the landing shelf shows only when the URL carries a ?tab=.
+  assert.ok(homeTabs.includes('homeTabIdFromQueryOrNull'), 'the null-returning tab parser exists');
+  assert.ok(page.includes('initialLandingTab={homeTabIdFromQueryOrNull'), 'the homepage passes the landing tab separately');
+  assert.ok(app.includes('initialLandingTab ?? null'), 'the shelf state starts from the landing tab, not the widget tab');
+  // 2 — distinct section grammars: photo destination cards, deal rows.
+  assert.ok(app.includes('dest-card--photo'), 'destination cards use the photo-led variant');
+  assert.ok(app.includes('dest-overlay'), 'the name + from-price overlay the photo');
+  assert.ok(deals.includes('            row'), 'the deals shelf renders the row layout');
+  assert.ok(css.includes('.dest-card--photo{'), 'the photo-card style exists');
+  assert.ok(css.includes('.pkg-card--row{'), 'the row-card style exists');
+  assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:1fr'), 'deals are one column of wide rows');
+  // 3 — package cards hide the breakdown behind an expander.
+  assert.ok(pkgs.includes('<details className="pkg-details">'), 'the includes + tiers sit behind a details');
+  assert.ok(pkgs.includes("See what&apos;s included"), 'the expander is labeled');
+  assert.ok(css.includes('.pkg-details{'), 'the expander style exists');
+  // 4 — non-flight prices lead the card at 22px.
+  assert.ok(css.includes('.result-price{font-size:22px'), 'result prices are 22px, not body size');
+  // 5 — hotel cards are horizontal rows with a fixed price column.
+  assert.ok(results.includes('result-card--wide'), 'Hotelbeds cards use the wide variant');
+  assert.ok(results.includes('result-wide-side'), 'the price + action sit in the side column');
+  assert.ok(results.includes('result-cards--wide'), 'the hotel list is a single column');
+  assert.ok(css.includes('.result-card--wide{display:grid'), 'the wide-row style exists');
+  // 6 — Stays filters live in one sidebar, as checkbox lists.
+  assert.ok(!results.includes('stayFilterBar'), 'the stays top bar is gone');
+  assert.ok(!results.includes('stay-filter-bar'), 'no stays top-bar class remains');
+  assert.ok(results.includes('className="facet-check"'), 'star / area / meal plan render as checkbox lists');
+  assert.ok(results.includes('type="checkbox"'), 'the facets use real checkboxes');
+  assert.ok(css.includes('.facet-check{'), 'the facet checkbox style exists');
+  assert.ok(!css.includes('.stay-filter-bar'), 'the stays bar rule is gone from the CSS');
+  // 7 — weekend trips carry photos.
+  assert.ok(data.includes("image: weekendPhoto('Paris')"), 'the default trips have photos');
+  assert.ok(data.includes("image: CITY_PHOTOS['New York']"), 'the New York trips use the real skyline');
+  assert.ok(app.includes('l.image'), 'the weekend cards render the photo');
+  // 8 — Local Voices is photo cards linking to the guides.
+  assert.ok(voices.includes('voicePhoto'), 'each place resolves a photo');
+  assert.ok(voices.includes('Destination guide →'), 'the cards link to the destination guide');
+  assert.ok(!voices.includes('<strong>To try</strong>'), 'the full guide text moved off the card');
+  // 9 — My Trips collapses behind one details when empty.
+  assert.ok(app.includes('myTripsEmpty'), 'the empty state is computed');
+  assert.ok(app.includes('Your trips, account and settings'), 'the collapsed section has one summary');
+  // 10 — the results page no longer triple-stacks chrome.
+  assert.ok(!results.includes('<h2>{label}</h2>'), 'the redundant results heading is gone');
+  assert.ok(!results.includes('results-honesty'), 'the standalone honesty paragraph is gone');
+  assert.ok(results.includes('results-bar-note'), 'the honesty line lives in the results bar');
+  assert.ok(!css.includes('.results-honesty'), 'the honesty style is gone');
+  // 11 — the fares strip no longer claims live fares are still coming.
+  assert.ok(strip.includes('Planning estimates, not live quotes'), 'the strip still says the chips are not live quotes');
+  assert.ok(strip.includes('Live fares from Ignav and LetsFG appear in flight results'), 'the strip names the live sources');
+  assert.ok(!strip.includes('live fares arrive as suppliers connect'), 'the strip never claims live fares are still coming');
+  // 12 — the header nav is text-only.
+  assert.ok(!header.includes('<Icon name={t.icon}'), 'no category icon in the header nav');
 });

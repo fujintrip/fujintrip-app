@@ -40,7 +40,7 @@ export default function SiteHeader({
       <nav className="site-nav" aria-label="Book by category">
         {HOME_TABS.map((t) => (
           <a key={t.id} href={`/?tab=${t.id}`} onClick={navClick(t.id)}>
-            <Icon name={t.icon} size={15} /> {t.label}
+            {t.label}
           </a>
         ))}
       </nav>
@@ -84,7 +84,7 @@ export default function SiteHeader({
         <div className="site-menu" role="menu" aria-label="Site menu">
           {HOME_TABS.map((t) => (
             <a key={t.id} href={`/?tab=${t.id}`} role="menuitem" onClick={navClick(t.id)}>
-              <Icon name={t.icon} size={18} /> {t.label}
+              {t.label}
             </a>
           ))}
           <a href={myTripsHref} role="menuitem" onClick={closeMenu}>

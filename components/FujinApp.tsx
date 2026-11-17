@@ -100,7 +100,7 @@ const SHELF_COPY: Record<HomeTabId, { heading: string; line: string }> = {
   },
 };
 
-export default function FujinApp({ variant, initialTab, initialSearch }: { variant: 'home' | 'chat'; initialTab?: HomeTabId; initialSearch?: SearchQuery | null }) {
+export default function FujinApp({ variant, initialTab, initialLandingTab, initialSearch }: { variant: 'home' | 'chat'; initialTab?: HomeTabId; initialLandingTab?: HomeTabId | null; initialSearch?: SearchQuery | null }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const router = useRouter();
   // Theme (interface round §6): the discovery map follows the same
@@ -280,7 +280,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // P1 #17): which tab the URL (or a tile/header tap) landed on.
   // The shelf renders while a tab is landed on; a bare homepage
   // load with no ?tab= shows none.
-  const [landingTab, setLandingTab] = useState<HomeTabId | null>(initialTab ?? null);
+  const [landingTab, setLandingTab] = useState<HomeTabId | null>(initialLandingTab ?? null);
   // A shared deep link followed while already on the page (or Back)
   // changes initialSearch without remounting — the results follow the
   // link instead of the stale search from the first load. A bare
@@ -565,222 +565,15 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       <ReelComposer trips={trips} prefillDestination={composerDest} onPosted={() => {}} onClose={() => setComposerOpen(false)} />
     </div>
   );
-  return (
-    <div>
-      {variant === 'chat' ? (
-        <a href="#fujin-chat" className="skip-link">Skip to chat</a>
-      ) : (
-        <a href="#destinations" className="skip-link">Skip to destinations</a>
-      )}
-      {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12;
-          interface round M2 — the 8-tab bar is gone): the chat section
-          is full-bleed — header and chat panel span the viewport, and
-          the chat + trip panel + map fill the first screen. The slim
-          hero was folded into the app bar (the mark + one-line tagline),
-          so it no longer pushes the app down. The content sections
-          below stay in the capped .wrap. */}
-      {variant === 'chat' && (
-        <div className="chat-shell">
-          <div className="panel chat-panel" id="fujin-chat">
-            <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} embassyNumber={embassyNumber} onEmbassyChange={setEmbassyNumber} />
-          </div>
-        </div>
-      )}
-      {composerPanel}
-      {variant === 'home' && (
-        <SiteHeader
-          theme={theme}
-          onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          onSelectCategory={selectCategory}
-          myTripsHref="#mytrips"
-        />
-      )}
-      {variant === 'home' && (
-        <section className="hero-booking">
-          <div className="wrap hero-booking-inner">
-            <h1>Where to?</h1>
-            <p className="hero-booking-sub">Flights, stays, cars, tours and more — compare prices from different sources, all in one place.</p>
-            <SearchWidget
-              tab={widgetTab}
-              onTabChange={changeTab}
-              initialSearch={initialSearch ?? null}
-              prefill={prefill}
-              onSubmit={handleSearchSubmit}
-            />
-          </div>
-        </section>
-      )}
-      {variant === 'home' && (
-        <div className="wrap">
-          <ContinueStrip
-            trips={trips}
-            watches={watches}
-            lastSearch={lastSearch}
-            onResumeSearch={resumeSearch}
-            onGoToTrips={() => document.getElementById('mytrips')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          />
-        </div>
-      )}
-      {variant === 'home' && search && (
-        <div className="wrap">
-          <SearchResults
-            query={search}
-            dark={theme === 'dark'}
-            onSaveSearch={(label) => saveTrip(label, 'Request saved')}
-            onEditSearch={editSearch}
-          />
-        </div>
-      )}
-      {/* Trust strip (interface round, Nov 16 2026 — P0 #3): directly
-          under the search results when a search is active, directly
-          under the hero otherwise. */}
-      {variant === 'home' && (
-        <div className="wrap">{trustStrip('Why book with FujinTrip')}</div>
-      )}
-      {variant === 'home' && (
-      <main className="wrap">
-        {/* Category tiles (interface round, Nov 16 2026 — P1 #9):
-            moved from position 8 to directly under the hero — the
-            category entry points come first, as on Expedia. They
-            still switch the widget tab; position is the only change. */}
-        <section>
-          <h2>What do you need for your trip?</h2>
-          <p className="sub">Pick a category — the search above switches to it.</p>
-          <div className="cat-tiles">
-            {CATEGORY_TILES.map((t) => (
-              <button key={t.id} type="button" className="cat-tile" onClick={() => selectCategory(t.id)}>
-                <span className="cat-icon" aria-hidden="true">
-                  <Icon name={t.icon} size={26} />
-                </span>
-                <strong>{t.label}</strong>
-                <span>{t.blurb}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Per-category landing shelf (interface round, Nov 16 2026
-            — P1 #17, option (a)): when a tab is landed on (?tab=),
-            the category's own shelf renders under the tiles — top
-            destinations with that category's Best value figure, from
-            the planner's own legs, labelled planning estimates. No
-            new routes. */}
-        {landingTab && shelfEntries.length > 0 && (
-          <section aria-label={`${SHELF_COPY[landingTab].heading} destinations`}>
-            <h2>Top {SHELF_COPY[landingTab].heading.toLowerCase()} destinations</h2>
-            <p className="sub">{SHELF_COPY[landingTab].line}</p>
-            <div className="grid">
-              {shelfEntries.map((s) => (
-                <article className="card" key={s.name}>
-                  {s.photo && <SafeImg src={s.photo} alt={s.name} label={s.name} />}
-                  <div className="body">
-                    <h3>{s.name}</h3>
-                    <p className="price">from ${s.perTraveler.toLocaleString()} per traveler</p>
-                    <p className="plan-muted">Best value · {s.legLabel} · planning estimate</p>
-                    <button className="primary" onClick={() => prefillDestination(s.name)}>Search this destination</button>{' '}
-                    <a href={`/destination/${encodeURIComponent(s.name)}`}>Destination guide →</a>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Homepage restructure (Nov 15, 2026): ready-made packages
-            first, then the cheapest fares and the deals — the search
-            results still render directly under the hero, above main. */}
-        <PackagesSection onViewPackage={viewPackage} onSavePackage={savePackage} />
-        <FaresStrip onPick={prefillDestination} />
-        <DealsSection onViewPackage={viewPackage} onSavePackage={savePackage} />
-
-        <section id="destinations">
-          <h2>Popular destinations</h2>
-          <p className="sub">Tap a destination to fill in the search above — prices are planning estimates from FujinTrip&apos;s planner, Best value per traveler.</p>
-          <div className="grid">
-            {visibleEntries.map((e) => (
-              <article className="card" key={e.key}>
-                <PhotoCarousel photos={e.photos} alt={e.name} />
-                <div className="body"><span className="pill">{e.tag}</span><h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
-                  {e.total !== null ? (
-                    <>
-                      <p className="price">from ${Math.round(e.total / 2).toLocaleString()} per traveler</p>
-                      <p className="plan-muted">Best value · 2 travelers · planning estimate</p>
-                    </>
-                  ) : (
-                    <p className="plan-muted">No planning estimate for this one yet</p>
-                  )}
-                  <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>{' '}
-                  <a href={`/destination/${encodeURIComponent(e.name)}`}>Destination guide →</a>{' '}
-                  <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} />
-                </div>
-              </article>
-            ))}
-          </div>
-          {libraryEntries.length > 8 && !showAllDestinations && (
-            <p style={{ marginTop: 16 }}>
-              <button type="button" className="ghost" onClick={() => setShowAllDestinations(true)}>
-                Show more destinations ({libraryEntries.length - 8} more)
-              </button>
-            </p>
-          )}
-        </section>
-
-        <HowItWorksSection />
-
-        <section>
-          <h2>Travelers&apos; stories</h2>
-          <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
-          <ReelsFeed onPost={() => openComposer()} />
-          <p style={{ marginTop: 12 }}>
-            <a href="/community">Visit the Community →</a>{' '}
-            <a href="/reels">See all travelers’ reels →</a>
-          </p>
-        </section>
-
-        <LocalVoicesTeaser onPick={prefillDestination} />
-
-        <section>
-          <h2>Weekend trips near you</h2>
-          <p className="sub">Local trips that cost little — enjoy local activities for less, based on where you are.</p>
-          <p><button className="ghost" onClick={useGeo}>Use my location</button>{' '}
-            <select value={loc} onChange={(e) => { setLoc(e.target.value); setLocName(e.target.value); }} aria-label="Pick a city">
-              <option value="default">Pick a city…</option><option value="New York">New York</option><option value="Los Angeles">Los Angeles</option>
-            </select></p>
-          <p className="plan-muted">{geoStatus}{locName && locName !== 'default' ? ` Showing trips near ${locName}.` : ''}</p>
-          <div className="grid">{local.map((l) => (<article className="card" key={l.name}><div className="body"><span className="pill">{l.distance}</span><h3>{l.name}</h3><p>{l.activity}</p><p className="price">{l.price}</p></div></article>))}</div>
-          <h3 style={{ marginTop: 28 }}>Featured hidden gems</h3>
-          <p className="sub">The highest-trending US destinations, explored properly — with a full plan, not just a photo.</p>
-          <div className="grid">
-            {HIDDEN_GEMS.map((d) => (
-              <article className="card" key={d.name}>
-                <SafeImg src={d.image} alt={d.name} label={d.name} />
-                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
-                  {cardInfo[d.name] && (
-                    <>
-                      <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
-                      <p className="price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()} per traveler</p>
-                      <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>
-                    </>
-                  )}
-                  <details>
-                    <summary>See the days</summary>
-                    <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
-                  </details>
-                  <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>{' '}
-                  <a href={`/destination/${encodeURIComponent(d.name)}`}>Destination guide →</a>{' '}
-                  <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} />
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-
-        {/* Ad slot: below the fold, content area only. Dormant until AdSense is configured. */}
-        <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
-
-        <section>
-          <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
+  // My Trips collapsed for first-time visitors (review round, Nov 17
+  // 2026 — gap 9): with no trips, no watches and no profile, the
+  // whole section sits behind one "My Trips" <details> so the
+  // homepage reads as a marketing page. The body below is the
+  // section's content, rendered collapsed or open; it keeps its
+  // original indentation.
+  const myTripsEmpty = trips.length === 0 && watches.length === 0 && !profileSummary(profile);
+  const myTripsBody = (
+    <>
           {/* Free account (Clerk, Nov 14 2026) — sign-in lives in My
               Trips, not in the chat: accounts come AFTER the traveler
               has a plan worth saving, and browsing, the tabs and the
@@ -931,6 +724,233 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             </ul>
           )}
           </details>
+    </>
+  );
+
+  return (
+    <div>
+      {variant === 'chat' ? (
+        <a href="#fujin-chat" className="skip-link">Skip to chat</a>
+      ) : (
+        <a href="#destinations" className="skip-link">Skip to destinations</a>
+      )}
+      {/* Chat-first shell (Nov 12 layout rebuild; app shell Nov 12;
+          interface round M2 — the 8-tab bar is gone): the chat section
+          is full-bleed — header and chat panel span the viewport, and
+          the chat + trip panel + map fill the first screen. The slim
+          hero was folded into the app bar (the mark + one-line tagline),
+          so it no longer pushes the app down. The content sections
+          below stay in the capped .wrap. */}
+      {variant === 'chat' && (
+        <div className="chat-shell">
+          <div className="panel chat-panel" id="fujin-chat">
+            <Chat onParsed={setAiTrip} onSaveTrip={saveTrip} onWatchPrices={addWatch} bookedDestinations={bookedDestinations} watches={watches} seed={chatSeed} onSeedUsed={() => setChatSeed(null)} onShareReel={(d) => openComposer(d)} trips={trips} profile={profile} onProfileChange={setProfile} emergencyContact={emergencyContact} embassyNumber={embassyNumber} onEmbassyChange={setEmbassyNumber} />
+          </div>
+        </div>
+      )}
+      {composerPanel}
+      {variant === 'home' && (
+        <SiteHeader
+          theme={theme}
+          onThemeToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onSelectCategory={selectCategory}
+          myTripsHref="#mytrips"
+        />
+      )}
+      {variant === 'home' && (
+        <section className="hero-booking">
+          <div className="wrap hero-booking-inner">
+            <h1>Where to?</h1>
+            <p className="hero-booking-sub">Flights, stays, cars, tours and more — compare prices from different sources, all in one place.</p>
+            <SearchWidget
+              tab={widgetTab}
+              onTabChange={changeTab}
+              initialSearch={initialSearch ?? null}
+              prefill={prefill}
+              onSubmit={handleSearchSubmit}
+            />
+          </div>
+        </section>
+      )}
+      {variant === 'home' && (
+        <div className="wrap">
+          <ContinueStrip
+            trips={trips}
+            watches={watches}
+            lastSearch={lastSearch}
+            onResumeSearch={resumeSearch}
+            onGoToTrips={() => document.getElementById('mytrips')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          />
+        </div>
+      )}
+      {variant === 'home' && search && (
+        <div className="wrap">
+          <SearchResults
+            query={search}
+            dark={theme === 'dark'}
+            onSaveSearch={(label) => saveTrip(label, 'Request saved')}
+            onEditSearch={editSearch}
+          />
+        </div>
+      )}
+      {/* Trust strip (interface round, Nov 16 2026 — P0 #3): directly
+          under the search results when a search is active, directly
+          under the hero otherwise. */}
+      {variant === 'home' && (
+        <div className="wrap">{trustStrip('Why book with FujinTrip')}</div>
+      )}
+      {variant === 'home' && (
+      <main className="wrap">
+        {/* Category tiles (interface round, Nov 16 2026 — P1 #9):
+            moved from position 8 to directly under the hero — the
+            category entry points come first, as on Expedia. They
+            still switch the widget tab; position is the only change. */}
+        <section>
+          <h2>What do you need for your trip?</h2>
+          <p className="sub">Pick a category — the search above switches to it.</p>
+          <div className="cat-tiles">
+            {CATEGORY_TILES.map((t) => (
+              <button key={t.id} type="button" className="cat-tile" onClick={() => selectCategory(t.id)}>
+                <span className="cat-icon" aria-hidden="true">
+                  <Icon name={t.icon} size={26} />
+                </span>
+                <strong>{t.label}</strong>
+                <span>{t.blurb}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Per-category landing shelf (interface round, Nov 16 2026
+            — P1 #17, option (a)): when a tab is landed on (?tab=),
+            the category's own shelf renders under the tiles — top
+            destinations with that category's Best value figure, from
+            the planner's own legs, labelled planning estimates. No
+            new routes. */}
+        {landingTab && shelfEntries.length > 0 && (
+          <section aria-label={`${SHELF_COPY[landingTab].heading} destinations`}>
+            <h2>Top {SHELF_COPY[landingTab].heading.toLowerCase()} destinations</h2>
+            <p className="sub">{SHELF_COPY[landingTab].line}</p>
+            <div className="grid">
+              {shelfEntries.map((s) => (
+                <article className="card" key={s.name}>
+                  {s.photo && <SafeImg src={s.photo} alt={s.name} label={s.name} />}
+                  <div className="body">
+                    <h3>{s.name}</h3>
+                    <p className="price">from ${s.perTraveler.toLocaleString()} per traveler</p>
+                    <p className="plan-muted">Best value · {s.legLabel} · planning estimate</p>
+                    <button className="primary" onClick={() => prefillDestination(s.name)}>Search this destination</button>{' '}
+                    <a href={`/destination/${encodeURIComponent(s.name)}`}>Destination guide →</a>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Homepage restructure (Nov 15, 2026): ready-made packages
+            first, then the cheapest fares and the deals — the search
+            results still render directly under the hero, above main. */}
+        <PackagesSection onViewPackage={viewPackage} onSavePackage={savePackage} />
+        <FaresStrip onPick={prefillDestination} />
+        <DealsSection onViewPackage={viewPackage} onSavePackage={savePackage} />
+
+        <section id="destinations">
+          <h2>Popular destinations</h2>
+          <p className="sub">Tap a destination to fill in the search above — prices are planning estimates from FujinTrip&apos;s planner, Best value per traveler.</p>
+          <div className="grid">
+            {visibleEntries.map((e) => (
+              <article className="card dest-card--photo" key={e.key}>
+                <PhotoCarousel photos={e.photos} alt={e.name} />
+                <div className="dest-overlay">
+                  <h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
+                  {e.total !== null ? (
+                    <p>from ${Math.round(e.total / 2).toLocaleString()} per traveler · Best value · 2 travelers · planning estimate</p>
+                  ) : (
+                    <p>No planning estimate for this one yet</p>
+                  )}
+                </div>
+                <div className="body"><span className="pill">{e.tag}</span>
+                  <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>{' '}
+                  <a href={`/destination/${encodeURIComponent(e.name)}`}>Destination guide →</a>{' '}
+                  <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} />
+                </div>
+              </article>
+            ))}
+          </div>
+          {libraryEntries.length > 8 && !showAllDestinations && (
+            <p style={{ marginTop: 16 }}>
+              <button type="button" className="ghost" onClick={() => setShowAllDestinations(true)}>
+                Show more destinations ({libraryEntries.length - 8} more)
+              </button>
+            </p>
+          )}
+        </section>
+
+        <HowItWorksSection />
+
+        <section>
+          <h2>Travelers&apos; stories</h2>
+          <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
+          <ReelsFeed onPost={() => openComposer()} />
+          <p style={{ marginTop: 12 }}>
+            <a href="/community">Visit the Community →</a>{' '}
+            <a href="/reels">See all travelers’ reels →</a>
+          </p>
+        </section>
+
+        <LocalVoicesTeaser onPick={prefillDestination} />
+
+        <section>
+          <h2>Weekend trips near you</h2>
+          <p className="sub">Local trips that cost little — enjoy local activities for less, based on where you are.</p>
+          <p><button className="ghost" onClick={useGeo}>Use my location</button>{' '}
+            <select value={loc} onChange={(e) => { setLoc(e.target.value); setLocName(e.target.value); }} aria-label="Pick a city">
+              <option value="default">Pick a city…</option><option value="New York">New York</option><option value="Los Angeles">Los Angeles</option>
+            </select></p>
+          <p className="plan-muted">{geoStatus}{locName && locName !== 'default' ? ` Showing trips near ${locName}.` : ''}</p>
+          <div className="grid">{local.map((l) => (<article className="card" key={l.name}>{l.image ? <SafeImg src={l.image} alt={l.name} label={l.name} /> : null}<div className="body"><span className="pill">{l.distance}</span><h3>{l.name}</h3><p>{l.activity}</p><p className="price">{l.price}</p></div></article>))}</div>
+          <h3 style={{ marginTop: 28 }}>Featured hidden gems</h3>
+          <p className="sub">The highest-trending US destinations, explored properly — with a full plan, not just a photo.</p>
+          <div className="grid">
+            {HIDDEN_GEMS.map((d) => (
+              <article className="card" key={d.name}>
+                <SafeImg src={d.image} alt={d.name} label={d.name} />
+                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
+                  {cardInfo[d.name] && (
+                    <>
+                      <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
+                      <p className="price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()} per traveler</p>
+                      <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>
+                    </>
+                  )}
+                  <details>
+                    <summary>See the days</summary>
+                    <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
+                  </details>
+                  <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>{' '}
+                  <a href={`/destination/${encodeURIComponent(d.name)}`}>Destination guide →</a>{' '}
+                  <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} />
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+
+        {/* Ad slot: below the fold, content area only. Dormant until AdSense is configured. */}
+        <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
+
+        <section>
+          <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
+          {myTripsEmpty ? (
+            <details>
+              <summary><span className="details-heading">Your trips, account and settings</span></summary>
+              {myTripsBody}
+            </details>
+          ) : (
+            myTripsBody
+          )}
         </section>
 
         {/* Ad slot: above the footer, content area only. Dormant until AdSense is configured. */}

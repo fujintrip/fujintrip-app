@@ -77,21 +77,28 @@ export const CITY_PHOTOS: Record<string, string> = {
   'New York': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Lower_Manhattan%2C_New_York_skyline_from_Liberty_Island_2021.jpg/960px-Lower_Manhattan%2C_New_York_skyline_from_Liberty_Island_2021.jpg',
 };
 
-export const LOCAL_TRIPS: Record<string, { name: string; distance: string; price: string; activity: string }[]> = {
+// Weekend-trip photos (review round, Nov 17 2026 — gap 7): the trips
+// are generic local activities, not places, so each photo illustrates
+// the activity from the existing verified pool — it is not a photo of
+// the place itself. The New York trips use the real New York skyline.
+const weekendPhoto = (name: string): string =>
+  GLOBAL_DESTINATIONS.find((d) => d.name === name)?.image ?? '';
+
+export const LOCAL_TRIPS: Record<string, { name: string; distance: string; price: string; activity: string; image: string }[]> = {
   default: [
-    { name: 'Riverside walk + local market', distance: 'Near you', price: 'from $12', activity: 'A slow morning, local food and a park picnic' },
-    { name: 'Nearby nature trail', distance: 'Under an hour away', price: 'from $0', activity: 'Hiking, viewpoints and a sunset spot' },
-    { name: 'Old town food crawl', distance: 'In town', price: 'from $25', activity: 'Family-run cafés and street food' },
+    { name: 'Riverside walk + local market', distance: 'Near you', price: 'from $12', activity: 'A slow morning, local food and a park picnic', image: weekendPhoto('Paris') },
+    { name: 'Nearby nature trail', distance: 'Under an hour away', price: 'from $0', activity: 'Hiking, viewpoints and a sunset spot', image: weekendPhoto('Bali') },
+    { name: 'Old town food crawl', distance: 'In town', price: 'from $25', activity: 'Family-run cafés and street food', image: weekendPhoto('Kyoto') },
   ],
   'New York': [
-    { name: 'Hudson Valley day trip', distance: '1.5 hrs away', price: 'from $35', activity: 'Farms, hikes and a small-town main street' },
-    { name: 'Coney Island + boardwalk', distance: 'In the city', price: 'from $15', activity: 'Beach, rides and local eats' },
-    { name: 'Central Park picnic', distance: 'In the city', price: 'from $10', activity: 'Boats, lawns and a free museum hour' },
+    { name: 'Hudson Valley day trip', distance: '1.5 hrs away', price: 'from $35', activity: 'Farms, hikes and a small-town main street', image: CITY_PHOTOS['New York'] },
+    { name: 'Coney Island + boardwalk', distance: 'In the city', price: 'from $15', activity: 'Beach, rides and local eats', image: CITY_PHOTOS['New York'] },
+    { name: 'Central Park picnic', distance: 'In the city', price: 'from $10', activity: 'Boats, lawns and a free museum hour', image: CITY_PHOTOS['New York'] },
   ],
   'Los Angeles': [
-    { name: 'Malibu coast drive', distance: '45 min away', price: 'from $20', activity: 'Beaches, viewpoints and seafood shacks' },
-    { name: 'Griffith Park hike', distance: 'In the city', price: 'from $0', activity: 'City views and the observatory' },
-    { name: 'Pasadena food walk', distance: '30 min away', price: 'from $28', activity: 'Cafés, bookshops and old-town streets' },
+    { name: 'Malibu coast drive', distance: '45 min away', price: 'from $20', activity: 'Beaches, viewpoints and seafood shacks', image: weekendPhoto('Caribbean') },
+    { name: 'Griffith Park hike', distance: 'In the city', price: 'from $0', activity: 'City views and the observatory', image: weekendPhoto('Bali') },
+    { name: 'Pasadena food walk', distance: '30 min away', price: 'from $28', activity: 'Cafés, bookshops and old-town streets', image: weekendPhoto('Kyoto') },
   ],
 };
 

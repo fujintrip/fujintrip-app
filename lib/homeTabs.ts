@@ -56,6 +56,16 @@ export function homeTabIdFromQuery(q: string | string[] | null | undefined): Hom
   return found ? found.id : DEFAULT_HOME_TAB;
 }
 
+// The ?tab= deep link for the landing shelf: only a real tab id in
+// the URL wins — a bare homepage load (no ?tab=) gets null, so the
+// shelf stays hidden (review round, Nov 17 2026 — gap 1). The search
+// widget still defaults to Flights via homeTabIdFromQuery above.
+export function homeTabIdFromQueryOrNull(q: string | string[] | null | undefined): HomeTabId | null {
+  const raw = Array.isArray(q) ? q[0] : q;
+  const found = HOME_TABS.find((t) => t.id === raw);
+  return found ? found.id : null;
+}
+
 export type TabRow = {
   destination: string;
   routeLine: string;

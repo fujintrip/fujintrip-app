@@ -1,11 +1,10 @@
 // Cheapest-fares strip (homepage restructure, Nov 15, 2026): the
 // lowest prices across the routes, as a horizontal strip. Honest by
-// construction — there is NO live fare source today (Duffel is test
-// mode with fictional fares, which never appear here), so every chip
-// is the planner's Best value per-traveler total, labeled "planning
-// estimate". When a live source connects, the strip reads it through
-// the same live-fares seam as the packages (lib/packages.ts) — the
-// chips keep their shape and gain a source + check time.
+// construction — every chip is the planner's Best value per-traveler
+// total, labeled "planning estimate" (Ignav and LetsFG are live for
+// flights, and their fares appear in the flight results — this strip
+// stays planner estimates until it reads the same live-fares seam as
+// the packages, lib/packages.ts).
 'use client';
 import { cheapestPackages } from '../lib/packages';
 import { Icon } from './icons';
@@ -17,7 +16,7 @@ export default function FaresStrip({ onPick }: { onPick: (destination: string) =
       <p className="eyebrow">Cheapest fares</p>
       <h2>The lowest prices across our routes</h2>
       <p className="sub">
-        Planning estimates, not live quotes — live fares arrive as suppliers connect. Tap one to fill in the search.
+        Planning estimates, not live quotes — tap one to fill in the search. Live fares from Ignav and LetsFG appear in flight results.
       </p>
       <div className="fares-strip" role="list">
         {fares.map((p) => (

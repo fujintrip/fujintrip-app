@@ -9,6 +9,8 @@ import { Icon } from './icons';
 import { HOME_TABS } from '../lib/homeTabs';
 import { bestTimeLine } from '../lib/bestTime';
 import { guideFor } from '../lib/localGuides';
+import { CITY_PHOTOS, GLOBAL_DESTINATIONS } from '../lib/data';
+import { SafeImg } from './FujinChat';
 import type { SearchQuery } from '../lib/searchPlaces';
 import type { PriceWatch, Trip } from './FujinChat';
 
@@ -118,6 +120,18 @@ export function HowItWorksSection() {
   );
 }
 
+// Photo per place (review round, Nov 17 2026 — gap 8): from the
+// existing verified pool — Kyoto's own photo, Prague for Central
+// Europe (its first stop), Kyoto again for Japan (a Japan photo).
+function voicePhoto(place: string): string | null {
+  if (place === 'Central Europe') return CITY_PHOTOS['Prague'] ?? null;
+  return (
+    GLOBAL_DESTINATIONS.find((d) => d.name === place)?.image ??
+    GLOBAL_DESTINATIONS.find((d) => d.name === 'Kyoto')?.image ??
+    null
+  );
+}
+
 export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) => void }) {
   const places = ['Kyoto', 'Central Europe', 'Japan'];
   return (
@@ -146,9 +160,10 @@ export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) =>
         </div>
       </div>
       {/* Grown into a real inspiration section (interface round, Nov
-          16 2026 — P1 #11): one card per place with the best time to
-          go and, where a researched guide exists, what to eat and
-          where to go — all real data (lib/localGuides.ts,
+          16 2026 — P1 #11; photo cards, review round Nov 17 2026 —
+          gap 8): one photo card per place with the best time to go
+          and a link to the destination page, where the researched
+          guide lives when one exists (lib/localGuides.ts,
           lib/bestTime.ts). A place with no researched guide says so
           plainly instead of getting invented editorial. The "See it
           in a plan" link stays — its removal is an open decision for
@@ -156,35 +171,20 @@ export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) =>
       <div className="grid voices-grid">
         {places.map((p) => {
           const guide = guideFor(p);
+          const photo = voicePhoto(p);
           return (
             <article className="card" key={p}>
+              {photo ? <SafeImg src={photo} alt={p} label={p} /> : null}
               <div className="body">
                 <span className="pill">Local voices</span>
                 <h3>{p}</h3>
                 <p className="plan-muted">{bestTimeLine(p)}</p>
                 {guide ? (
-                  <>
-                    <p>
-                      <strong>To try</strong>
-                    </p>
-                    <ul style={{ fontSize: 13, paddingLeft: 18, margin: '4px 0' }}>
-                      {guide.dishes.slice(0, 3).map((d) => (
-                        <li key={d}>{d}</li>
-                      ))}
-                    </ul>
-                    <p>
-                      <strong>Where to go</strong>
-                    </p>
-                    <ul style={{ fontSize: 13, paddingLeft: 18, margin: '4px 0' }}>
-                      {guide.places.slice(0, 2).map((pl) => (
-                        <li key={pl}>{pl}</li>
-                      ))}
-                    </ul>
-                    <p className="plan-muted">{guide.source}</p>
-                  </>
+                  <p className="plan-muted">A researched local guide is on the destination page — dishes to try and where to go.</p>
                 ) : (
                   <p className="plan-muted">No researched local guide for {p} yet — the best time above is from our planner.</p>
                 )}
+                <a href={`/destination/${encodeURIComponent(p)}`}>Destination guide →</a>{' '}
                 <button className="primary" onClick={() => onPick(p)}>
                   Search {p}
                 </button>

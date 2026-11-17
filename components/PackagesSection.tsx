@@ -3,8 +3,9 @@
 // building a plan. Bento grid: the first card is the hero (spans
 // 2×2), the rest fill around it; on a phone every card stacks full
 // width. The total price is the largest type on the card, with the
-// breakdown underneath (research: prices are the product, make them
-// loud). Every price is the planner's own math (lib/packages.ts) —
+// breakdown behind a "See what's included" expander (review round,
+// Nov 17 2026 — gap 3: one loud price per card; research: prices are
+// the product, make them loud). Every price is the planner's own math (lib/packages.ts) —
 // planning estimate until a live supplier connects. Primary action
 // is "Save this search" (a saved request in My Trips); "View
 // package" prefills the search widget. Never "Book now" — checkout
@@ -19,19 +20,23 @@ import ShareMenu from './ShareMenu';
 export function PackageCard({
   pkg,
   hero,
+  row,
   liveFares,
   onView,
   onSave,
 }: {
   pkg: Package;
   hero?: boolean;
+  // Horizontal row layout (review round, Nov 17 2026 — gap 2): the
+  // deals shelf renders the same card as a wide row, photo left.
+  row?: boolean;
   liveFares?: LivePackageFare[] | null;
   onView: () => void;
   onSave: () => void;
 }) {
   const price = packagePrice(pkg, liveFares);
   return (
-    <article className={`pkg-card${hero ? ' pkg-card--hero' : ''}`}>
+    <article className={`pkg-card${hero ? ' pkg-card--hero' : ''}${row ? ' pkg-card--row' : ''}`}>
       {pkg.photo ? (
         <SafeImg src={pkg.photo} alt={pkg.destination} label={pkg.destination} className="pkg-photo" />
       ) : (
@@ -53,27 +58,30 @@ export function PackageCard({
           {price.label}
           {price.source ? ` · ${price.source}` : ''}
         </p>
-        <ul className="pkg-includes" aria-label="What the price includes, per traveler, Best value">
-          <li>
-            <Icon name="plane" size={15} /> Flights ${pkg.includes.flight.toLocaleString()}
-          </li>
-          <li>
-            <Icon name="bed" size={15} /> Stays ${pkg.includes.hotel.toLocaleString()}
-          </li>
-          <li>
-            <Icon name="car" size={15} /> Car ${pkg.includes.car.toLocaleString()}
-          </li>
-          <li>
-            <Icon name="ticket" size={15} /> Activities ${pkg.includes.activities.toLocaleString()}
-          </li>
-        </ul>
-        <p className="pkg-tiers" aria-label="All three prices, per traveler">
-          {pkg.tiers.map((t) => (
-            <span key={t.name}>
-              {t.name} <strong>${t.perTraveler.toLocaleString()}</strong>
-            </span>
-          ))}
-        </p>
+        <details className="pkg-details">
+          <summary>See what&apos;s included</summary>
+          <ul className="pkg-includes" aria-label="What the price includes, per traveler, Best value">
+            <li>
+              <Icon name="plane" size={15} /> Flights ${pkg.includes.flight.toLocaleString()}
+            </li>
+            <li>
+              <Icon name="bed" size={15} /> Stays ${pkg.includes.hotel.toLocaleString()}
+            </li>
+            <li>
+              <Icon name="car" size={15} /> Car ${pkg.includes.car.toLocaleString()}
+            </li>
+            <li>
+              <Icon name="ticket" size={15} /> Activities ${pkg.includes.activities.toLocaleString()}
+            </li>
+          </ul>
+          <p className="pkg-tiers" aria-label="All three prices, per traveler">
+            {pkg.tiers.map((t) => (
+              <span key={t.name}>
+                {t.name} <strong>${t.perTraveler.toLocaleString()}</strong>
+              </span>
+            ))}
+          </p>
+        </details>
         <div className="pkg-actions">
           <button type="button" className="primary" onClick={onSave}>
             Save this search
