@@ -1,24 +1,25 @@
 // The merged flight-option list (Nov 16, 2026): one card grid, one
-// sort, sources interleaved — Duffel and Ignav options never grouped
-// by source. Every option is a COMPLETE trip for the searched party,
-// so the prices on screen are comparable: a Duffel round-trip option
-// is an outbound + return leg pair (cheapest out + back total, the
-// service fee shown separately on the card, never folded into the
-// total); an Ignav option is a whole-trip itinerary as priced. A
-// one-way leg price is never placed next to a round-trip total as if
-// they were comparable — one-way merges one-way legs with one-way
-// itineraries only. Multi-city has no merged view: its legs are
-// per-leg lists, and this module is not used for it.
+// sort, sources interleaved — Duffel, Ignav and LetsFG options never
+// grouped by source. Every option is a COMPLETE trip for the searched
+// party, so the prices on screen are comparable: a Duffel round-trip
+// option is an outbound + return leg pair (cheapest out + back total,
+// the service fee shown separately on the card, never folded into the
+// total); an Ignav or LetsFG option is a whole-trip itinerary as
+// priced. A one-way leg price is never placed next to a round-trip
+// total as if they were comparable — one-way merges one-way legs
+// with one-way itineraries only. Multi-city has no merged view: its
+// legs are per-leg lists, and this module is not used for it.
 //
 // The lists arrive already filtered + sorted by the caller's sort
 // (visibleLive); the merge re-sorts the combined list by the same
-// sort so a Duffel pair and an Ignav trip order against each other:
-// cheapest/best = trip total ascending, shortest = total duration,
-// earliest = outbound departure. A missing duration or departure
-// sorts last, price breaking the tie — nothing is dropped for
-// lacking a time.
+// sort so a Duffel pair, an Ignav trip and a LetsFG trip order
+// against each other: cheapest/best = trip total ascending, shortest
+// = total duration, earliest = outbound departure. A missing duration
+// or departure sorts last, price breaking the tie — nothing is
+// dropped for lacking a time.
 import type { DuffelFareOffer } from './duffel';
 import type { IgnavItinerary } from './ignav';
+import { letsfgItineraryDuration, type LetsfgItinerary } from './letsfg';
 import type { RowSort } from './searchPlaces';
 
 export type FlightOption =
@@ -46,6 +47,14 @@ export type FlightOption =
       durationMinutes: number;
       departMinutes: number;
       key: string;
+    }
+  | {
+      kind: 'letsfg';
+      itinerary: LetsfgItinerary;
+      total: number;
+      durationMinutes: number;
+      departMinutes: number;
+      key: string;
     };
 
 // An Ignav trip's total duration — the sum of its legs, mirroring
@@ -60,6 +69,9 @@ export function mergeFlightOptions(args: {
   out: DuffelFareOffer[];
   back: DuffelFareOffer[];
   ignavItineraries: IgnavItinerary[];
+  // LetsFG trips (Nov 16, 2026): optional — older callers pass none
+  // and the merge is Duffel + Ignav exactly as before.
+  letsfgItineraries?: LetsfgItinerary[];
   sort: RowSort;
 }): FlightOption[] {
   const options: FlightOption[] = [];
@@ -105,6 +117,20 @@ export function mergeFlightOptions(args: {
       durationMinutes: ignavItineraryDuration(itinerary),
       departMinutes: itinerary.legs[0]?.departMinutes ?? Infinity,
       key: `ignav:${itinerary.ignavId ?? `${itinerary.price}-${itinerary.legs[0]?.airline ?? ''}`}:${i}`,
+    });
+  }
+  // LetsFG trips (Nov 16, 2026): whole-trip itineraries as priced,
+  // interleaved with the rest by the same sort — never a separate
+  // LetsFG section.
+  for (let i = 0; i < (args.letsfgItineraries ?? []).length; i += 1) {
+    const itinerary = (args.letsfgItineraries ?? [])[i];
+    options.push({
+      kind: 'letsfg',
+      itinerary,
+      total: itinerary.price,
+      durationMinutes: letsfgItineraryDuration(itinerary),
+      departMinutes: itinerary.legs[0]?.departMinutes ?? Infinity,
+      key: `letsfg:${itinerary.letsfgId ?? `${itinerary.price}-${itinerary.legs[0]?.airline ?? ''}`}:${i}`,
     });
   }
   const byTotal = (a: FlightOption, b: FlightOption) => a.total - b.total;

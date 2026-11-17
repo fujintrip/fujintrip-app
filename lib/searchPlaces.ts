@@ -13,7 +13,6 @@ import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES, buildPlan } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
 import { cabinClassFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
-import { ignavItineraryStops, type IgnavItinerary } from './ignav';
 
 let placeCache: string[] | null = null;
 
@@ -1151,11 +1150,19 @@ export function flightFiltersActive(args: {
   );
 }
 
+// A whole-trip itinerary for facet counting: Ignav and LetsFG trips
+// share this shape (legs + party-total price) — the counts treat
+// them the same, whatever the source. The stops count is the
+// OUTBOUND leg's stops (the same outbound-first rule as
+// ignavItineraryStops), so a 1-stop-out / nonstop-back trip lands in
+// the 1-stop bucket, never in none.
+export type CountableItinerary = { legs: DuffelFareOffer[]; price: number };
+
 export function liveFilterOptions(args: {
   shownOffers: DuffelFareOffer[];
-  shownItineraries: IgnavItinerary[];
+  shownItineraries: CountableItinerary[];
   allOffers: DuffelFareOffer[];
-  allItineraries: IgnavItinerary[];
+  allItineraries: CountableItinerary[];
   totalVisible: number;
   travelers: number;
 }): LiveFilterOptions | null {
@@ -1173,7 +1180,7 @@ export function liveFilterOptions(args: {
     for (const l of it.legs) {
       optionAirlines.add(l.airline);
     }
-    optionStops.add(ignavItineraryStops(it));
+    optionStops.add(it.legs[0]?.stops ?? 0);
     const b = timeBucketFor(it.legs[0]?.departMinutes);
     if (b) optionTimes.add(b);
   }
@@ -1194,7 +1201,7 @@ export function liveFilterOptions(args: {
   for (const it of args.allItineraries) {
     const airlines = [...new Set(it.legs.map((l) => l.airline))];
     countFare(
-      [ignavItineraryStops(it)],
+      [it.legs[0]?.stops ?? 0],
       airlines.length === 1 ? airlines : [],
       timeBucketFor(it.legs[0]?.departMinutes),
       it.price

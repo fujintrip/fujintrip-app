@@ -298,12 +298,14 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   // for one-way and round-trip itineraries and one DuffelPairCard
   // for the round-trip legs, so the count is 6, not 7 — the
   // one-way Ignav block's separate FareCard is gone, its itineraries
-  // now render through the shared group.
+  // now render through the shared group. LetsFG adds a seventh: the
+  // LetsfgItineraryGroup renders its legs through FareCard too, the
+  // same shared pattern as the Ignav group.
   const cardUses = (src.match(/<FareCard/g) ?? []).length;
   assert.equal(
     cardUses,
-    6,
-    'Duffel: one-way, multi-city, pair out, pair back; Ignav: itinerary-group legs, per-leg multi-city'
+    7,
+    'Duffel: one-way, multi-city, pair out, pair back; Ignav: itinerary-group legs, per-leg multi-city; LetsFG: itinerary-group legs'
   );
   assert.ok(src.includes('hidePrice'), 'Ignav itinerary groups hide the per-card price — the trip total shows once');
   assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');

@@ -95,6 +95,15 @@ import {
   ignavSourceTag,
   sortIgnavItineraries,
 } from '../lib/ignav';
+import type { LetsfgFaresResponse, LetsfgItinerary } from '../lib/letsfg';
+import {
+  cheapestLetsfgItinerary,
+  LETSFG_MAX_ITINERARIES,
+  letsfgEmptyMessage,
+  letsfgItineraryMatches,
+  letsfgSourceTag,
+  sortLetsfgItineraries,
+} from '../lib/letsfg';
 import type { HotelbedsHotel, HotelbedsSearchResult } from '../lib/hotelbeds';
 import { hotelbedsEmptyMessage, hotelbedsProductEnabled, hotelbedsSandboxTag } from '../lib/hotelbeds';
 import type { HotelbedsActivity, HotelbedsActivitiesResult } from '../lib/hotelbeds-activities';
@@ -420,6 +429,70 @@ function IgnavItineraryGroup({
   );
 }
 
+// One LetsFG itinerary as a group (Nov 16, 2026): the same shape as
+// an Ignav group — the trip total once on top ("from $X": a live
+// fare can change before booking), one FareCard per leg with the
+// price hidden — but the booking action is a direct link-out, not a
+// lookup: every LetsFG offer carries its own booking_url to
+// letsfg.co, where the traveler books and pays with their own
+// Revolut method. FujinTrip never takes payment for a LetsFG fare
+// and never presents one as bookable on FujinTrip.
+function LetsfgItineraryGroup({
+  itinerary,
+  travelers,
+  cabin,
+  labels,
+  sourceLabel,
+}: {
+  itinerary: LetsfgItinerary;
+  travelers: number;
+  cabin: string;
+  labels: string[];
+  // The small source + freshness tag for the whole trip (Nov 16,
+  // 2026): the big column header is gone, so the trip total carries
+  // its own "LetsFG · live, checked …" line.
+  sourceLabel?: string;
+}) {
+  const perPerson = travelers > 1 ? perTravelerPrice(itinerary.price, travelers) : null;
+  return (
+    <div className="ignav-itinerary">
+      <p className="ignav-total">
+        Trip total from <strong>${itinerary.price.toLocaleString()}</strong>
+        {perPerson !== null && (
+          <span className="plan-muted">
+            {' '}
+            · ${perPerson.toLocaleString()} per traveler · {travelers} travelers
+          </span>
+        )}
+      </p>
+      {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
+      {itinerary.legs.map((leg, i) => (
+        <div key={`${leg.airline}-${leg.price}-${i}`}>
+          <h6 className="ignav-leg-label">{labels[i] ?? `Leg ${i + 1}`}</h6>
+          <ul className="fare-list">
+            <FareCard offer={leg} travelers={travelers} cabin={cabin} hidePrice />
+          </ul>
+        </div>
+      ))}
+      {itinerary.bookingUrl ? (
+        <div className="booking-links">
+          <ul>
+            <li>
+              <a href={itinerary.bookingUrl} target="_blank" rel="noreferrer">
+                See booking options on LetsFG
+                <Icon name="externalLink" size={14} />
+              </a>
+            </li>
+          </ul>
+          <p className="plan-muted">
+            Opens letsfg.co — you book and pay there with your Revolut method, not on FujinTrip. Prices can change.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // One Duffel round-trip as a single card (Nov 16, 2026): the merged
 // grid's Duffel option — an outbound + return leg pair, the trip
 // total once on top (party total, exact — not "from"), the service
@@ -586,6 +659,15 @@ function FlightResults({
     status: 'idle',
     data: null,
   });
+  // LetsFG live fares — the second live comparison column (Nov 16,
+  // 2026). Fetched in parallel with Duffel and Ignav, one request
+  // per search; the column renders its honest empty state when the
+  // key is missing or LetsFG has no fares. Multi-city never calls
+  // LetsFG — it has no multi-city endpoint.
+  const [letsfg, setLetsfg] = useState<{ status: 'idle' | 'loading' | 'done'; data: LetsfgFaresResponse | null }>({
+    status: 'idle',
+    data: null,
+  });
   const fetchedKeyRef = useRef('');
   const tripType = query.tripType ?? 'roundtrip';
   const queryLegs = useMemo(() => flightLegsFromSearch(query), [query]);
@@ -597,6 +679,9 @@ function FlightResults({
     setFares({ status: 'loading', data: null });
     setCompetitor({ status: 'idle', data: null });
     setIgnav({ status: 'loading', data: null });
+    // Multi-city never calls LetsFG (no multi-city endpoint), so its
+    // state stays idle instead of loading forever.
+    setLetsfg(tripType === 'multicity' ? { status: 'idle', data: null } : { status: 'loading', data: null });
     onLiveOptions(null);
     let cancelled = false;
     // Ignav fires in parallel with the Duffel price-check — one
@@ -642,6 +727,44 @@ function FlightResults({
     ignavPromise.then((ig) => {
       if (!cancelled) setIgnav({ status: 'done', data: ig });
     });
+    // LetsFG fires in parallel with Duffel and Ignav — one request
+    // per search, never per keystroke. The route starts an async
+    // LetsFG search and polls server-side, so this one fetch waits
+    // for the completed result; the column renders when it lands.
+    // Multi-city is skipped: LetsFG has no multi-city endpoint.
+    if (tripType !== 'multicity') {
+      const letsfgBody =
+        tripType === 'oneway'
+          ? {
+              tripType: 'oneway',
+              origin: ctx.origin,
+              destination: ctx.destination,
+              travelers: query.travelers,
+              depart: ctx.depart,
+              cabin: ctx.cabin,
+            }
+          : {
+              origin: ctx.origin,
+              destination: ctx.destination,
+              travelers: query.travelers,
+              depart: ctx.depart,
+              return: ctx.return,
+              cabin: ctx.cabin,
+            };
+      (async () => {
+        try {
+          const r = await fetch('/api/letsfg-fares', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(letsfgBody),
+          });
+          const j = (await r.json()) as LetsfgFaresResponse;
+          if (!cancelled) setLetsfg({ status: 'done', data: j });
+        } catch {
+          if (!cancelled) setLetsfg({ status: 'done', data: null });
+        }
+      })();
+    }
     (async () => {
       let pc: PriceCheckResponse | null = null;
       try {
@@ -758,13 +881,27 @@ function FlightResults({
       ...leg,
       offers: sortFareOffers(leg.out.filter(passesOffer), sort),
     }));
-    return { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists };
-  }, [fares.data, ignav.data, stopsFilter, airlinesFilter, timesFilter, maxPrice, sort, query.travelers]);
-  const { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists } = visibleLive;
+    // LetsFG, filtered + sorted the same way as Duffel's fares and
+    // Ignav's trips: the itinerary lists are the whole-trip
+    // itineraries (one-way, round-trip); multi-city never reaches
+    // this list — LetsFG has no multi-city endpoint.
+    const letsfgFiltered = letsfg.data
+      ? sortLetsfgItineraries(
+          letsfg.data.itineraries.filter(
+            (it) => letsfgItineraryMatches(it, stopsFilter, airlinesFilter, timesFilter) && passesPrice(it.price)
+          ),
+          sort
+        )
+      : [];
+    const letsfgItineraries = letsfgFiltered.slice(0, LETSFG_MAX_ITINERARIES);
+    return { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists, letsfgFiltered, letsfgItineraries };
+  }, [fares.data, ignav.data, letsfg.data, stopsFilter, airlinesFilter, timesFilter, maxPrice, sort, query.travelers]);
+  const { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists, letsfgFiltered, letsfgItineraries } = visibleLive;
 
   // The merged card grid (Nov 16, 2026): one list, sources
-  // interleaved by the active sort — Duffel pairs + Ignav trips.
-  // Multi-city has no merged view; its legs stay per-leg lists.
+  // interleaved by the active sort — Duffel pairs + Ignav trips +
+  // LetsFG trips. Multi-city has no merged view; its legs stay
+  // per-leg lists.
   const mergedOptions: FlightOption[] = useMemo(() => {
     if (tripType === 'multicity') return [];
     return mergeFlightOptions({
@@ -772,6 +909,7 @@ function FlightResults({
       out: visibleLive.out,
       back: visibleLive.back,
       ignavItineraries: visibleLive.ignavItineraries,
+      letsfgItineraries: visibleLive.letsfgItineraries,
       sort,
     });
   }, [tripType, visibleLive, sort]);
@@ -787,7 +925,8 @@ function FlightResults({
       (fares.data?.back.length ?? 0) +
       (fares.data?.legs ?? []).reduce((n, l) => n + l.out.length, 0) +
       Math.min(ignav.data?.itineraries.length ?? 0, IGNAV_MAX_ITINERARIES) +
-      (ignav.data?.legs ?? []).reduce((n, l) => n + l.out.length, 0);
+      (ignav.data?.legs ?? []).reduce((n, l) => n + l.out.length, 0) +
+      Math.min(letsfg.data?.itineraries.length ?? 0, LETSFG_MAX_ITINERARIES);
     const base = liveFilterOptions({
       shownOffers: [
         ...visibleLive.out,
@@ -795,32 +934,34 @@ function FlightResults({
         ...visibleLive.legLists.flatMap((l) => l.offers),
         ...visibleLive.ignavLegLists.flatMap((l) => l.offers),
       ],
-      shownItineraries: visibleLive.ignavItineraries,
+      shownItineraries: [...visibleLive.ignavItineraries, ...visibleLive.letsfgItineraries],
       allOffers: [
         ...(fares.data?.out ?? []),
         ...(fares.data?.back ?? []),
         ...(fares.data?.legs ?? []).flatMap((l) => l.out),
         ...(ignav.data?.legs ?? []).flatMap((l) => l.out),
       ],
-      allItineraries: ignav.data?.itineraries ?? [],
+      allItineraries: [...(ignav.data?.itineraries ?? []), ...(letsfg.data?.itineraries ?? [])],
       totalVisible,
       travelers: query.travelers,
     });
     if (!base || tripType === 'multicity') return base;
     // The card counts for the merged grid: the same merge on the
-    // unfiltered inventory (Ignav still capped, as totalVisible is)
-    // is the total the grid holds; the filtered merge is what it
-    // shows. The facet counts above stay fare counts from the full
-    // inventory — only the "Showing X of Y" line counts cards.
+    // unfiltered inventory (Ignav and LetsFG still capped, as
+    // totalVisible is) is the total the grid holds; the filtered
+    // merge is what it shows. The facet counts above stay fare counts
+    // from the full inventory — only the "Showing X of Y" line counts
+    // cards.
     const totalOptions = mergeFlightOptions({
       tripType,
       out: fares.data?.out ?? [],
       back: fares.data?.back ?? [],
       ignavItineraries: (ignav.data?.itineraries ?? []).slice(0, IGNAV_MAX_ITINERARIES),
+      letsfgItineraries: (letsfg.data?.itineraries ?? []).slice(0, LETSFG_MAX_ITINERARIES),
       sort,
     }).length;
     return { ...base, shownOptions: mergedOptions.length, totalOptions };
-  }, [visibleLive, fares.data, ignav.data, query.travelers, tripType, sort, mergedOptions]);
+  }, [visibleLive, fares.data, ignav.data, letsfg.data, query.travelers, tripType, sort, mergedOptions]);
   const liveOptionsKeyRef = useRef('');
   useEffect(() => {
     const key = liveOptionsValue === null ? 'null' : JSON.stringify(liveOptionsValue);
@@ -851,8 +992,10 @@ function FlightResults({
   // sourceLabel is set.
   const duffelTag = fares.data?.mode === 'live' ? 'Duffel · live fare' : 'Duffel · test fare';
   const ignavTag = ignavSourceTag(ignav.data?.observedAt ?? null);
+  const letsfgTag = letsfgSourceTag(letsfg.data?.observedAt ?? null);
   const duffelTagShown = hideSourceTags ? undefined : duffelTag;
   const ignavTagShown = hideSourceTags ? undefined : ignavTag;
+  const letsfgTagShown = hideSourceTags ? undefined : letsfgTag;
   // The plan flight budget is a round-trip figure — for one-way and
   // multi-city it would quote a budget that does not apply, so the
   // line (and the budget inside noFareMessage) stays round-trip only.
@@ -875,19 +1018,21 @@ function FlightResults({
       </h3>
       {/* One merged live-fares grid (Nov 16, 2026): the big supplier
           column headers ("Duffel", "Ignav — live") are gone — the
-          traveler sees one card grid, Duffel pairs and Ignav trips
-          interleaved by the active sort, each card a complete trip
-          option with its own small source + freshness tag while no
-          filter is active (the tags hide while any filter is on).
-          The "Showing X of Y" line lives in the filter bar on top,
-          not here. Multi-city keeps its per-leg lists below. */}
+          traveler sees one card grid, Duffel pairs, Ignav trips and
+          LetsFG trips interleaved by the active sort, each card a
+          complete trip option with its own small source + freshness
+          tag while no filter is active (the tags hide while any
+          filter is on). The "Showing X of Y" line lives in the
+          filter bar on top, not here. Multi-city keeps its per-leg
+          lists below. */}
       <div className="fare-live-list">
         {fares.status === 'loading' && <p>Checking live fares…</p>}
         {/* The merged grid (Nov 16, 2026): round-trip and one-way
-            searches render one card grid — Duffel pairs and Ignav
-            trips interleaved by the active sort, never grouped by
-            source. Each card is a complete trip option with its own
-            small source + freshness tag while no filter is active. */}
+            searches render one card grid — Duffel pairs, Ignav trips
+            and LetsFG trips interleaved by the active sort, never
+            grouped by source. Each card is a complete trip option
+            with its own small source + freshness tag while no filter
+            is active. */}
         {tripType !== 'multicity' && (fares.status === 'done' || ignav.status === 'done') && (
           <>
             {mergedOptions.length > 0 ? (
@@ -921,6 +1066,19 @@ function FlightResults({
                           </span>
                         }
                       />
+                    );
+                  }
+                  if (opt.kind === 'letsfg') {
+                    return (
+                      <li key={opt.key} className="flight-option-card">
+                        <LetsfgItineraryGroup
+                          itinerary={opt.itinerary}
+                          travelers={query.travelers}
+                          cabin={query.cabin}
+                          labels={tripType === 'oneway' ? ['One-way'] : ['Outbound', 'Return']}
+                          sourceLabel={letsfgTagShown}
+                        />
+                      </li>
                     );
                   }
                   return (
@@ -962,6 +1120,9 @@ function FlightResults({
             )}
             {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
               <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
+            )}
+            {letsfgFiltered.length > LETSFG_MAX_ITINERARIES && (
+              <p className="plan-muted">Showing the {LETSFG_MAX_ITINERARIES} cheapest live trips from LetsFG.</p>
             )}
             <p>
               <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
@@ -1035,6 +1196,16 @@ function FlightResults({
             <p>{ignavEmptyMessage(ignav.data.reason)}</p>
           )}
           {ignav.status === 'done' && !ignav.data && <p>Could not check live fares from Ignav right now.</p>}
+          {letsfg.status === 'loading' && <p>Checking live fares from LetsFG…</p>}
+          {letsfg.status === 'done' && letsfg.data && !letsfg.data.live && (
+            <p>{letsfgEmptyMessage(letsfg.data.reason)}</p>
+          )}
+          {letsfg.status === 'done' && !letsfg.data && <p>Could not check live fares from LetsFG right now.</p>}
+          {letsfg.status === 'done' && letsfg.data?.live && (
+            <p className="plan-muted">
+              Live fares from LetsFG — prices are live and can change; booking opens on letsfg.co.
+            </p>
+          )}
             {ignav.status === 'done' && ignav.data?.live && tripType === 'multicity' && ignav.data.itineraries.length > 0 && (
               <>
                 {ignavItineraries.map((it) => (

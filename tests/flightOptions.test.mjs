@@ -206,10 +206,87 @@ test('flight results: full-screen card grid, top filter bar, merged list, tags k
   assert.ok(src.includes('fare-card-source'), 'each card carries its small source tag');
   assert.ok(src.includes('sourceLabel={duffelTagShown}'), 'Duffel cards carry their tag when unfiltered');
   assert.ok(src.includes('sourceLabel={ignavTagShown}'), 'Ignav cards carry their tag when unfiltered');
+  assert.ok(src.includes('sourceLabel={letsfgTagShown}'), 'LetsFG cards carry their tag when unfiltered');
   assert.ok(src.includes('hideSourceTags ? undefined : duffelTag'), 'a filtered view hides the Duffel tag');
   assert.ok(src.includes('hideSourceTags ? undefined : ignavTag'), 'a filtered view hides the Ignav tag');
+  assert.ok(src.includes('hideSourceTags ? undefined : letsfgTag'), 'a filtered view hides the LetsFG tag');
   assert.ok(src.includes('hideSourceTags={liveFiltersActive}'), 'the hide state comes from the filter bar');
   assert.ok(!src.includes('sourceLabel={duffelTag}'), 'no card passes the Duffel tag unconditionally');
   assert.ok(!src.includes('sourceLabel={ignavTag}'), 'no card passes the Ignav tag unconditionally');
+  assert.ok(!src.includes('sourceLabel={letsfgTag}'), 'no card passes the LetsFG tag unconditionally');
   assert.ok(!src.includes('aria-label="Source"'), 'the filter bar offers no source facet');
+});
+
+// --- LetsFG trips in the merge (Nov 16, 2026) ---
+const letsfgTrip = (price, legs) => ({ price, legs, letsfgId: `lf-${price}`, bookingUrl: 'https://letsfg.co/x' });
+
+const letsfgTrips = [
+  letsfgTrip(650, [offer('Iberia', 0, 825, 219, 650), offer('Iberia', 0, 945, 131, 650)]),
+  letsfgTrip(710, [offer('ITA Airways', 0, 1275, 85, 710), offer('ITA Airways', 0, 570, 195, 710)]),
+];
+
+test('merge round-trip: LetsFG trips interleave cheapest-first with Duffel pairs and Ignav trips', () => {
+  const merged = mergeFlightOptions({
+    tripType: 'roundtrip',
+    out,
+    back,
+    ignavItineraries: ignavTrips,
+    letsfgItineraries: letsfgTrips,
+    sort: 'cheapest',
+  });
+  assert.deepEqual(
+    merged.map((o) => `${o.kind}:${o.total}`),
+    ['duffel-pair:432', 'duffel-pair:445', 'duffel-pair:470', 'letsfg:650', 'letsfg:710', 'ignav:788', 'ignav:796', 'ignav:1028'],
+    'one list, cheapest first, never grouped by source'
+  );
+});
+
+test('merge: LetsFG trips order by duration and departure too', () => {
+  const byDuration = mergeFlightOptions({
+    tripType: 'roundtrip',
+    out,
+    back,
+    ignavItineraries: [],
+    letsfgItineraries: letsfgTrips,
+    sort: 'duration',
+  });
+  assert.deepEqual(
+    byDuration.map((o) => o.total),
+    [710, 650, 432, 445, 470],
+    'shortest trip first — the 280-minute LetsFG trip leads'
+  );
+  const byDeparture = mergeFlightOptions({
+    tripType: 'roundtrip',
+    out,
+    back,
+    ignavItineraries: [],
+    letsfgItineraries: letsfgTrips,
+    sort: 'departure',
+  });
+  assert.deepEqual(
+    byDeparture.map((o) => o.total),
+    [432, 445, 470, 650, 710],
+    'earliest outbound departure first'
+  );
+});
+
+test('merge one-way: LetsFG one-way trips interleave with Duffel one-way legs', () => {
+  const merged = mergeFlightOptions({
+    tripType: 'oneway',
+    out,
+    back: [],
+    ignavItineraries: [],
+    letsfgItineraries: [letsfgTrip(300, [offer('Iberia', 0, 825, 219, 300)])],
+    sort: 'cheapest',
+  });
+  assert.deepEqual(
+    merged.map((o) => `${o.kind}:${o.total}`),
+    ['duffel-oneway:216', 'duffel-oneway:220', 'duffel-oneway:230', 'letsfg:300']
+  );
+});
+
+test('merge: callers without LetsFG trips get the Duffel + Ignav list unchanged', () => {
+  const merged = mergeFlightOptions({ tripType: 'roundtrip', out, back, ignavItineraries: ignavTrips, sort: 'cheapest' });
+  assert.ok(merged.every((o) => o.kind !== 'letsfg'), 'no LetsFG option appears unasked');
+  assert.equal(merged.length, 6, '3 Duffel pairs + 3 Ignav trips, as before');
 });
