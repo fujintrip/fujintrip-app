@@ -287,10 +287,18 @@ test('results: the fare columns follow the trip type — out only for one-way, p
   const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   assert.ok(src.includes("tripType === 'oneway'"), 'one-way is a real results branch');
   assert.ok(src.includes("tripType === 'multicity'"), 'multi-city is a real results branch');
-  assert.ok(src.includes('Cheapest one-way:'), 'one-way quotes its own cheapest total');
   assert.ok(src.includes('Cheapest all legs:'), 'multi-city quotes the summed cheapest total');
   assert.ok(src.includes('cheapestMultiCityTotal'), 'the multi-city total sums the cheapest fare of each leg');
-  assert.ok(src.includes('cheapestOneWayTotal'), 'the one-way total is the cheapest outbound fare');
+  // Audit round Nov 17, 2026: one trip-card format — the round-trip
+  // and one-way cheapest banners are gone (every card carries its
+  // own trip total now), and every trip card has one action.
+  assert.ok(!src.includes('Cheapest out + back:'), 'no round-trip cheapest banner below the list');
+  assert.ok(!src.includes('Cheapest one-way:'), 'no one-way cheapest banner below the list');
+  assert.ok(!src.includes('fare-total'), 'no highlighted cheapest banner remains');
+  assert.ok(src.includes('TripPriceHeader'), 'one price block serves every trip card');
+  assert.ok(src.includes('DuffelOneWayCard'), 'one-way Duffel fares render as trip cards, not bare fare cards');
+  assert.ok(src.includes('Save this fare'), 'Duffel cards carry a save action');
+  assert.ok(src.includes('flight-option-actions'), 'trip-card actions sit in one footer row');
   assert.ok(src.includes('Leg {i + 1}'), 'multi-city fares render per leg');
   assert.ok(src.includes("tripType === 'roundtrip' && pc?.departDate"), 'the cached competitor column stays round-trip only');
   assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');

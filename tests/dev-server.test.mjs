@@ -1136,7 +1136,11 @@ test('popular destinations (direction v3): 8 cards + expander, per-traveler pric
   assert.ok(!html.includes('>Paris<'), 'Paris waits behind the expander');
   // A card carries the per-traveler Best value price line, never a
   // counts line or a guessed rate. Central Europe is $3,600 for 2.
-  assert.ok(html.includes('from $1,800 per traveler'), 'Central Europe card carries the per-traveler price line');
+  // (Audit round, Nov 17, 2026 — gap 10: the price lives in the
+  // white body now, so "from $1,800" and "per traveler" sit in
+  // separate elements instead of one overlay line.)
+  assert.ok(html.includes('from $1,800'), 'Central Europe card carries the per-traveler price');
+  assert.ok(html.includes('class="result-price"'), 'the price is the 22px price-card in the body');
   assert.ok(html.includes('Best value · 2 travelers · planning estimate'), 'the price line is labeled a planning estimate');
   // The card action prefills the search widget — it never seeds the
   // chat, and the old library actions are gone.

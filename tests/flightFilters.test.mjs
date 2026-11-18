@@ -1,4 +1,4 @@
-// Flights filter system (Nov 15–16, 2026): selecting a filter —
+// Flights filter system (Nov 15–17, 2026): selecting a filter —
 // airline, stops, price, times — must narrow the visible live
 // offers, and every facet count must be what the filter actually
 // shows. The Nov 15 defect: the counts came from every leg of every
@@ -6,14 +6,16 @@
 // ~326 airline counts) while only 9 options were on screen. The
 // Nov 15 fix (counts from the offers on screen only) was wrong the
 // other way: the Ignav list is sliced to the 3 cheapest for display
-// and filtering re-slices over the whole response, so British
+// and filtering re-sliced over the whole response, so British
 // Airways read (1) before filtering and the filter then revealed 4
-// BA fares. The Nov 16 rule: facet counts come from the FULL
-// unfiltered live inventory — all Duffel offers plus all Ignav
-// itineraries, each itinerary counted once as a trip — while only
-// the "Showing X of Y" line counts what is on screen. The price
-// bands count flight fares only, per traveler, never the estimate
-// rows below the results.
+// BA fares. The Nov 16 rule (counts from the full unfiltered live
+// inventory) fixed that mismatch but left the audit's complaint:
+// "Under $1,000 (23)" next to 6 cards, because a round-trip pair
+// is two legs. The Nov 17 audit rule: facet counts count CARDS,
+// from the same filtered merge the grid shows — a pair is one card,
+// an itinerary is one card — so the count and the filter can never
+// disagree again. The price bands count flight fares only, per
+// traveler, never the estimate rows below the results.
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/flightFilters.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -250,25 +252,29 @@ test('filter system: the results wire every filter to the live offers', () => {
   assert.ok(src.includes("onClearSort={() => setSort('best')}"), 'clearing from the results restores Best value');
   assert.ok(src.includes("'Duffel · test fare'"), 'test fares are named as test fares on the card');
   assert.ok(src.includes('ignavSourceTag('), 'Ignav fares carry the checked time');
-  // The filter system (Nov 16, 2026): the filters sit in a top bar
-  // above the merged card grid, not a left sidebar. Times state,
-  // max price on live offers, counts from the full live inventory,
-  // one summary line — and the line now counts cards: the merged
-  // options for round-trip/one-way, live fares for multi-city, which
-  // has no merged grid.
+  // The filter system (audit round, Nov 17, 2026): the facets sit
+  // in the 230px left rail — the same results-layout as every other
+  // tab — not a top bar. Times state, max price on live offers,
+  // facet counts from the CARDS on screen (countFlightCards), one
+  // summary line above the list — and the line counts cards: the
+  // merged options for round-trip/one-way, live fares for
+  // multi-city, which has no merged grid.
   assert.ok(src.includes('timesFilter'), 'a departure-time filter exists');
-  assert.ok(src.includes('Departure time'), 'the bar offers departure times');
-  assert.ok(src.includes('liveFilterOptions({'), 'counts come from the live inventory');
+  assert.ok(src.includes('Departure time'), 'the rail offers departure times');
+  assert.ok(src.includes('liveFilterOptions({'), 'the facet lists still come from the live inventory');
+  assert.ok(src.includes('countFlightCards(mergedOptions, query.travelers)'), 'the facet counts count the cards on screen');
   assert.ok(src.includes('travelers: query.travelers'), 'the price bands divide by travelers');
   assert.ok(src.includes('liveOptions.counts.prices[max]'), 'the price bands count live fares, not estimate rows');
   assert.ok(src.includes('LIVE_PRICE_BANDS.map'), 'the price bands are one shared list');
-  assert.ok(src.includes('flight-filter-bar'), 'the filters sit in a top bar, not a sidebar');
-  assert.ok(src.includes('Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options'), 'the bar counts the merged cards');
+  assert.ok(!src.includes('flight-filter-bar'), 'the top filter bar is gone — the facets live in the rail');
+  assert.ok(!src.includes('results-section--flights'), 'flights no longer break out of the container');
+  assert.ok(src.includes('results-count-row'), 'the count row sits above the list');
+  assert.ok(src.includes('Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options'), 'the count row counts the merged cards');
   assert.ok(src.includes('Showing ${liveOptions.shownCount} of ${liveOptions.totalCount} live fares'), 'multi-city falls back to fare counts');
   assert.ok(!src.includes('Showing {liveOptionsValue.shownCount} of {liveOptionsValue.totalCount} live fares'), 'the old sidebar summary line is gone');
   assert.ok(src.includes('clearAllLiveFilters'), 'clearing restores the full list');
-  assert.ok(src.includes('clearAllFlightFilters'), 'the top bar clears every flight filter');
-  assert.ok(src.includes("setSort('best')"), 'the top bar clear restores Best value, so the tags come back');
+  assert.ok(src.includes('clearAllFlightFilters'), 'the rail clear resets every flight filter');
+  assert.ok(src.includes("setSort('best')"), 'the rail clear restores Best value, so the tags come back');
 });
 
 test('flightFiltersActive: any filter on hides the source tags, all clear brings them back', () => {

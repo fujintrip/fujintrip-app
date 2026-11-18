@@ -2,6 +2,7 @@
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/reels.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   MIN_VERIFIED_FOR_AVERAGE,
   REPORTS_TO_HIDE,
@@ -207,4 +208,26 @@ test('spaces SigV4: matches the AWS published test vector', () => {
 
 test('spacesConfigured is false without credentials in this environment', () => {
   assert.equal(spacesConfigured(), false);
+});
+
+test('audit round Nov 17: no developer storage note in the feed, section hides while empty', () => {
+  const feed = readFileSync(new URL('../components/ReelsFeed.tsx', import.meta.url), 'utf8');
+  const route = readFileSync(new URL('../app/api/reels/route.ts', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  // The feed API no longer ships a storage note, and the feed no
+  // longer renders one — the SPACES_KEY line is gone from the UI.
+  assert.ok(!route.includes('SPACES_KEY'), 'the reels API never mentions SPACES_KEY');
+  assert.ok(!route.includes('storage:'), 'the feed response carries no storage field');
+  assert.ok(!feed.includes('storageNote'), 'the feed renders no storage note');
+  assert.ok(!feed.includes('SPACES_KEY'), 'the feed never mentions SPACES_KEY');
+  // The feed reports its visible count once a load finishes, and
+  // the homepage hides the whole section while the count is zero —
+  // never a "No reels yet" box on the homepage.
+  assert.ok(feed.includes('onCount?: (count: number) => void'), 'the feed reports its visible count');
+  assert.ok(feed.includes('if (!loading) onCount?.(posts.length)'), 'the count reports only after a load finishes');
+  assert.ok(app.includes('reelsCount !== 0'), 'the homepage section hides while the feed is empty');
+  assert.ok(app.includes('<ReelsFeed onPost={() => openComposer()} onCount={setReelsCount} />'), 'the homepage feed reports its count');
+  // Posting the first reel still works from My Trips and the chat,
+  // so hiding the empty section never strands the first poster.
+  assert.ok(app.includes('Share how it went'), 'My Trips still opens the composer');
 });

@@ -24,8 +24,6 @@ import {
 } from '../lib/homeTabs';
 import {
   cheapestMultiCityTotal,
-  cheapestOneWayTotal,
-  cheapestOutBackTotal,
   destinationPhoto,
   flightBudgetCopy,
   flightContextFromSearch,
@@ -131,7 +129,7 @@ import {
   transferTypeOptions,
 } from '../lib/hotelbeds-transfers';
 import { serviceFee } from '../lib/planner';
-import { mergeFlightOptions, type FlightOption } from '../lib/flightOptions';
+import { countFlightCards, mergeFlightOptions, type FlightOption } from '../lib/flightOptions';
 import { SafeImg } from './FujinChat';
 import HotelGallery from './HotelGallery';
 import { AirlineLogo } from './AirlineLogo';
@@ -204,7 +202,6 @@ function FareCard({
   hidePrice = false,
   footer,
   sourceLabel,
-  priceNote,
 }: {
   offer: DuffelFareOffer;
   travelers: number;
@@ -221,9 +218,6 @@ function FareCard({
   // every fare still says where it came from and when it was checked
   // — a test fare must never be mistaken for a real bookable fare.
   sourceLabel?: string;
-  // A line under the price — the one-way card's service fee, so the
-  // fee is on the card itself, not only in a summary below the list.
-  priceNote?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const segs = offer.segments ?? [];
@@ -274,7 +268,6 @@ function FareCard({
                 ${perPerson.toLocaleString()} per traveler · {travelers} travelers
               </span>
             )}
-            {priceNote}
           </div>
         )}
       </div>
@@ -363,7 +356,7 @@ function IgnavBookingLinks({
   return (
     <div className="booking-links">
       {state.status === 'idle' && (
-        <button type="button" className="ghost" onClick={load}>
+        <button type="button" className="linklike" onClick={load}>
           See booking options
         </button>
       )}
@@ -414,6 +407,7 @@ function IgnavItineraryGroup({
   cabin,
   labels,
   sourceLabel,
+  onSaveFare,
 }: {
   itinerary: IgnavItinerary;
   travelers: number;
@@ -423,19 +417,19 @@ function IgnavItineraryGroup({
   // 2026): the big column header is gone, so the trip total carries
   // its own "Ignav · live, checked …" line.
   sourceLabel?: string;
+  // Save this fare (audit round, Nov 17, 2026): every flight card
+  // has the same two actions — one primary pill (Save) + one text
+  // link (See booking options). Duffel cards already had Save;
+  // Ignav and LetsFG cards only offered booking, so the cheapest
+  // live fare could not be picked.
+  onSaveFare: (fareLabel: string) => void;
 }) {
-  const perPerson = travelers > 1 ? perTravelerPrice(itinerary.price, travelers) : null;
+  const [saved, setSaved] = useState(false);
+  // Same trip-card shape as the Duffel cards (Nov 17, 2026): one
+  // price block, one action.
   return (
     <div className="ignav-itinerary">
-      <p className="ignav-total">
-        Trip total from <strong>${itinerary.price.toLocaleString()}</strong>
-        {perPerson !== null && (
-          <span className="plan-muted">
-            {' '}
-            · ${perPerson.toLocaleString()} per traveler · {travelers} travelers
-          </span>
-        )}
-      </p>
+      <TripPriceHeader total={itinerary.price} travelers={travelers} prefix="Trip total from" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {itinerary.legs.map((leg, i) => (
         <div key={`${leg.airline}-${leg.price}-${i}`}>
@@ -445,7 +439,20 @@ function IgnavItineraryGroup({
           </ul>
         </div>
       ))}
-      <IgnavBookingLinks key={itinerary.ignavId ?? itinerary.price} context={ignavBookingContext(itinerary)} travelers={travelers} />
+      <div className="flight-option-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={saved}
+          onClick={() => {
+            onSaveFare(`${itinerary.legs[0]?.airline ?? 'Ignav'} · $${itinerary.price.toLocaleString()}`);
+            setSaved(true);
+          }}
+        >
+          {saved ? 'Saved ✓' : 'Save this fare'}
+        </button>
+        <IgnavBookingLinks key={itinerary.ignavId ?? itinerary.price} context={ignavBookingContext(itinerary)} travelers={travelers} />
+      </div>
     </div>
   );
 }
@@ -464,6 +471,7 @@ function LetsfgItineraryGroup({
   cabin,
   labels,
   sourceLabel,
+  onSaveFare,
 }: {
   itinerary: LetsfgItinerary;
   travelers: number;
@@ -473,19 +481,16 @@ function LetsfgItineraryGroup({
   // 2026): the big column header is gone, so the trip total carries
   // its own "LetsFG · live, checked …" line.
   sourceLabel?: string;
+  // Save this fare — see IgnavItineraryGroup: every flight card
+  // carries the same two actions.
+  onSaveFare: (fareLabel: string) => void;
 }) {
-  const perPerson = travelers > 1 ? perTravelerPrice(itinerary.price, travelers) : null;
+  const [saved, setSaved] = useState(false);
+  // Same trip-card shape as the Ignav group (Nov 17, 2026): one
+  // price block, one action.
   return (
     <div className="ignav-itinerary">
-      <p className="ignav-total">
-        Trip total from <strong>${itinerary.price.toLocaleString()}</strong>
-        {perPerson !== null && (
-          <span className="plan-muted">
-            {' '}
-            · ${perPerson.toLocaleString()} per traveler · {travelers} travelers
-          </span>
-        )}
-      </p>
+      <TripPriceHeader total={itinerary.price} travelers={travelers} prefix="Trip total from" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {itinerary.legs.map((leg, i) => (
         <div key={`${leg.airline}-${leg.price}-${i}`}>
@@ -495,32 +500,77 @@ function LetsfgItineraryGroup({
           </ul>
         </div>
       ))}
-      {itinerary.bookingUrl ? (
-        <div className="booking-links">
-          <ul>
-            <li>
-              <a href={itinerary.bookingUrl} target="_blank" rel="noreferrer">
-                See booking options on LetsFG
-                <Icon name="externalLink" size={14} />
-              </a>
-            </li>
-          </ul>
-          <p className="plan-muted">
-            Opens letsfg.co — you book and pay there with your Revolut method, not on FujinTrip. Prices can change.
-          </p>
-        </div>
-      ) : null}
+      <div className="flight-option-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={saved}
+          onClick={() => {
+            onSaveFare(`${itinerary.legs[0]?.airline ?? 'LetsFG'} · $${itinerary.price.toLocaleString()}`);
+            setSaved(true);
+          }}
+        >
+          {saved ? 'Saved ✓' : 'Save this fare'}
+        </button>
+        {itinerary.bookingUrl ? (
+          <div className="booking-links">
+            <ul>
+              <li>
+                <a href={itinerary.bookingUrl} target="_blank" rel="noreferrer">
+                  See booking options on LetsFG
+                  <Icon name="externalLink" size={14} />
+                </a>
+              </li>
+            </ul>
+            <p className="plan-muted">
+              Opens letsfg.co — you book and pay there with your Revolut method, not on FujinTrip. Prices can change.
+            </p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-// One Duffel round-trip as a single card (Nov 16, 2026): the merged
-// grid's Duffel option — an outbound + return leg pair, the trip
-// total once on top (party total, exact — not "from"), the service
-// fee on its own line (never folded into the total, never hidden),
-// the small source tag, then the two legs with their prices hidden
-// (the pair total is the price; a per-leg price would read as a
-// one-way fare next to round-trip totals).
+// One price block for every flight trip card (Nov 17, 2026): the
+// trip total once, loud (22px, tabular numerals — the Expedia
+// price-card), and ONE sub-line with the per-traveler price and,
+// for Duffel only, the service fee. Live Ignav/LetsFG totals say
+// "from" — a live fare can change before booking. The fee is shown
+// here once, never folded into the total and never repeated in a
+// banner below the list.
+function TripPriceHeader({
+  total,
+  travelers,
+  fee,
+  prefix,
+}: {
+  total: number;
+  travelers: number;
+  fee?: number;
+  prefix: string;
+}) {
+  const perPerson = travelers > 1 ? perTravelerPrice(total, travelers) : null;
+  const sub =
+    (perPerson !== null ? ` · $${perPerson.toLocaleString()} per traveler · ${travelers} travelers` : '') +
+    (fee !== undefined ? ` · + $${fee.toLocaleString()} service fee per flight order` : '');
+  return (
+    <p className="flight-option-price">
+      {prefix} <strong>${total.toLocaleString()}</strong>
+      {sub !== '' && <span className="plan-muted">{sub}</span>}
+    </p>
+  );
+}
+
+// One Duffel round-trip as a single card (Nov 16, 2026; one format
+// for every trip card, Nov 17, 2026): the merged grid's Duffel
+// option — an outbound + return leg pair, the trip total once on
+// top (party total, exact — not "from"), the small source tag, then
+// the two legs with their prices hidden (the pair total is the
+// price; a per-leg price would read as a one-way fare next to
+// round-trip totals), and one action: "Save this fare" stores the
+// chosen option in My Trips. Duffel has no checkout yet, so the
+// card never claims a booking.
 function DuffelPairCard({
   out,
   back,
@@ -529,6 +579,7 @@ function DuffelPairCard({
   sourceLabel,
   departDate,
   returnDate,
+  onSaveFare,
 }: {
   out: DuffelFareOffer;
   back: DuffelFareOffer;
@@ -537,22 +588,14 @@ function DuffelPairCard({
   sourceLabel?: string;
   departDate: string;
   returnDate: string;
+  onSaveFare: (fareLabel: string) => void;
 }) {
   const total = out.price + back.price;
-  const perPerson = travelers > 1 ? perTravelerPrice(total, travelers) : null;
   const fee = serviceFee(total);
+  const [saved, setSaved] = useState(false);
   return (
     <li className="flight-option-card">
-      <p className="flight-option-price">
-        Trip total <strong>${total.toLocaleString()}</strong>
-        {perPerson !== null && (
-          <span className="plan-muted">
-            {' '}
-            · ${perPerson.toLocaleString()} per traveler · {travelers} travelers
-          </span>
-        )}
-      </p>
-      <p className="flight-option-fee">+ ${fee.toLocaleString()} service fee per flight order</p>
+      <TripPriceHeader total={total} travelers={travelers} fee={fee} prefix="Trip total" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       <h6 className="ignav-leg-label">Outbound — {departDate}</h6>
       <ul className="fare-list">
@@ -562,6 +605,62 @@ function DuffelPairCard({
       <ul className="fare-list">
         <FareCard offer={back} travelers={travelers} cabin={cabin} hidePrice />
       </ul>
+      <div className="flight-option-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={saved}
+          onClick={() => {
+            onSaveFare(`${out.airline} + ${back.airline} · $${total.toLocaleString()}`);
+            setSaved(true);
+          }}
+        >
+          {saved ? 'Saved ✓' : 'Save this fare'}
+        </button>
+      </div>
+    </li>
+  );
+}
+
+// One Duffel one-way as a trip card (Nov 17, 2026): the merged
+// grid's one-way option — the same trip-card shape as a pair (trip
+// total on top, source tag, one leg with its price hidden, one
+// action), never a bare fare card with the price on the leg.
+function DuffelOneWayCard({
+  offer,
+  travelers,
+  cabin,
+  sourceLabel,
+  onSaveFare,
+}: {
+  offer: DuffelFareOffer;
+  travelers: number;
+  cabin: string;
+  sourceLabel?: string;
+  onSaveFare: (fareLabel: string) => void;
+}) {
+  const fee = serviceFee(offer.price);
+  const [saved, setSaved] = useState(false);
+  return (
+    <li className="flight-option-card">
+      <TripPriceHeader total={offer.price} travelers={travelers} fee={fee} prefix="Trip total" />
+      {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
+      <ul className="fare-list">
+        <FareCard offer={offer} travelers={travelers} cabin={cabin} hidePrice />
+      </ul>
+      <div className="flight-option-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={saved}
+          onClick={() => {
+            onSaveFare(`${offer.airline} · $${offer.price.toLocaleString()}`);
+            setSaved(true);
+          }}
+        >
+          {saved ? 'Saved ✓' : 'Save this fare'}
+        </button>
+      </div>
     </li>
   );
 }
@@ -967,12 +1066,14 @@ function FlightResults({
       travelers: query.travelers,
     });
     if (!base || tripType === 'multicity') return base;
-    // The card counts for the merged grid: the same merge on the
-    // unfiltered inventory (Ignav and LetsFG still capped, as
-    // totalVisible is) is the total the grid holds; the filtered
-    // merge is what it shows. The facet counts above stay fare counts
-    // from the full inventory — only the "Showing X of Y" line counts
-    // cards.
+    // The card counts for the merged grid (audit round, Nov 17,
+    // 2026): the facet counts are counted from the FILTERED merge,
+    // so they match the cards on screen — the old leg-based counts
+    // read "Under $1,000 (23)" next to 6 cards. The same merge on
+    // the unfiltered inventory (Ignav and LetsFG still capped, as
+    // totalVisible is) is the total the grid holds. Multi-city
+    // keeps the fare counts above: its per-leg lists ARE the list,
+    // so leg counts are the honest ones there.
     const totalOptions = mergeFlightOptions({
       tripType,
       out: fares.data?.out ?? [],
@@ -981,7 +1082,7 @@ function FlightResults({
       letsfgItineraries: (letsfg.data?.itineraries ?? []).slice(0, LETSFG_MAX_ITINERARIES),
       sort,
     }).length;
-    return { ...base, shownOptions: mergedOptions.length, totalOptions };
+    return { ...base, counts: countFlightCards(mergedOptions, query.travelers), shownOptions: mergedOptions.length, totalOptions };
   }, [visibleLive, fares.data, ignav.data, letsfg.data, query.travelers, tripType, sort, mergedOptions]);
   const liveOptionsKeyRef = useRef('');
   useEffect(() => {
@@ -1017,6 +1118,10 @@ function FlightResults({
   const duffelTagShown = hideSourceTags ? undefined : duffelTag;
   const ignavTagShown = hideSourceTags ? undefined : ignavTag;
   const letsfgTagShown = hideSourceTags ? undefined : letsfgTag;
+  // "Save this fare" (Nov 17, 2026): a Duffel card's one action —
+  // the chosen option is stored in My Trips with the search label,
+  // so the saved item records exactly which fare was picked.
+  const onSaveFare = (fareLabel: string) => onSave(`${searchRequestLabel(query)} · ${fareLabel}`);
   // The plan flight budget is a round-trip figure — for one-way and
   // multi-city it would quote a budget that does not apply, so the
   // line (and the budget inside noFareMessage) stays round-trip only.
@@ -1044,10 +1149,10 @@ function FlightResults({
           complete trip option with its own small source + freshness
           tag while no filter is active (the tags hide while any
           filter is on). The "Showing X of Y" line lives in the
-          filter bar on top, not here. Multi-city keeps its per-leg
-          lists below. */}
+          count row above the list, not here. Multi-city keeps its
+          per-leg lists below. */}
       <div className="fare-live-list">
-        {fares.status === 'loading' && <p>Checking live fares…</p>}
+        {fares.status === 'loading' && <p className="results-loading">Checking live fares…</p>}
         {/* The merged grid (Nov 16, 2026): round-trip and one-way
             searches render one card grid — Duffel pairs, Ignav trips
             and LetsFG trips interleaved by the active sort, never
@@ -1070,22 +1175,19 @@ function FlightResults({
                         sourceLabel={duffelTagShown}
                         departDate={fares.data?.departDate ?? departIso}
                         returnDate={fares.data?.returnDate ?? returnIso}
+                        onSaveFare={onSaveFare}
                       />
                     );
                   }
                   if (opt.kind === 'duffel-oneway') {
                     return (
-                      <FareCard
+                      <DuffelOneWayCard
                         key={opt.key}
                         offer={opt.offer}
                         travelers={query.travelers}
                         cabin={query.cabin}
                         sourceLabel={duffelTagShown}
-                        priceNote={
-                          <span>
-                            + ${serviceFee(opt.offer.price).toLocaleString()} service fee per flight order
-                          </span>
-                        }
+                        onSaveFare={onSaveFare}
                       />
                     );
                   }
@@ -1098,6 +1200,7 @@ function FlightResults({
                           cabin={query.cabin}
                           labels={tripType === 'oneway' ? ['One-way'] : ['Outbound', 'Return']}
                           sourceLabel={letsfgTagShown}
+                          onSaveFare={onSaveFare}
                         />
                       </li>
                     );
@@ -1110,6 +1213,7 @@ function FlightResults({
                         cabin={query.cabin}
                         labels={tripType === 'oneway' ? ['One-way'] : ['Outbound', 'Return']}
                         sourceLabel={ignavTagShown}
+                        onSaveFare={onSaveFare}
                       />
                     </li>
                   );
@@ -1126,18 +1230,6 @@ function FlightResults({
                   )}
                 </p>
               )
-            )}
-            {tripType === 'roundtrip' && cheapestOutBackTotal(out, back) > 0 && (
-              <p className="fare-total">
-                Cheapest out + back: <strong>${cheapestOutBackTotal(out, back).toLocaleString()}</strong> for {query.travelers} traveler
-                {query.travelers > 1 ? 's' : ''} · + ${serviceFee(cheapestOutBackTotal(out, back)).toLocaleString()} service fee per flight order.
-              </p>
-            )}
-            {tripType === 'oneway' && cheapestOneWayTotal(out) > 0 && (
-              <p className="fare-total">
-                Cheapest one-way: <strong>${cheapestOneWayTotal(out).toLocaleString()}</strong> for {query.travelers} traveler
-                {query.travelers > 1 ? 's' : ''} · + ${serviceFee(cheapestOneWayTotal(out)).toLocaleString()} service fee per flight order.
-              </p>
             )}
             {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
               <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
@@ -1185,7 +1277,7 @@ function FlightResults({
                 </div>
               ))}
               {cheapestMultiCityTotal(legLists) > 0 && (
-                <p className="fare-total">
+                <p className="plan-muted">
                   Cheapest all legs: <strong>${cheapestMultiCityTotal(legLists).toLocaleString()}</strong> for {query.travelers} traveler
                   {query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed · + ${serviceFee(cheapestMultiCityTotal(legLists)).toLocaleString()} service fee per flight order.
                 </p>
@@ -1212,12 +1304,12 @@ function FlightResults({
                 : ''}
             </p>
           )}
-          {ignav.status === 'loading' && <p>Checking live fares from Ignav…</p>}
+          {ignav.status === 'loading' && <p className="results-loading">Checking live fares from Ignav…</p>}
           {ignav.status === 'done' && ignav.data && !ignav.data.live && (
             <p>{ignavEmptyMessage(ignav.data.reason)}</p>
           )}
           {ignav.status === 'done' && !ignav.data && <p>Could not check live fares from Ignav right now.</p>}
-          {letsfg.status === 'loading' && <p>Checking live fares from LetsFG…</p>}
+          {letsfg.status === 'loading' && <p className="results-loading">Checking live fares from LetsFG…</p>}
           {letsfg.status === 'done' && letsfg.data && !letsfg.data.live && (
             <p>{letsfgEmptyMessage(letsfg.data.reason)}</p>
           )}
@@ -1237,6 +1329,7 @@ function FlightResults({
                     cabin={query.cabin}
                     labels={queryLegs.map((l, i) => `Leg ${i + 1} — ${l.from} → ${l.to} · ${l.depart}`)}
                     sourceLabel={ignavTagShown}
+                    onSaveFare={onSaveFare}
                   />
                 ))}
                 {ignavItineraries.length === 0 && (
@@ -1248,7 +1341,7 @@ function FlightResults({
                   </p>
                 )}
                 {cheapestIgnavItinerary(ignavItineraries) > 0 && (
-                  <p className="fare-total">
+                  <p className="plan-muted">
                     Cheapest multi-city (Ignav): from{' '}
                     <strong>${cheapestIgnavItinerary(ignavItineraries).toLocaleString()}</strong> for {query.travelers} traveler
                     {query.travelers > 1 ? 's' : ''}
@@ -1293,7 +1386,7 @@ function FlightResults({
                   </div>
                 ))}
                 {cheapestMultiCityTotal(ignavLegLists.map((l) => ({ out: l.offers }))) > 0 && (
-                  <p className="fare-total">
+                  <p className="plan-muted">
                     Cheapest all legs (Ignav): from{' '}
                     <strong>${cheapestMultiCityTotal(ignavLegLists.map((l) => ({ out: l.offers }))).toLocaleString()}</strong> for{' '}
                     {query.travelers} traveler{query.travelers > 1 ? 's' : ''} · cheapest fare of each leg, summed.
@@ -3031,11 +3124,13 @@ export default function SearchResults({
   dark,
   onSaveSearch,
   onEditSearch,
+  onClearSearch,
 }: {
   query: SearchQuery;
   dark: boolean;
   onSaveSearch: (label: string) => void;
   onEditSearch: () => void;
+  onClearSearch: () => void;
 }) {
   const label = HOME_TABS.find((t) => t.id === query.tab)?.label ?? query.tab;
   const [sort, setSort] = useState<RowSort>('best');
@@ -3169,6 +3264,16 @@ export default function SearchResults({
     setBoardFilter(null);
   };
 
+  const liveFiltersActive = flightFiltersActive({ sort, maxPrice, stopsFilter, airlinesFilter, timesFilter });
+  const clearAllFlightFilters = () => {
+    setStopsFilter([]);
+    setAirlinesFilter([]);
+    setTimesFilter([]);
+    setMaxPrice(null);
+    // A changed sort is itself a filter state — clearing restores
+    // Best value, so the source tags come back too.
+    setSort('best');
+  };
   const filtersBody = (
     <>
       {/* Sort + max price live in the sidebar for every tab
@@ -3200,6 +3305,52 @@ export default function SearchResults({
               ))}
             </select>
           </div>
+        </>
+      )}
+      {/* Flight facets (audit round, Nov 17, 2026): stops, airline and
+          departure time moved from the top filter bar into this rail —
+          the same facet-check lists the Stays sidebar uses. The
+          counts come from the cards on screen (countFlightCards), so
+          "Nonstop (3)" means 3 visible cards, never a leg count from
+          another dataset. */}
+      {query.tab === 'flights' && liveOptions && (
+        <>
+          <div className="filter-group">
+            <h3>Stops</h3>
+            {liveOptions.stops.map((s) => (
+              <label key={s} className="facet-check">
+                <input type="checkbox" checked={stopsFilter.includes(s)} onChange={() => setStopsFilter((l) => toggleIn(l, s))} />
+                {s === 0 ? 'Nonstop' : `${s} stop${s > 1 ? 's' : ''}`} ({liveOptions.counts.stops[s] ?? 0})
+              </label>
+            ))}
+          </div>
+          <div className="filter-group">
+            <h3>Airline</h3>
+            {liveOptions.airlines.map((a) => (
+              <label key={a} className="facet-check">
+                <input type="checkbox" checked={airlinesFilter.includes(a)} onChange={() => setAirlinesFilter((l) => toggleIn(l, a))} />
+                {a} ({liveOptions.counts.airlines[a] ?? 0})
+              </label>
+            ))}
+          </div>
+          {liveOptions.times.length > 0 && (
+            <div className="filter-group">
+              <h3>Departure time</h3>
+              {liveOptions.times.map((t) => (
+                <label key={t} className="facet-check">
+                  <input type="checkbox" checked={timesFilter.includes(t)} onChange={() => setTimesFilter((l) => toggleIn(l, t))} />
+                  {TIME_BUCKETS.find((b) => b.id === t)?.label ?? t} ({liveOptions.counts.times[t] ?? 0})
+                </label>
+              ))}
+            </div>
+          )}
+          {liveFiltersActive && (
+            <p>
+              <button type="button" className="linklike" onClick={clearAllFlightFilters}>
+                Clear filters
+              </button>
+            </p>
+          )}
         </>
       )}
       {query.tab === 'hotels' && (
@@ -3333,99 +3484,14 @@ export default function SearchResults({
     </>
   );
 
-  // The flight filter bar (Nov 16, 2026): flights have no left
-  // sidebar — one horizontal bar above the results carries the same
-  // facets the sidebar had (sort, max price, stops, airline,
-  // departure time), the "Showing X of Y" count, and Clear filters.
-  // The facet counts are the same full-inventory counts the sidebar
-  // showed (liveOptions.counts), so a count is still what the
-  // filter reveals; only the "Showing" line counts cards now — the
-  // merged grid's options — falling back to live fares for
-  // multi-city, which has no merged grid.
-  const liveFiltersActive = flightFiltersActive({ sort, maxPrice, stopsFilter, airlinesFilter, timesFilter });
-  const clearAllFlightFilters = () => {
-    setStopsFilter([]);
-    setAirlinesFilter([]);
-    setTimesFilter([]);
-    setMaxPrice(null);
-    // A changed sort is itself a filter state — clearing restores
-    // Best value, so the source tags come back too.
-    setSort('best');
-  };
-  const flightFilterBar = (
-    <div className="flight-filter-bar" aria-label="Flight filters">
-      <label className="filter-bar-field">
-        <span>Sort</span>
-        <select value={sort} onChange={(e) => setSort(e.target.value as RowSort)} aria-label="Sort results">
-          <option value="best">Best value first</option>
-          <option value="cheapest">Cheapest first</option>
-          <option value="duration">Shortest first</option>
-          <option value="departure">Earliest departure</option>
-        </select>
-      </label>
-      <label className="filter-bar-field">
-        <span>Max price per traveler</span>
-        <select
-          value={maxPrice === null ? '' : String(maxPrice)}
-          onChange={(e) => setMaxPrice(e.target.value === '' ? null : Number(e.target.value))}
-          aria-label="Maximum price per traveler"
-        >
-          <option value="">Any price</option>
-          {LIVE_PRICE_BANDS.map((band) => (
-            <option key={band} value={band}>
-              Under ${band.toLocaleString()} ({underCount(band)})
-            </option>
-          ))}
-        </select>
-      </label>
-      {liveOptions && (
-        <>
-          <div className="filter-bar-group" role="group" aria-label="Stops">
-            <span className="filter-bar-label">Stops</span>
-            {liveOptions.stops.map((s) => (
-              <label key={s} className="filter-check">
-                <input type="checkbox" checked={stopsFilter.includes(s)} onChange={() => setStopsFilter((l) => toggleIn(l, s))} />
-                {s === 0 ? 'Nonstop' : `${s} stop${s > 1 ? 's' : ''}`} ({liveOptions.counts.stops[s] ?? 0})
-              </label>
-            ))}
-          </div>
-          <div className="filter-bar-group" role="group" aria-label="Airline">
-            <span className="filter-bar-label">Airline</span>
-            {liveOptions.airlines.map((a) => (
-              <label key={a} className="filter-check">
-                <input type="checkbox" checked={airlinesFilter.includes(a)} onChange={() => setAirlinesFilter((l) => toggleIn(l, a))} />
-                {a} ({liveOptions.counts.airlines[a] ?? 0})
-              </label>
-            ))}
-          </div>
-          {liveOptions.times.length > 0 && (
-            <div className="filter-bar-group" role="group" aria-label="Departure time">
-              <span className="filter-bar-label">Departure time</span>
-              {liveOptions.times.map((t) => (
-                <label key={t} className="filter-check">
-                  <input type="checkbox" checked={timesFilter.includes(t)} onChange={() => setTimesFilter((l) => toggleIn(l, t))} />
-                  {TIME_BUCKETS.find((b) => b.id === t)?.label ?? t} ({liveOptions.counts.times[t] ?? 0})
-                </label>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-      <span className="filter-bar-count">
-        {liveOptions
-          ? liveOptions.shownOptions !== undefined
-            ? `Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options`
-            : `Showing ${liveOptions.shownCount} of ${liveOptions.totalCount} live fares`
-          : 'Checking live fares…'}
-      </span>
-      {liveFiltersActive && (
-        <button type="button" className="linklike" onClick={clearAllFlightFilters}>
-          Clear filters
-        </button>
-      )}
-    </div>
-  );
-
+  // Flight filter state (audit round, Nov 17, 2026): the facets
+  // live in the left rail now (filtersBody) — the top filter bar is
+  // gone. Sort, max price, stops, airline and departure time are the
+  // same controls, and the "Showing X of Y" count lives in the count
+  // row above the list. The facet counts are card counts
+  // (countFlightCards), so a count is what the filter reveals; only
+  // multi-city falls back to live-fare counts, which has no merged
+  // grid.
   // The map toggle + map (Nov 14, 2026): shared by the flights
   // full-width branch and the sidebar layout's main column — the
   // discovery pins are destinations with trip totals, which is what
@@ -3528,7 +3594,7 @@ export default function SearchResults({
 
   return (
     <section
-      className={query.tab === 'flights' ? 'results-section results-section--flights' : 'results-section'}
+      className="results-section"
       id="results"
       aria-label="Search results"
     >
@@ -3543,6 +3609,9 @@ export default function SearchResults({
         </span>
         <button type="button" className="ghost" onClick={onEditSearch}>
           Edit search
+        </button>{' '}
+        <button type="button" className="ghost" onClick={onClearSearch}>
+          Clear search
         </button>
       </div>
       {unknownPlace && query.tab !== 'flights' ? (
@@ -3557,31 +3626,56 @@ export default function SearchResults({
           </p>
         </div>
       ) : query.tab === 'flights' ? (
-        // Flights, full screen (Nov 16, 2026): no left sidebar, no
-        // narrow centered column — the filter bar sits on top and the
-        // merged card grid uses the full viewport width.
-        <div className="results-full">
-          {flightFilterBar}
-          {mapToggle}
-          {mapBlock}
-          <FlightResults
-            query={query}
-            sort={sort}
-            maxPrice={maxPrice}
-            stopsFilter={stopsFilter}
-            airlinesFilter={airlinesFilter}
-            timesFilter={timesFilter}
-            hideSourceTags={liveFiltersActive}
-            onLiveOptions={setLiveOptions}
-            onSave={onSaveSearch}
-            onClearLiveFilters={() => {
-              setStopsFilter([]);
-              setAirlinesFilter([]);
-              setTimesFilter([]);
-            }}
-            onClearPrice={() => setMaxPrice(null)}
-            onClearSort={() => setSort('best')}
-          />
+        // Flights (audit round, Nov 17, 2026): the same 230px left
+        // rail + results column as every other tab — the top filter
+        // bar is gone. Sort + price + facets live in the rail
+        // (filtersBody); the count row above the list carries the
+        // "Showing X of Y" count, counted from the cards.
+        <div className="results-layout">
+          <aside className="results-filters" aria-label="Filters">
+            {filtersBody}
+          </aside>
+          <div className="results-main">
+            <p className="filters-open-row">
+              <button type="button" className="ghost" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((o) => !o)}>
+                Filters
+              </button>
+            </p>
+            <div className="results-count-row">
+              <span>
+                {liveOptions
+                  ? liveOptions.shownOptions !== undefined
+                    ? `Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options`
+                    : `Showing ${liveOptions.shownCount} of ${liveOptions.totalCount} live fares`
+                  : 'Checking live fares…'}
+              </span>
+              {liveFiltersActive && (
+                <button type="button" className="linklike" onClick={clearAllFlightFilters}>
+                  Clear filters
+                </button>
+              )}
+            </div>
+            {mapToggle}
+            {mapBlock}
+            <FlightResults
+              query={query}
+              sort={sort}
+              maxPrice={maxPrice}
+              stopsFilter={stopsFilter}
+              airlinesFilter={airlinesFilter}
+              timesFilter={timesFilter}
+              hideSourceTags={liveFiltersActive}
+              onLiveOptions={setLiveOptions}
+              onSave={onSaveSearch}
+              onClearLiveFilters={() => {
+                setStopsFilter([]);
+                setAirlinesFilter([]);
+                setTimesFilter([]);
+              }}
+              onClearPrice={() => setMaxPrice(null)}
+              onClearSort={() => setSort('best')}
+            />
+          </div>
         </div>
       ) : (
         <div className="results-layout">
@@ -3689,7 +3783,7 @@ export default function SearchResults({
           </div>
         </div>
       )}
-      {filtersOpen && query.tab !== 'flights' && (
+      {filtersOpen && (
         <div className="filters-sheet" role="dialog" aria-label="Filters">
           <div className="filters-sheet-head">
             <strong>Filters</strong>

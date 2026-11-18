@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS, LOCAL_TRIPS } from '../lib/data';
+import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS, leadPhotoFor, LOCAL_TRIPS } from '../lib/data';
 import { discoveryDestinations } from '../lib/discovery';
 import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
@@ -256,6 +256,13 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
   // — the traveler lands in the app with the cursor ready to
   // personalize the template ("make it cheaper", "3 nights in Prague").
   const [chatSeed, setChatSeed] = useState<{ destination: string; cities: string[]; sourceTips?: Record<string, string> } | null>(null);
+  // Visible reels on the homepage (audit round, Nov 17, 2026):
+  // null while the feed is still loading, then the count — the
+  // Travelers' stories section hides while the feed is empty, so
+  // the homepage never shows a "No reels yet" box. Posting the
+  // first reel still works from My Trips ("Share how it went") and
+  // from the chat.
+  const [reelsCount, setReelsCount] = useState<number | null>(null);
   // Direction v3 search (Nov 14, 2026): the hero search widget owns
   // the tab; a submitted search renders results below the hero; a
   // destination card prefills the widget. The homepage no longer
@@ -466,12 +473,12 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
     const entries: LibraryEntry[] = [];
     for (const e of discovery) {
       const stopPhotos = [...new Set(e.stops.map((s) => s.city).map((c) => imageByName.get(c)).filter((x): x is string => Boolean(x)))];
-      const own = imageByName.get(e.destination);
+      const lead = leadPhotoFor(e.destination, e.stops.map((s) => s.city));
       entries.push({
         key: e.key,
         name: e.destination,
         tag: e.tag,
-        photos: own ? [own] : stopPhotos,
+        photos: lead ? [lead, ...stopPhotos.filter((p) => p !== lead)] : stopPhotos,
         routeLine: e.stops.length > 1 ? e.stops.map((s) => s.city).join(' → ') : undefined,
         stays: e.stays,
         transports: e.transports,
@@ -549,7 +556,8 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
   // Trust strip (interface round, Nov 16 2026 — P0 #3): moved from
   // the bottom of the page to directly under the search results (or
   // under the hero when no search is active) — trust belongs where
-  // the traveler decides. The same three lines repeat in the footer.
+  // the traveler decides. It appears once, there — never again in
+  // the footer (audit round, Nov 17, 2026 — gap 13).
   const trustStrip = (label: string) => (
     <div className="trust-strip" aria-label={label}>
       <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>All-in prices — the price you see is the price you pay</span>
@@ -790,6 +798,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
             dark={theme === 'dark'}
             onSaveSearch={(label) => saveTrip(label, 'Request saved')}
             onEditSearch={editSearch}
+            onClearSearch={() => setSearch(null)}
           />
         </div>
       )}
@@ -801,6 +810,16 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
       )}
       {variant === 'home' && (
       <main className="wrap">
+        {/* Audit round Nov 17, 2026: a search turns this into a
+            results-only page — the browse sections (tiles, packages,
+            fares, deals, destinations, stories, voices, weekend
+            trips) hide while results are showing, so a flight search
+            is not buried under the whole homepage. My Trips stays:
+            it is the traveler's own content, and the #mytrips anchor
+            must keep working. "Clear search" in the results bar
+            brings the browse sections back. */}
+        {!search && (
+        <>
         {/* Category tiles (interface round, Nov 16 2026 — P1 #9):
             moved from position 8 to directly under the hero — the
             category entry points come first, as on Expedia. They
@@ -860,20 +879,29 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
           <p className="sub">Tap a destination to fill in the search above — prices are planning estimates from FujinTrip&apos;s planner, Best value per traveler.</p>
           <div className="grid">
             {visibleEntries.map((e) => (
-              <article className="card dest-card--photo" key={e.key}>
+              <article className="card" key={e.key}>
                 <PhotoCarousel photos={e.photos} alt={e.name} />
-                <div className="dest-overlay">
+                <div className="body">
+                  <div className="card-top">
+                    <span className="pill">{e.tag}</span>
+                    <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} buttonClassName="linklike" />
+                  </div>
+                  {/* The price lives below the photo now (audit round,
+                      Nov 17, 2026 — gap 10): white text over a busy
+                      photo wrapped to two lines and read badly. The
+                      name + from-price sit in the white body,
+                      Expedia's destination-card pattern. */}
                   <h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
                   {e.total !== null ? (
-                    <p>from ${Math.round(e.total / 2).toLocaleString()} per traveler · Best value · 2 travelers · planning estimate</p>
+                    <>
+                      <p className="result-price">from ${Math.round(e.total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
+                      <p className="plan-muted">Best value · 2 travelers · planning estimate</p>
+                    </>
                   ) : (
-                    <p>No planning estimate for this one yet</p>
+                    <p className="plan-muted">No planning estimate for this one yet</p>
                   )}
-                </div>
-                <div className="body"><span className="pill">{e.tag}</span>
                   <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>{' '}
-                  <a href={`/destination/${encodeURIComponent(e.name)}`}>Destination guide →</a>{' '}
-                  <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} />
+                  <a href={`/destination/${encodeURIComponent(e.name)}`}>Destination guide →</a>
                 </div>
               </article>
             ))}
@@ -889,15 +917,17 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
 
         <HowItWorksSection />
 
-        <section>
-          <h2>Travelers&apos; stories</h2>
-          <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
-          <ReelsFeed onPost={() => openComposer()} />
-          <p style={{ marginTop: 12 }}>
-            <a href="/community">Visit the Community →</a>{' '}
-            <a href="/reels">See all travelers’ reels →</a>
-          </p>
-        </section>
+        {reelsCount !== 0 && (
+          <section>
+            <h2>Travelers&apos; stories</h2>
+            <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
+            <ReelsFeed onPost={() => openComposer()} onCount={setReelsCount} />
+            <p style={{ marginTop: 12 }}>
+              <a href="/community">Visit the Community →</a>{' '}
+              <a href="/reels">See all travelers’ reels →</a>
+            </p>
+          </section>
+        )}
 
         <LocalVoicesTeaser onPick={prefillDestination} />
 
@@ -916,7 +946,12 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
             {HIDDEN_GEMS.map((d) => (
               <article className="card" key={d.name}>
                 <SafeImg src={d.image} alt={d.name} label={d.name} />
-                <div className="body"><span className="pill">{d.tag}</span><h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
+                <div className="body">
+                  <div className="card-top">
+                    <span className="pill">{d.tag}</span>
+                    <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} buttonClassName="linklike" />
+                  </div>
+                  <h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
                   {cardInfo[d.name] && (
                     <>
                       <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
@@ -929,8 +964,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
                   <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>{' '}
-                  <a href={`/destination/${encodeURIComponent(d.name)}`}>Destination guide →</a>{' '}
-                  <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} />
+                  <a href={`/destination/${encodeURIComponent(d.name)}`}>Destination guide →</a>
                 </div>
               </article>
             ))}
@@ -940,6 +974,8 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
 
         {/* Ad slot: below the fold, content area only. Dormant until AdSense is configured. */}
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_BELOW_GEMS ?? ''} />
+        </>
+        )}
 
         <section>
           <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
@@ -1011,28 +1047,18 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
               </ul>
             </div>
           </div>
-          {/* Footer link hub (interface round, Nov 16 2026 — P1 #10):
-              top destinations × the 7 categories as /?tab= links,
-              built from discovery data. A destination name links to
-              its guide page; a category link lands on that tab with
-              the destination prefilled in the search widget. */}
-          <div className="footer-hub" aria-label="Top destinations by category">
+          {/* Footer destinations (audit round, Nov 17, 2026 — gap
+              13): one link per destination, to its guide page. The
+              hub used to repeat all 7 category links under every
+              destination — 42 identical links — while the Book
+              column already links the 7 categories once. */}
+          <div className="footer-hub" aria-label="Top destinations">
             {discovery.slice(0, 6).map((d) => (
-              <div key={d.key} className="footer-hub-dest">
-                <strong>
-                  <a href={`/destination/${encodeURIComponent(d.destination)}`}>{d.destination}</a>
-                </strong>
-                <ul>
-                  {HOME_TABS.map((t) => (
-                    <li key={t.id}>
-                      <a href={`/?tab=${t.id}&plan=${encodeURIComponent(d.destination)}`}>{t.label}</a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <span key={d.key} className="footer-hub-dest">
+                <a href={`/destination/${encodeURIComponent(d.destination)}`}>{d.destination}</a>
+              </span>
             ))}
           </div>
-          {trustStrip('Why book with FujinTrip — footer')}
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Travel globally, act locally. Named for Fujin, Japan’s wind god.</p>
           <p>No hidden margin on fares — the airline fare is passed through at cost. Our service fee is shown separately at checkout, so you always see fare + fee before you pay.</p>
           <p>Fujin artwork: Ogata Korin, Wind God, c.1700 (public domain). Photo credits in the destination cards are from Unsplash / Wikimedia Commons.</p>

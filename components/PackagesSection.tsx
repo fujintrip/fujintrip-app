@@ -20,23 +20,19 @@ import ShareMenu from './ShareMenu';
 export function PackageCard({
   pkg,
   hero,
-  row,
   liveFares,
   onView,
   onSave,
 }: {
   pkg: Package;
   hero?: boolean;
-  // Horizontal row layout (review round, Nov 17 2026 — gap 2): the
-  // deals shelf renders the same card as a wide row, photo left.
-  row?: boolean;
   liveFares?: LivePackageFare[] | null;
   onView: () => void;
   onSave: () => void;
 }) {
   const price = packagePrice(pkg, liveFares);
   return (
-    <article className={`pkg-card${hero ? ' pkg-card--hero' : ''}${row ? ' pkg-card--row' : ''}`}>
+    <article className={`pkg-card${hero ? ' pkg-card--hero' : ''}`}>
       {pkg.photo ? (
         <SafeImg src={pkg.photo} alt={pkg.destination} label={pkg.destination} className="pkg-photo" />
       ) : (
@@ -45,7 +41,21 @@ export function PackageCard({
         </div>
       )}
       <div className="pkg-body">
-        <span className="pill">{pkg.tag}</span>
+        {/* Card top row (audit round, Nov 17, 2026): the tag pill and
+            share sit together up top, so the action row below holds
+            exactly one primary pill + one text link. */}
+        <div className="card-top">
+          <span className="pill">{pkg.tag}</span>
+          {/* Social share-out (Nov 15, 2026): the link lands on the
+              packages grid; the text names the package and its
+              from-price. Posting happens on the network the traveler
+              picks, never by FujinTrip. */}
+          <ShareMenu
+            url="/#packages"
+            text={shareTextFor('package', pkg.destination, `from $${price.perTraveler.toLocaleString()} per traveler · planning estimate`)}
+            buttonClassName="linklike"
+          />
+        </div>
         <h3>{pkg.destination}</h3>
         <p className="pkg-route">{pkg.stops.join(' → ')}</p>
         <p className="pkg-meta">
@@ -86,17 +96,9 @@ export function PackageCard({
           <button type="button" className="primary" onClick={onSave}>
             Save this search
           </button>
-          <button type="button" className="ghost" onClick={onView}>
+          <button type="button" className="linklike" onClick={onView}>
             View package
           </button>
-          {/* Social share-out (Nov 15, 2026): the link lands on the
-              packages grid; the text names the package and its
-              from-price. Posting happens on the network the traveler
-              picks, never by FujinTrip. */}
-          <ShareMenu
-            url="/#packages"
-            text={shareTextFor('package', pkg.destination, `from $${price.perTraveler.toLocaleString()} per traveler · planning estimate`)}
-          />
         </div>
       </div>
     </article>

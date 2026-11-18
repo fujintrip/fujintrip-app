@@ -75,7 +75,54 @@ export const CITY_PHOTOS: Record<string, string> = {
   London: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Big_Ben_at_sunset_-_2014-10-27_17-30.jpg/960px-Big_Ben_at_sunset_-_2014-10-27_17-30.jpg',
   'Mexico City': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c3/Plaza_de_la_Constituci%C3%B3n_-_Z%C3%B3calo_de_la_Ciudad_de_M%C3%A9xico_-_6.jpg/960px-Plaza_de_la_Constituci%C3%B3n_-_Z%C3%B3calo_de_la_Ciudad_de_M%C3%A9xico_-_6.jpg',
   'New York': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Lower_Manhattan%2C_New_York_skyline_from_Liberty_Island_2021.jpg/960px-Lower_Manhattan%2C_New_York_skyline_from_Liberty_Island_2021.jpg',
+  // Audit round Nov 17, 2026 — verified Nov 17 (HTTP 200, image/jpeg):
+  // Tokyo Skytree (File:Tokyo_SkyTree.jpg), Vienna Schönbrunn Gloriette
+  // (File:Wien.Schönbrunn26.jpg), Hanoi Turtle Tower on Hoàn Kiếm Lake
+  // (File:Hanoi - Turtle Tower (Tháp Rùa), Hoàn Kiếm Lake.jpg).
+  Tokyo: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Tokyo_SkyTree.jpg/960px-Tokyo_SkyTree.jpg',
+  Vienna: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Wien.Sch%C3%B6nbrunn26.jpg/960px-Wien.Sch%C3%B6nbrunn26.jpg',
+  Hanoi: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Hanoi_-_Turtle_Tower_%28Th%C3%A1p_R%C3%B9a%29%2C_Ho%C3%A0n_Ki%E1%BA%BFm_Lake.jpg/960px-Hanoi_-_Turtle_Tower_%28Th%C3%A1p_R%C3%B9a%29%2C_Ho%C3%A0n_Ki%E1%BA%BFm_Lake.jpg',
 };
+
+// Audit round Nov 17, 2026: routes that share a first stop with
+// another route — or with a standalone city card — get a different
+// lead photo from a later stop, so no two cards on the homepage lead
+// with the same photo. Europe shows Paris, not Lisbon (Portugal
+// keeps the tram); Central Europe shows Vienna, not Prague (the
+// Prague photo stays with the Local Voice); Japan shows Tokyo, not
+// Kyoto (Kyoto keeps its own card); Southeast Asia shows Hanoi, not
+// Bangkok (Thailand keeps Bangkok).
+export const ROUTE_PHOTO_CITY: Record<string, string> = {
+  Europe: 'Paris',
+  'Central Europe': 'Vienna',
+  Japan: 'Tokyo',
+  'Southeast Asia': 'Hanoi',
+};
+
+// The lead photo for a trip (audit round, Nov 17, 2026): the
+// route override first, then the first stop that has a photo (a
+// route whose first stop has none — Japan's first stop is Tokyo,
+// which had no photo until this round — used to fall back to a
+// blank tile), then the destination's own photo. One rule for the
+// packages shelf, the destination cards and the search results, so
+// a package and its destination card never disagree.
+export function leadPhotoFor(destination: string, stopCities: string[]): string | null {
+  const byName = new Map<string, string>([
+    ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
+    ...HIDDEN_GEMS.map((d) => [d.name, d.image] as const),
+    ...Object.entries(CITY_PHOTOS),
+  ]);
+  const overrideCity = ROUTE_PHOTO_CITY[destination];
+  if (overrideCity) {
+    const p = byName.get(overrideCity);
+    if (p) return p;
+  }
+  for (const c of stopCities) {
+    const p = byName.get(c);
+    if (p) return p;
+  }
+  return byName.get(destination) ?? null;
+}
 
 // Weekend-trip photos (review round, Nov 17 2026 — gap 7): the trips
 // are generic local activities, not places, so each photo illustrates

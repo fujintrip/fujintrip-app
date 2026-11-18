@@ -19,7 +19,19 @@ function storedIds(key: string): string[] {
   }
 }
 
-export default function ReelsFeed({ destination, onPost }: { destination?: string; onPost?: () => void }) {
+export default function ReelsFeed({
+  destination,
+  onPost,
+  // The visible count, for a parent that hides its section while the
+  // feed is empty (audit round, Nov 17, 2026): reported only once a
+  // load has finished, so the section never flashes away while the
+  // first page is still loading.
+  onCount,
+}: {
+  destination?: string;
+  onPost?: () => void;
+  onCount?: (count: number) => void;
+}) {
   const [posts, setPosts] = useState<PublicReelPost[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
@@ -27,7 +39,6 @@ export default function ReelsFeed({ destination, onPost }: { destination?: strin
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [notice, setNotice] = useState('');
-  const [storageNote, setStorageNote] = useState('');
 
   const load = useCallback(async (dest: string, cursor?: string) => {
     const params = new URLSearchParams({ limit: '10' });
@@ -36,7 +47,7 @@ export default function ReelsFeed({ destination, onPost }: { destination?: strin
     const r = await fetch(`/api/reels?${params.toString()}`);
     const j = await r.json();
     if (!r.ok) throw new Error(typeof j.message === 'string' ? j.message : 'Couldn’t load the reels.');
-    return j as { posts: PublicReelPost[]; nextCursor: string | null; total: number; storage?: string };
+    return j as { posts: PublicReelPost[]; nextCursor: string | null; total: number };
   }, []);
 
   const refresh = useCallback(async () => {
@@ -48,7 +59,6 @@ export default function ReelsFeed({ destination, onPost }: { destination?: strin
       setPosts(j.posts.filter((p) => !reported.includes(p.id)));
       setNextCursor(j.nextCursor);
       setTotal(j.total);
-      if (j.storage) setStorageNote(j.storage);
     } catch {
       setNotice('Couldn’t load the reels right now — try again in a moment.');
     } finally {
@@ -59,6 +69,13 @@ export default function ReelsFeed({ destination, onPost }: { destination?: strin
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Report the visible count once a load has finished — the parent
+  // hides its section while the feed is empty. Reporting during the
+  // first load would hide the section before the reels arrive.
+  useEffect(() => {
+    if (!loading) onCount?.(posts.length);
+  }, [loading, posts, onCount]);
 
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return;
@@ -129,7 +146,6 @@ export default function ReelsFeed({ destination, onPost }: { destination?: strin
           </button>
         </p>
       )}
-      {storageNote && <p className="plan-note">{storageNote}</p>}
     </div>
   );
 }

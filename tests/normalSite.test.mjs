@@ -26,6 +26,7 @@ import {
 } from '../lib/searchPlaces.ts';
 import { tabRowsFor } from '../lib/homeTabs.ts';
 import { bestTimeFor } from '../lib/bestTime.ts';
+import { CITY_PHOTOS, GLOBAL_DESTINATIONS, leadPhotoFor } from '../lib/data.ts';
 
 test('knownPlaceNames: every place the app knows, sorted, no duplicates', () => {
   const names = knownPlaceNames();
@@ -62,11 +63,13 @@ test('isKnownPlace: exact match only, case-insensitive', () => {
 test('destinationPhoto: a photo where one exists on file, null otherwise', () => {
   assert.ok(destinationPhoto('Kyoto')?.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto has its torii photo');
   assert.ok(destinationPhoto('Bali')?.includes('photo-1537996194471'), 'Bali has a photo');
-  // Japan's stops include Kyoto, so the route resolves to Kyoto's photo.
-  assert.ok(destinationPhoto('Japan')?.includes('photo-1493976040374-85c8e12f0c0e'), 'Japan resolves to a stop photo');
-  // Central Europe's first stop is Prague, which has a per-city photo
-  // (CITY_PHOTOS, Nov 14 2026) — the route resolves to it now.
-  assert.ok(destinationPhoto('Central Europe')?.includes('Prague_07-2016'), 'Central Europe resolves to the Prague photo');
+  // Japan's stops include Kyoto, but the route leads with Tokyo
+  // (leadPhotoFor, Nov 17 2026) — the Japan tile is no longer a
+  // blank block or a Kyoto duplicate.
+  assert.ok(destinationPhoto('Japan')?.includes('Tokyo_SkyTree'), 'Japan resolves to the Tokyo photo');
+  // Central Europe leads with Vienna (ROUTE_PHOTO_CITY, Nov 17
+  // 2026) so it stops duplicating Prague's photo.
+  assert.ok(destinationPhoto('Central Europe')?.includes('Wien.Sch'), 'Central Europe resolves to the Vienna photo');
   assert.ok(destinationPhoto('Portugal')?.includes('Le_tram_28'), 'Portugal resolves to the Lisbon tram photo');
   assert.ok(destinationPhoto('Egypt')?.includes('All_Gizah_Pyramids'), 'Egypt resolves to the Giza photo');
   assert.equal(destinationPhoto('Atlantis'), null);
@@ -343,7 +346,10 @@ test('mobile: phone rules — no zoom, no horizontal scroll, wrapping bar, fitti
 
 test('mobile: the filter checkbox still sits next to its label (defect, Nov 15 2026)', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  assert.ok(/\.filter-check input\{flex:none/.test(css), 'filter checkboxes keep their natural size, so the label sits next to them');
+  // The rail facets use .facet-check now (audit round, Nov 17 2026
+  // — the top bar's .filter-check is gone); the protection is the
+  // same: the checkbox keeps its natural size.
+  assert.ok(/\.facet-check input\{flex:none/.test(css), 'filter checkboxes keep their natural size, so the label sits next to them');
 });
 
 // Flights section build (Nov 15, 2026): the sort re-orders the live
@@ -492,7 +498,10 @@ test('flights: one merged live-fares list — no supplier column headers, a smal
   assert.ok(!src.includes('Etraveli'), 'no fares from a source that is not connected yet');
   assert.ok(src.includes('/api/ignav-fares'), 'the Ignav fares fetch from the Ignav route');
   assert.ok(src.includes('IgnavBookingLinks'), 'Ignav fares carry on-click booking options');
-  assert.ok(src.includes('fare-total'), 'the cheapest out + back total is a highlighted block');
+  // Audit round Nov 17, 2026: the cheapest banner is gone — every
+  // trip card carries its own trip total and one action.
+  assert.ok(!src.includes('fare-total'), 'no highlighted cheapest banner below the flight list');
+  assert.ok(src.includes('Save this fare'), 'Duffel trip cards carry a save action');
   assert.ok(src.includes('Clear filters'), 'a filtered-empty list has a way back');
   // "Book now" appears in the file header and in the comment explaining
   // why the "Book-now read" line is NOT rendered — neither is a
@@ -548,9 +557,13 @@ test('restructure: the card price is the largest type on the card', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const price = css.match(/\.pkg-price\{[^}]*font-size:(\d+)px/);
   assert.ok(price, '.pkg-price has a font-size');
-  assert.ok(Number(price[1]) >= 28, `card price ${price[1]}px is loud (≥28px)`);
+  // Audit round (Nov 17, 2026 — gap 9): the 30px display price is
+  // gone; the package price is the Expedia price-card, 22/700 —
+  // still the largest type on the card, ahead of the 18px title.
+  assert.equal(Number(price[1]), 22, `card price ${price[1]}px is the 22px Expedia price-card`);
   const bodyH3 = css.match(/\.pkg-body h3\{[^}]*font-size:(\d+)px/);
   assert.ok(bodyH3 && Number(price[1]) > Number(bodyH3[1]), 'price larger than the card title');
+  assert.equal(Number(bodyH3[1]), 18, 'card titles are 18px (Expedia title-md)');
 });
 
 test('restructure: icons are Lucide, one pack, one stroke — no emoji, no hand-rolled svg', () => {
@@ -611,9 +624,10 @@ test('restructure: micro-interactions animate transform only, 150–300ms', () =
 test('restructure: the new grids stack to one column at 390px', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const mobile = css.slice(css.indexOf('@media (max-width:640px){', css.indexOf('/* Homepage restructure')));
-  assert.ok(mobile.includes('.pkg-grid,.deals-grid{grid-template-columns:1fr}'), 'package + deals grids collapse to one column');
+  assert.ok(mobile.includes('.pkg-grid,.deals-grid,.fares-strip{grid-template-columns:1fr}'), 'package + deals + fares grids collapse to one column');
   assert.ok(mobile.includes('.pkg-card--hero{grid-column:auto}'), 'the hero card stops spanning on a phone');
-  assert.ok(css.includes('.fares-strip{display:flex'), 'the fares strip scrolls horizontally on a phone');
+  assert.ok(css.includes('.fares-strip{display:grid;grid-template-columns:repeat(4,1fr)'), 'the fares strip is a 4-column grid');
+  assert.ok(css.includes('.pkg-grid,.deals-grid,.fares-strip{grid-template-columns:1fr}'), 'the fares grid collapses to one column on a phone');
   assert.ok(css.includes('.pkg-actions button{min-height:44px'), 'package actions are 44px touch targets');
 });
 
@@ -628,20 +642,22 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   assert.ok(css.includes('.wrap{max-width:1200px;margin:0 auto;padding:0 24px}'), 'the container is 1200px with 24px gutters');
   assert.ok(css.includes('calc((100vw - 1200px)/2 + 24px)'), 'the sticky header caps at the same 1200px container');
   for (const cls of ['.card', '.search-widget', '.result-card', '.pkg-card', '.fare-card', '.flight-option-card', '.step', '.voices-teaser']) {
-    assert.ok(new RegExp(`\\${cls}\\{[^}]*border-radius:16px`).test(css), `${cls} uses the 16px card radius`);
+    assert.ok(new RegExp(`\\${cls}\\{[^}]*border-radius:12px`).test(css), `${cls} uses the 12px card radius`);
   }
   assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:8px/.test(css), 'search fields use the 8px radius');
   assert.ok(/\.results-bar\{[^}]*border-radius:12px/.test(css), 'the results bar uses the 12px radius');
   // The stays top bar is gone (review round, Nov 17 2026 — gap 6:
   // sort, max price, tier and the sandbox facets all live in the
-  // sidebar now — one filter surface). The flights bar keeps the
-  // 16px radius on its own rule.
-  assert.ok(/\.flight-filter-bar\{[^}]*border-radius:16px/.test(css), 'the flights filter bar uses the 16px radius');
+  // sidebar now — one filter surface). The flights top bar is gone
+  // too (audit round, Nov 17 2026 — gap 8: the facets moved into
+  // the same left rail, the count row sits above the list).
+  assert.ok(!css.includes('.flight-filter-bar'), 'the flights filter bar is gone — its facets live in the rail');
+  assert.ok(css.includes('.results-count-row{display:flex'), 'the flight count row sits above the list');
   assert.ok(!css.includes('.stay-filter-bar'), 'the stays filter bar is gone — its filters live in the sidebar');
   for (const grid of ['.result-cards', '.pkg-grid', '.deals-grid', '.flight-card-grid', '.cat-tiles']) {
     assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:20px`).test(css), `${grid} breathes at a 20px gap`);
   }
-  assert.ok(css.includes('footer{border-top:1px solid var(--line);padding:48px 0 64px;color:var(--muted);font-size:13px;background:var(--surface)}'), 'the footer is a roomy surface band');
+  assert.ok(css.includes('footer{border-top:1px solid var(--line);padding:48px 0 32px;color:var(--muted);font-size:13px;background:var(--surface)}'), 'the footer is a surface-1 band with tightened bottom padding');
   assert.ok(css.includes("--font-display:'DM Sans'"), 'the display face is still DM Sans, not Expedia’s');
   assert.ok(css.includes("--font-body:'Inter'"), 'the body face is still Inter');
 });
@@ -685,13 +701,15 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(homeTabs.includes('homeTabIdFromQueryOrNull'), 'the null-returning tab parser exists');
   assert.ok(page.includes('initialLandingTab={homeTabIdFromQueryOrNull'), 'the homepage passes the landing tab separately');
   assert.ok(app.includes('initialLandingTab ?? null'), 'the shelf state starts from the landing tab, not the widget tab');
-  // 2 — distinct section grammars: photo destination cards, deal rows.
-  assert.ok(app.includes('dest-card--photo'), 'destination cards use the photo-led variant');
-  assert.ok(app.includes('dest-overlay'), 'the name + from-price overlay the photo');
-  assert.ok(deals.includes('            row'), 'the deals shelf renders the row layout');
-  assert.ok(css.includes('.dest-card--photo{'), 'the photo-card style exists');
-  assert.ok(css.includes('.pkg-card--row{'), 'the row-card style exists');
-  assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:1fr'), 'deals are one column of wide rows');
+  // 2 — distinct section grammars: photo destination cards, deals grid.
+  assert.ok(!app.includes('dest-card--photo'), 'destination cards no longer use the overlay variant');
+  assert.ok(!app.includes('dest-overlay'), 'the name + from-price no longer overlay the photo');
+  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the white body, below the photo');
+  assert.ok(!deals.includes('            row'), 'the deals shelf no longer renders the wide-row layout');
+  assert.ok(!css.includes('.dest-overlay'), 'the overlay style is gone');
+  assert.ok(css.includes('.card .body .result-price{font-size:22px'), 'the body price is the 22px price-card');
+  assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
+  assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:repeat(3,1fr)'), 'deals are a 3-column grid');
   // 3 — package cards hide the breakdown behind an expander.
   assert.ok(pkgs.includes('<details className="pkg-details">'), 'the includes + tiers sit behind a details');
   assert.ok(pkgs.includes("See what&apos;s included"), 'the expander is labeled');
@@ -732,4 +750,142 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(!strip.includes('live fares arrive as suppliers connect'), 'the strip never claims live fares are still coming');
   // 12 — the header nav is text-only.
   assert.ok(!header.includes('<Icon name={t.icon}'), 'no category icon in the header nav');
+});
+
+test('audit round Nov 17: results-only page, Expedia tokens, one flight-card format', () => {
+  const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  // 2 — a search hides the browse sections; My Trips stays, and
+  // "Clear search" brings the browse sections back.
+  assert.ok(app.includes('{!search && ('), 'the browse sections hide while a search is active');
+  assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
+  assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
+  assert.ok(results.includes('onClearSearch: () => void'), 'the clear callback is a declared prop');
+  // Tokens — Expedia radius scale: cards 12px, buttons pill,
+  // inputs 8px; no 16px radius remains.
+  assert.ok(!css.includes('border-radius:16px'), 'no 16px radius remains in the stylesheet');
+  assert.ok(css.includes('--brand:#00255d'), 'navy is the primary-action color');
+  assert.ok(css.includes('--ink:#191e3b'), 'ink is the blue-tinted near-black');
+  assert.ok(css.includes('--line:#dcdee5'), 'hairlines are the Expedia grey');
+  // Tokens — section headings 24px, sections 48px apart.
+  assert.ok(css.includes('section h2{font-size:24px'), 'section headings are 24px');
+  assert.ok(css.includes('.home-section{padding:48px 0}'), 'sections sit 48px apart');
+  // 4 + 5 + 6 — deals grid, package photos, section rhythm.
+  assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:repeat(3,1fr)'), 'deals are a 3-column grid, not empty rows');
+  assert.ok(css.includes('.pkg-photo{width:100%;aspect-ratio:4/3'), 'package photos are 4:3, not thin strips');
+  assert.ok(css.includes('.pkg-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto'), 'package actions pin to the card bottom');
+  assert.ok(css.includes('section{padding:48px 0}'), 'sections sit 48px apart, not 64px');
+  assert.ok(!css.includes('--r-lg:16px'), 'no 16px radius tier remains');
+  // 1 + 3 — one flight-card format, one price block, one action.
+  assert.ok(results.includes('TripPriceHeader'), 'one price block serves every trip card');
+  assert.ok(results.includes('DuffelOneWayCard'), 'one-way Duffel fares render as trip cards');
+  assert.ok(results.includes('Save this fare'), 'Duffel trip cards carry a save action');
+  assert.ok(results.includes("Saved ✓"), 'the save action confirms inline');
+  assert.ok(!results.includes('fare-total'), 'no highlighted cheapest banner below the flight list');
+  assert.ok(!results.includes('priceNote'), 'no per-card fee note remains');
+  assert.ok(css.includes('.flight-option-price strong{font-size:22px'), 'trip totals are 22px like Expedia prices');
+});
+
+test('audit round Nov 17: no two cards lead with the same photo', () => {
+  const lisbon = CITY_PHOTOS['Lisbon'];
+  const kyoto = GLOBAL_DESTINATIONS.find((d) => d.name === 'Kyoto')?.image;
+  const paris = GLOBAL_DESTINATIONS.find((d) => d.name === 'Paris')?.image;
+  // Routes that share a first stop lead with a different stop.
+  assert.equal(leadPhotoFor('Europe', ['Lisbon', 'Madrid', 'Barcelona', 'Paris', 'Rome', 'Athens']), paris);
+  assert.equal(leadPhotoFor('Portugal', ['Lisbon', 'Porto', 'Sintra']), lisbon);
+  assert.notEqual(leadPhotoFor('Europe', ['Lisbon', 'Paris', 'Rome']), leadPhotoFor('Portugal', ['Lisbon', 'Porto']));
+  assert.equal(leadPhotoFor('Japan', ['Tokyo', 'Kyoto', 'Osaka']), CITY_PHOTOS['Tokyo']);
+  assert.equal(leadPhotoFor('Central Europe', ['Prague', 'Vienna', 'Budapest']), CITY_PHOTOS['Vienna']);
+  assert.equal(leadPhotoFor('Southeast Asia', ['Bangkok', 'Siem Reap', 'Hanoi']), CITY_PHOTOS['Hanoi']);
+  assert.equal(leadPhotoFor('Thailand', ['Bangkok', 'Chiang Mai', 'Krabi']), CITY_PHOTOS['Bangkok']);
+  // Japan used to fall back to a blank tile: its first stop (Tokyo)
+  // had no photo. It now resolves, and it is not Kyoto's photo.
+  assert.notEqual(leadPhotoFor('Japan', ['Tokyo', 'Kyoto', 'Osaka']), kyoto);
+  assert.ok(destinationPhoto('Japan')?.includes('Tokyo_SkyTree'), 'the search photo for Japan is Tokyo, not Kyoto');
+  // One shared rule: packages, destination cards and search photos.
+  const pkgs = readFileSync(new URL('../lib/packages.ts', import.meta.url), 'utf8');
+  const voices = readFileSync(new URL('../components/HomeSections.tsx', import.meta.url), 'utf8');
+  assert.ok(pkgs.includes('leadPhotoFor(entry.destination'), 'package photos use the shared rule');
+  assert.ok(voices.includes("if (place === 'Japan') return CITY_PHOTOS['Tokyo']"), 'the Japan voice uses Tokyo, not Kyoto');
+});
+
+test('audit round Nov 17: one primary pill + one text link per card', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const pkgs = readFileSync(new URL('../components/PackagesSection.tsx', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  const share = readFileSync(new URL('../components/ShareMenu.tsx', import.meta.url), 'utf8');
+  // Type scale 24/18/16/14: section heads 24, card titles 18/600,
+  // card body 16, captions 13–14.
+  assert.ok(css.includes('section h2{font-size:24px'), 'section heads are 24px');
+  assert.ok(css.includes('.card .body h3{font-size:18px;font-weight:600;margin:0 0 4px}'), 'card titles are 18px/600');
+  assert.ok(css.includes('.pkg-body h3{margin:10px 0 2px;font-size:18px;font-weight:600}'), 'package titles are 18px/600');
+  assert.ok(css.includes('.card .body p{font-size:16px'), 'card body text is 16px');
+  assert.ok(css.includes('.pkg-price{font-family:var(--font-display);font-size:22px;font-weight:700'), 'package prices are the 22px price-card');
+  // Pills are auto-width, never a full-width peach bar: a
+  // flex-column body stretches its children, so the pill pins
+  // itself to the start.
+  assert.ok(css.includes('.card .body .pill,.pkg-body .pill{align-self:flex-start}'), 'tag pills are auto-width in flex-column bodies');
+  assert.ok(css.includes('.card-top{display:flex'), 'cards have a top row for tag + share');
+  // Package cards: one primary pill + one text link in the action
+  // row; share lives in the top row as a text link.
+  assert.ok(pkgs.includes('className="card-top"'), 'package cards have the top row');
+  assert.ok(pkgs.includes('buttonClassName="linklike"'), 'package share is a text link');
+  assert.ok(pkgs.includes('<button type="button" className="linklike" onClick={onView}>'), 'View package is a text link, not a second button');
+  assert.ok(!pkgs.includes('<button type="button" className="ghost" onClick={onView}>'), 'no ghost View package button remains');
+  // Destination cards: same shape — top row + primary + guide link.
+  assert.ok(app.includes('className="card-top"'), 'destination cards have the top row');
+  assert.ok(app.includes('buttonClassName="linklike"'), 'destination share is a text link');
+  // ShareMenu takes the trigger style from its caller.
+  assert.ok(share.includes('buttonClassName'), 'ShareMenu accepts a trigger style');
+  assert.ok(share.includes("buttonClassName = 'ghost'"), 'reels and plans keep the ghost share button');
+});
+
+test('audit round Nov 17: destination price below the photo, fares as a grid', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const strip = readFileSync(new URL('../components/FaresStrip.tsx', import.meta.url), 'utf8');
+  // Photos are 4:3 everywhere a card shows one — the 180px strips
+  // cropped every photo the same way.
+  assert.ok(css.includes('.card img{width:100%;aspect-ratio:4/3'), 'card photos are 4:3');
+  assert.ok(css.includes('.photocarousel img{width:100%;aspect-ratio:4/3'), 'carousel photos are 4:3');
+  assert.ok(css.includes('.card .img-fallback{aspect-ratio:4/3'), 'photo fallbacks are 4:3');
+  // Fares: a 4-column grid of compact cards with one loud price,
+  // short labels — the scroller clipped the last chip.
+  assert.ok(css.includes('.fares-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}'), 'the fares strip is a 4-column grid');
+  assert.ok(!css.includes('scroll-snap-type:x mandatory'), 'no horizontal scroller remains');
+  assert.ok(css.includes('.fare-chip-price{font-family:var(--font-body'), 'the chip price carries the loud price style');
+  assert.ok(css.includes('font-size:22px;font-weight:700'), 'the chip price is 22px/700');
+  // The honesty copy is pinned: planning estimates, live fares named.
+  assert.ok(strip.includes('Planning estimates, not live quotes'), 'the strip still says planning estimates');
+  assert.ok(strip.includes('Live fares from Ignav and LetsFG appear in flight results.'), 'the strip still names the live sources');
+});
+
+test('audit round Nov 17: live-fares loading is a styled state, not a bare line', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  assert.ok(css.includes('.results-loading{display:flex'), 'the loading state is a styled row');
+  assert.ok(css.includes('.results-loading::after'), 'the loading state carries a shimmer bar');
+  assert.ok(results.includes('<p className="results-loading">Checking live fares…</p>'), 'the Duffel loading line is styled');
+  assert.ok(results.includes('<p className="results-loading">Checking live fares from Ignav…</p>'), 'the Ignav loading line is styled');
+  assert.ok(results.includes('<p className="results-loading">Checking live fares from LetsFG…</p>'), 'the LetsFG loading line is styled');
+  assert.ok(!results.includes("&& <p>Checking live fares"), 'no bare loading line remains');
+});
+
+test('audit round Nov 17: the footer is one 4-column grid, no link farm, no repeated trust strip', () => {
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
+  // The 4-column grid stays (Book / Company / Help / Account).
+  assert.ok(css.includes('.footer-cols{display:grid;grid-template-columns:repeat(4,1fr)'), 'the footer keeps its 4-column grid');
+  assert.ok(css.includes('footer{border-top:1px solid var(--line);padding:48px 0 32px'), 'the footer is a surface-1 band');
+  // The hub is one link per destination — the 42 repeated category
+  // links are gone (the Book column already links the 7 categories).
+  assert.ok(app.includes('aria-label="Top destinations"'), 'the hub lists top destinations');
+  assert.ok(!app.includes('aria-label="Top destinations by category"'), 'the per-category hub is gone');
+  assert.ok(!app.includes('/?tab=${t.id}&plan='), 'no destination × category link farm remains');
+  assert.ok(css.includes('.footer-hub{display:flex;flex-wrap:wrap'), 'the hub is one row of links');
+  assert.ok(!css.includes('.footer-hub-dest ul'), 'the hub list style is gone');
+  // The trust strip appears once, under the results — never again
+  // in the footer.
+  assert.equal((app.match(/trustStrip\(/g) || []).length, 1, 'the trust strip renders exactly once');
+  assert.ok(!app.includes("trustStrip('Why book with FujinTrip — footer')"), 'no repeated trust strip in the footer');
 });

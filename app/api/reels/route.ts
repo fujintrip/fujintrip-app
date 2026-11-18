@@ -53,7 +53,6 @@ export async function GET(req: NextRequest) {
     posts: page.posts.map(publicPost),
     nextCursor: page.nextCursor,
     total: page.total,
-    storage: 'Posts are stored on this server. Media storage (Spaces) is connected when SPACES_KEY is set — otherwise uploads stay on this server.',
   });
 }
 

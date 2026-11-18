@@ -6,7 +6,7 @@
 // cities. A place the app does not know never appears as a suggestion;
 // a typed place it does not know is handled honestly by the results
 // (empty state / no live fare), never invented.
-import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from './data';
+import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, leadPhotoFor } from './data';
 import { discoveryDestinations, routeLineFor } from './discovery';
 import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
@@ -41,20 +41,8 @@ export function isKnownPlace(place: string): boolean {
 // photos, else the per-city photos). Null when no photo exists on
 // file — the card then renders without a photo, never a placeholder.
 export function destinationPhoto(destination: string): string | null {
-  const byName = new Map<string, string>([
-    ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
-    ...HIDDEN_GEMS.map((d) => [d.name, d.image] as const),
-    ...Object.entries(CITY_PHOTOS),
-  ]);
-  const own = byName.get(destination);
-  if (own) return own;
   const entry = discoveryDestinations().find((e) => e.destination === destination);
-  if (!entry) return null;
-  for (const s of entry.stops) {
-    const p = byName.get(s.city);
-    if (p) return p;
-  }
-  return null;
+  return leadPhotoFor(destination, entry?.stops.map((s) => s.city) ?? []);
 }
 
 // Does this destination's route include the place the traveler

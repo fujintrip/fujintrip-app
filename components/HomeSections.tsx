@@ -120,16 +120,15 @@ export function HowItWorksSection() {
   );
 }
 
-// Photo per place (review round, Nov 17 2026 — gap 8): from the
-// existing verified pool — Kyoto's own photo, Prague for Central
-// Europe (its first stop), Kyoto again for Japan (a Japan photo).
+// Photo per place (review round, Nov 17 2026 — gap 8; audit round,
+// Nov 17 2026): from the verified pool — Prague for Central Europe
+// (its first stop; the route card now leads with Vienna), Tokyo for
+// Japan (Kyoto keeps its own card and voice), Kyoto's own photo for
+// Kyoto.
 function voicePhoto(place: string): string | null {
   if (place === 'Central Europe') return CITY_PHOTOS['Prague'] ?? null;
-  return (
-    GLOBAL_DESTINATIONS.find((d) => d.name === place)?.image ??
-    GLOBAL_DESTINATIONS.find((d) => d.name === 'Kyoto')?.image ??
-    null
-  );
+  if (place === 'Japan') return CITY_PHOTOS['Tokyo'] ?? null;
+  return GLOBAL_DESTINATIONS.find((d) => d.name === place)?.image ?? null;
 }
 
 export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) => void }) {

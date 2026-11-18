@@ -3,6 +3,7 @@
 // the global destinations — never invented.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { heroSuggestions, seedForDestination } from '../lib/heroSearch.ts';
 import { discoveryDestinations } from '../lib/discovery.ts';
 import { GLOBAL_DESTINATIONS } from '../lib/data.ts';
@@ -83,4 +84,29 @@ test('seedForDestination: an unknown name seeds as a bare destination', () => {
     destination: 'Nowhereville',
     cities: ['Nowhereville'],
   });
+});
+
+test('audit round Nov 17: date fields never garble, search button sits in the grid', () => {
+  const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const field = readFileSync(new URL('../components/PlaceField.tsx', import.meta.url), 'utf8');
+  // No controlled native date/time input remains: a controlled one
+  // reports '' mid-typing and React writing '' back clears the
+  // in-progress segments ("mm/12/222026").
+  assert.ok(!widget.includes('<input type="date"'), 'no controlled date input remains in the widget');
+  assert.ok(!widget.includes('<input type="time"'), 'no controlled time input remains in the widget');
+  assert.ok(widget.includes('function DateField({'), 'date/time fields go through DateField');
+  assert.ok(widget.includes('defaultValue={value}'), 'DateField is uncontrolled');
+  assert.ok(widget.includes('if (el && el.value !== value) el.value = value;'), 'external changes sync through the ref');
+  assert.ok(widget.includes('<DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />'), 'the Return field uses DateField');
+  // The search button is the last cell of the fields grid, level
+  // with the inputs — not a lone button below a half-empty row.
+  assert.ok(widget.includes('<button type="submit" className="primary sw-search">'), 'the search button exists');
+  const gridClose = widget.indexOf('</div>\n      </form>');
+  const buttonAt = widget.indexOf('<button type="submit" className="primary sw-search">');
+  assert.ok(buttonAt > 0 && buttonAt < gridClose, 'the search button sits inside the fields grid');
+  assert.ok(css.includes('.sw-fields .sw-search{margin-top:0;align-self:end;min-height:48px;width:100%}'), 'the grid button aligns with the inputs');
+  // The type-ahead opens its listbox as soon as a fetch starts, so
+  // a slow source shows "Searching…" instead of looking dead.
+  assert.ok(field.includes('setOpen(true);\n    timerRef.current = setTimeout'), 'the listbox opens when the fetch starts');
 });

@@ -123,7 +123,12 @@ export function suggestionMeta(s: PlaceSuggestion): string {
 // Fetch suggestions for a typed prefix from /api/places. Any failure
 // (network, bad JSON, server error) is an honest empty list — the field
 // stays usable as a plain input and the known-list fallback already ran
-// server-side.
+// server-side. Two guards (audit round, Nov 17, 2026 — gap 12): the
+// fetch times out after 8s instead of hanging the listbox forever,
+// and an empty result is NEVER cached — a transient failure used to
+// poison the cache, so re-typing the same place kept returning
+// nothing while other places worked.
+const CLIENT_FETCH_TIMEOUT_MS = 8000;
 export async function fetchPlaceSuggestions(
   query: string,
   fetchImpl: typeof fetch = globalThis.fetch
@@ -134,8 +139,10 @@ export async function fetchPlaceSuggestions(
   const hit = clientCache.get(key);
   if (hit) return hit;
   let places: PlaceSuggestion[] = [];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetchImpl(`/api/places?q=${encodeURIComponent(q)}`);
+    const res = await fetchImpl(`/api/places?q=${encodeURIComponent(q)}`, { signal: controller.signal });
     if (res.ok) {
       const data: unknown = await res.json();
       if (data && typeof data === 'object' && Array.isArray((data as { places?: unknown }).places)) {
@@ -146,12 +153,16 @@ export async function fetchPlaceSuggestions(
     }
   } catch {
     places = [];
+  } finally {
+    clearTimeout(timeout);
   }
-  if (clientCache.size >= CLIENT_CACHE_MAX) {
-    const oldest = clientCache.keys().next().value;
-    if (oldest !== undefined) clientCache.delete(oldest);
+  if (places.length > 0) {
+    if (clientCache.size >= CLIENT_CACHE_MAX) {
+      const oldest = clientCache.keys().next().value;
+      if (oldest !== undefined) clientCache.delete(oldest);
+    }
+    clientCache.set(key, places);
   }
-  clientCache.set(key, places);
   return places;
 }
 
@@ -351,6 +362,10 @@ export async function searchPlaces(
           : { places: [], source: 'none', reason: 'no-matches' };
     }
   }
-  cache.set(key, { at: Date.now(), result });
+  // Only a non-empty answer is cached (audit round, Nov 17, 2026 —
+  // gap 12): a transient failure of both live sources used to cache
+  // the empty list for 10 minutes, so the place stayed unfindable
+  // after the sources recovered.
+  if (result.places.length > 0) cache.set(key, { at: Date.now(), result });
   return result;
 }

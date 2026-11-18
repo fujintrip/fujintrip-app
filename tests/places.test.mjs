@@ -5,6 +5,7 @@
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/places.test.mjs
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   __clearPlacesCache,
   __clearPlaceSuggestionCache,
@@ -278,4 +279,49 @@ test('autocompleteKeyDown: arrows cycle, Enter selects, Escape closes, other key
   assert.equal(other.selected, null);
   const empty = autocompleteKeyDown(closed, 'ArrowDown', 0);
   assert.deepEqual(empty.state, closed, 'no suggestions, no highlight');
+});
+
+test('searchPlaces: an empty result is never cached — the next try re-fetches', async () => {
+  // Audit round (Nov 17, 2026 — gap 12): both live sources failing
+  // once used to cache the empty list for 10 minutes, so the place
+  // stayed unfindable after the sources recovered.
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    calls += 1;
+    if (calls <= 2) throw new Error('transient outage');
+    if (String(url).includes('autocomplete.travelpayouts.com')) return { ok: true, json: async () => cannedTravelpayouts };
+    return { ok: true, json: async () => [] };
+  };
+  const first = await searchPlaces('Zzzqxwv', fetchImpl);
+  assert.deepEqual(first.places, [], 'first try finds nothing anywhere');
+  assert.equal(first.reason, 'no-matches');
+  const second = await searchPlaces('Zzzqxwv', fetchImpl);
+  assert.equal(second.source, 'travelpayouts', 'the second try re-fetches instead of serving the cached empty list');
+  assert.ok(second.places.some((p) => p.name === 'London'), 'the recovered source answers');
+  assert.ok(calls > 2, 'the second query actually called upstream');
+});
+
+test('fetchPlaceSuggestions: an empty result is never cached client-side', async () => {
+  // Same defect, client side: a failed fetch cached [] for the
+  // session, so re-typing the place kept returning nothing while
+  // other places worked.
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('network down');
+    return { ok: true, json: async () => ({ places: [{ name: 'New York', value: 'New York', kind: 'city', country: 'United States', iata: 'NYC' }] }) };
+  };
+  const first = await fetchPlaceSuggestions('New York', fetchImpl);
+  assert.deepEqual(first, [], 'the failed fetch is an honest empty list');
+  const second = await fetchPlaceSuggestions('New York', fetchImpl);
+  assert.equal(second.length, 1, 're-typing re-fetches instead of serving the cached empty list');
+  assert.equal(second[0].name, 'New York');
+  assert.equal(calls, 2, 'the second query actually called /api/places');
+});
+
+test('fetchPlaceSuggestions: a hung request times out instead of hanging the listbox', () => {
+  const src = readFileSync(new URL('../lib/places.ts', import.meta.url), 'utf8');
+  assert.ok(src.includes('CLIENT_FETCH_TIMEOUT_MS = 8000'), 'the client fetch times out after 8s');
+  assert.ok(src.includes('signal: controller.signal'), 'the timeout aborts the request');
+  assert.ok(src.includes('if (places.length > 0) {'), 'only non-empty results reach the client cache');
 });

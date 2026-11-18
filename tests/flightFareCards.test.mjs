@@ -286,8 +286,8 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   assert.ok(src.includes('offer.bags &&'), 'baggage shows only when Duffel provides it');
   assert.ok(src.includes('{s.aircraft &&'), 'aircraft shows only when Duffel provides it');
   assert.ok(src.includes('{singleFlight &&'), 'the flight number shows on a single-segment card');
-  assert.ok(src.includes('serviceFee(cheapestOutBackTotal(out, back))'), 'the round-trip total carries the fee line');
-  assert.ok(src.includes('serviceFee(cheapestOneWayTotal(out))'), 'the one-way total carries the fee line');
+  assert.ok(src.includes('serviceFee(total)'), 'the pair total carries the fee on the card itself');
+  assert.ok(src.includes('serviceFee(offer.price)'), 'the one-way total carries the fee on the card itself');
   assert.ok(src.includes('serviceFee(cheapestMultiCityTotal(legLists))'), 'the multi-city total carries the fee line');
   assert.ok(src.includes('travelers={query.travelers}'), 'the card knows the party size');
   assert.ok(src.includes('cabin={query.cabin}'), 'the card shows the searched cabin');
@@ -313,7 +313,7 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
 
 test('fare cards: the time row wraps as a unit — no overlap at desktop width', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  assert.ok(css.includes('.fare-card{border:1px solid var(--line);border-radius:16px'), 'the card is a 16px-rounded card, not a bare row');
+  assert.ok(css.includes('.fare-card{border:1px solid var(--line);border-radius:12px'), 'the card is a 12px-rounded card, not a bare row');
   assert.ok(css.includes('.fare-card-price strong{display:block;font-size:22px'), 'the total is the largest type on the card');
   assert.ok(css.includes('.fare-card-toggle{'), 'the details toggle is styled');
   assert.ok(css.includes('min-height:44px'), 'the toggle is a 44px touch target');
@@ -346,4 +346,23 @@ test('icons: the fare card details use the shared Lucide set', () => {
   const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   assert.ok(src.includes('<Icon name="luggage"'), 'baggage carries the luggage icon');
   assert.ok(src.includes('<Icon name="chevronDown"'), 'the details toggle carries the chevron icon');
+});
+
+test('audit round Nov 17: every flight card has one primary pill + one text link', () => {
+  const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  // Duffel cards already had Save; Ignav and LetsFG cards only
+  // offered booking, so the cheapest live fare could not be picked.
+  // Every trip card now carries the same two actions: one primary
+  // pill (Save this fare) + one text link (See booking options).
+  for (const group of ['IgnavItineraryGroup', 'LetsfgItineraryGroup']) {
+    assert.ok(src.includes(`function ${group}({`), `${group} exists`);
+    assert.ok(src.includes('onSaveFare: (fareLabel: string) => void'), `${group} takes the save action`);
+  }
+  assert.equal((src.match(/\{saved \? 'Saved ✓' : 'Save this fare'\}/g) || []).length, 4, 'Duffel pair + one-way + Ignav + LetsFG all offer Save this fare');
+  assert.ok(src.includes('onSaveFare={onSaveFare}'), 'the merged grid passes Save to every group');
+  // Ignav's booking lookup is the text link now, not a second
+  // primary pill; LetsFG's link-out already was one.
+  assert.ok(src.includes('<button type="button" className="linklike" onClick={load}>'), 'See booking options is a text link');
+  assert.ok(src.includes('See booking options on LetsFG'), 'the LetsFG link-out is still on the card');
+  assert.ok(!src.includes('<button type="button" className="primary" onClick={load}>'), 'no primary booking-lookup button remains');
 });

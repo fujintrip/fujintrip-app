@@ -3,9 +3,10 @@
 // never a marked-up price or a discount that does not exist. The
 // ranking is the planner's own data (cheapestPackages), so the shelf
 // changes only when the planner's prices change. Same card as the
-// packages shelf, in the horizontal row layout (review round, Nov 17
-// 2026 — gap 2: deals read as rows, not another card grid), same
-// actions: "Save this search" first, "View package" second, never "Book now".
+// packages shelf, in the 3-column grid (audit round, Nov 17 2026:
+// the wide rows read as empty white — Expedia shows deals as a
+// 3-column grid), same actions: "Save this search" first, "View
+// package" second, never "Book now".
 'use client';
 import { cheapestPackages, type LivePackageFare, type Package } from '../lib/packages';
 import { PackageCard } from './PackagesSection';
@@ -33,7 +34,6 @@ export default function DealsSection({
           <PackageCard
             key={pkg.id}
             pkg={pkg}
-            row
             liveFares={liveFares}
             onView={() => onViewPackage(pkg.destination)}
             onSave={() => onSavePackage(pkg)}

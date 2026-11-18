@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mergeFlightOptions, ignavItineraryDuration } from '../lib/flightOptions.ts';
+import { countFlightCards, mergeFlightOptions, ignavItineraryDuration } from '../lib/flightOptions.ts';
 
 const offer = (airline, stops, departMinutes, durationMinutes, price) => ({
   airline,
@@ -178,24 +178,29 @@ test('ignavItineraryDuration: the sum of its legs, Infinity when a leg has none'
   );
 });
 
-test('flight results: full-screen card grid, top filter bar, merged list, tags kept', () => {
+test('flight results: left-rail filters, card grid, merged list, tags kept', () => {
   const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  // Full screen: the flight page breaks out of the capped .wrap.
-  assert.ok(src.includes('results-section--flights'), 'the flight section breaks out of the narrow container');
-  assert.ok(css.includes('.results-section--flights{margin-left:calc(-50vw + 50%)'), 'the breakout spans the viewport');
+  // Audit round (Nov 17, 2026): flights use the same 230px left
+  // rail + results column as every other tab — the full-width
+  // breakout and the top filter bar are gone.
+  assert.ok(!src.includes('results-section--flights'), 'flights no longer break out of the narrow container');
+  assert.ok(!css.includes('.results-section--flights'), 'the breakout rule is gone');
+  assert.ok(!src.includes('flight-filter-bar'), 'the top filter bar is gone');
+  assert.ok(src.includes('results-layout'), 'flights use the shared rail layout');
+  assert.ok(src.includes('results-filters'), 'the facets sit in the left rail');
+  assert.ok(css.includes('.results-count-row{display:flex'), 'the count row sits above the list');
   // Cards: one responsive grid, each option a complete trip card.
   assert.ok(src.includes('flight-card-grid'), 'results render as a card grid');
   assert.ok(src.includes('DuffelPairCard'), 'a Duffel round-trip is one pair card');
   assert.ok(css.includes('.flight-card-grid{display:grid'), 'the grid is a responsive grid');
-  // Filter bar on top, no left sidebar for flights.
-  assert.ok(src.includes('flight-filter-bar'), 'the filters sit in a top bar');
-  assert.ok(src.includes('Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options'), 'the bar counts the merged cards');
+  // Count row above the list, not in a bar.
+  assert.ok(src.includes('Showing ${liveOptions.shownOptions} of ${liveOptions.totalOptions} options'), 'the count row counts the merged cards');
   assert.ok(
     src.includes('Showing ${liveOptions.shownCount} of ${liveOptions.totalCount} live fares'),
     'multi-city falls back to fare counts, having no merged grid'
   );
-  assert.ok(src.includes('clearAllFlightFilters'), 'the bar clears every filter');
+  assert.ok(src.includes('clearAllFlightFilters'), 'the rail clear resets every filter');
   // Mixed sources: one merge, sorted by the active sort.
   assert.ok(src.includes('mergeFlightOptions({'), 'Duffel pairs and Ignav trips merge into one list');
   assert.ok(!src.includes('Outbound — {fares.data.departDate}'), 'no separate outbound list heading anymore');
@@ -289,4 +294,45 @@ test('merge: callers without LetsFG trips get the Duffel + Ignav list unchanged'
   const merged = mergeFlightOptions({ tripType: 'roundtrip', out, back, ignavItineraries: ignavTrips, sort: 'cheapest' });
   assert.ok(merged.every((o) => o.kind !== 'letsfg'), 'no LetsFG option appears unasked');
   assert.equal(merged.length, 6, '3 Duffel pairs + 3 Ignav trips, as before');
+});
+
+test('countFlightCards: facet counts count cards, not legs', () => {
+  // Audit round (Nov 17, 2026): the live audit read "Under $1,000
+  // (23)" next to 6 cards, because the counts counted legs — a
+  // round-trip pair is two legs. These 4 cards are 6 legs; every
+  // count must come back as cards.
+  const out = [
+    offer('American', 0, 650, 478, 200),
+    offer('Iberia', 0, 650, 478, 220),
+  ];
+  const back = [
+    offer('American', 0, 1100, 478, 229),
+    offer('Iberia', 0, 1100, 478, 220),
+  ];
+  const merged = mergeFlightOptions({
+    tripType: 'roundtrip',
+    out,
+    back,
+    ignavItineraries: [
+      itinerary(698, [offer('American', 1, 650, 600, 698)]),
+      itinerary(754, [offer('Delta', 0, 480, 500, 754)]),
+    ],
+    sort: 'best',
+  });
+  assert.equal(merged.length, 4, '2 Duffel pairs + 2 Ignav trips');
+  const counts = countFlightCards(merged, 2);
+  // Stops: the 2 nonstop pairs + the nonstop Delta trip = 3 cards.
+  // Legs would say 5 (each pair is two nonstop legs).
+  assert.equal(counts.stops[0], 3, 'nonstop counts cards, not legs');
+  assert.equal(counts.stops[1], 1, 'the 1-stop Ignav trip is one card');
+  // Airlines: each card counts once per carrier on it.
+  assert.equal(counts.airlines['American'], 2, 'one pair + one Ignav trip');
+  assert.equal(counts.airlines['Iberia'], 1, 'one pair');
+  assert.equal(counts.airlines['Delta'], 1, 'one trip');
+  // Times: every card departs in the morning (outbound departure).
+  assert.equal(counts.times['morning'], 4, 'all four cards leave in the morning');
+  // Prices: trip totals per traveler ($214.50, $220, $349, $377) —
+  // all under the $1,000 band as cards, not as 6 leg prices.
+  assert.equal(counts.prices[1000], 4, 'every card is under $1,000 per traveler');
+  assert.equal(counts.prices[2000], 4, 'every card is under $2,000 per traveler');
 });

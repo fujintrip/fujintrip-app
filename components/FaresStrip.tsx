@@ -1,5 +1,7 @@
 // Cheapest-fares strip (homepage restructure, Nov 15, 2026): the
-// lowest prices across the routes, as a horizontal strip. Honest by
+// lowest prices across the routes, as a 4-column grid (audit round,
+// Nov 17, 2026 — gap 10: the horizontal scroller clipped the last
+// chip and crammed route + price + label onto one line). Honest by
 // construction — every chip is the planner's Best value per-traveler
 // total, labeled "planning estimate" (Ignav and LetsFG are live for
 // flights, and their fares appear in the flight results — this strip

@@ -55,6 +55,45 @@ function Field({ label, icon, children }: { label: string; icon?: IconName; chil
   );
 }
 
+// A date/time input that never garbles while typing (audit round,
+// Nov 17, 2026 — gap 12): a CONTROLLED native date input reports ''
+// while the traveler is mid-typing an incomplete date, and React
+// writing '' back clears the in-progress segments — typing 12/22/2026
+// into Return produced "mm/12/222026". This input is uncontrolled:
+// the browser keeps its editing state, the parent is told the value
+// on every change ('' while incomplete, the full YYYY-MM-DD once
+// complete), and external changes (prefill, clear, trip-type switch)
+// sync in through the ref — never a remount, never a stolen focus.
+function DateField({
+  type = 'date',
+  min,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  type?: 'date' | 'time';
+  min?: string;
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && el.value !== value) el.value = value;
+  }, [value]);
+  return (
+    <input
+      ref={ref}
+      type={type}
+      min={type === 'date' ? min : undefined}
+      defaultValue={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 // The trip-type segmented control (Nov 15, 2026): One-way /
 // Round-trip / Multi-city as a pill radiogroup — the traveler sees
 // all three options up front, the selected one filled in the accent,
@@ -574,10 +613,10 @@ export default function SearchWidget({
                 <PlaceField id="hotels-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where are you staying?" />
               </Field>
               <Field label="Check-in" icon="calendar">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Check-in date" />
+                <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Check-in date" />
               </Field>
               <Field label="Check-out" icon="calendar">
-                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Check-out date" />
+                <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Check-out date" />
               </Field>
               <Field label="Guests" icon="users">
                 <Stepper value={guests} min={1} max={9} onChange={setGuests} singular="guest" plural="guests" />
@@ -615,7 +654,7 @@ export default function SearchWidget({
                           <PlaceField id={`flights-leg${i + 1}-to`} label={`Leg ${i + 1} flying to`} value={leg.to} onChange={(v) => updateLeg(i, { to: v })} placeholder="Destination" />
                         </Field>
                         <Field label="Date" icon="calendar">
-                          <input type="date" min={today || undefined} value={leg.depart} onChange={(e) => updateLeg(i, { depart: e.target.value })} aria-label={`Leg ${i + 1} date`} />
+                          <DateField min={today || undefined} value={leg.depart} onChange={(v) => updateLeg(i, { depart: v })} ariaLabel={`Leg ${i + 1} date`} />
                         </Field>
                       </div>
                     </div>
@@ -639,11 +678,11 @@ export default function SearchWidget({
                     <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
                   </Field>
                   <Field label="Depart" icon="calendar">
-                    <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
+                    <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Departure date" />
                   </Field>
                   {tripType === 'roundtrip' && (
                     <Field label="Return" icon="calendar">
-                      <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
+                      <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />
                     </Field>
                   )}
                 </>
@@ -666,16 +705,16 @@ export default function SearchWidget({
                 <PlaceField id="cars-pickup" label="Pick-up location" value={place} onChange={setPlace} placeholder="City or airport" />
               </Field>
               <Field label="Pick-up date" icon="calendar">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Pick-up date" />
+                <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Pick-up date" />
               </Field>
               <Field label="Pick-up time" icon="clock">
-                <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} aria-label="Pick-up time" />
+                <DateField type="time" value={pickupTime} onChange={setPickupTime} ariaLabel="Pick-up time" />
               </Field>
               <Field label="Drop-off date" icon="calendar">
-                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Drop-off date" />
+                <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Drop-off date" />
               </Field>
               <Field label="Drop-off time" icon="clock">
-                <input type="time" value={dropoffTime} onChange={(e) => setDropoffTime(e.target.value)} aria-label="Drop-off time" />
+                <DateField type="time" value={dropoffTime} onChange={setDropoffTime} ariaLabel="Drop-off time" />
               </Field>
               <label className="sw-check">
                 <input type="checkbox" checked={sameLocation} onChange={(e) => setSameLocation(e.target.checked)} />
@@ -695,10 +734,10 @@ export default function SearchWidget({
                 <PlaceField id="tours-dest" label="Destination" value={place} onChange={setPlace} placeholder="Where to?" />
               </Field>
               <Field label="Start date" icon="calendar">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Start date" />
+                <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Start date" />
               </Field>
               <Field label="End date" icon="calendar">
-                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="End date" />
+                <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="End date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>
@@ -730,10 +769,10 @@ export default function SearchWidget({
                 <PlaceField id="buses-to" label="Traveling to" value={place} onChange={setPlace} placeholder="Destination city" />
               </Field>
               <Field label="Departure date" icon="calendar">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Departure date" />
+                <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Departure date" />
               </Field>
               <Field label="Return date" icon="calendar">
-                <input type="date" min={today || undefined} value={ret} onChange={(e) => setRet(e.target.value)} aria-label="Return date" />
+                <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
             </>
@@ -747,21 +786,25 @@ export default function SearchWidget({
                 <PlaceField id="taxis-dropoff" label="Drop-off" value={dropoff} onChange={setDropoff} placeholder="Drop-off place" />
               </Field>
               <Field label="Date" icon="calendar">
-                <input type="date" min={today || undefined} value={depart} onChange={(e) => setDepart(e.target.value)} aria-label="Date" />
+                <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Date" />
               </Field>
               <Field label="Time" icon="clock">
-                <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} aria-label="Time" />
+                <DateField type="time" value={pickupTime} onChange={setPickupTime} ariaLabel="Time" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Passengers" />
             </>
           )}
+          {/* The search button is the last grid cell (audit round, Nov
+              17, 2026 — gap 12): it used to sit below the grid,
+              left-aligned, with the second row half empty. Expedia's
+              search bar terminates in its search button the same way. */}
+          <button type="submit" className="primary sw-search">
+            <span className="sw-search-icon" aria-hidden="true">
+              <Icon name="search" size={20} />
+            </span>
+            {searchButtonLabel(tab)}
+          </button>
         </div>
-        <button type="submit" className="primary sw-search">
-          <span className="sw-search-icon" aria-hidden="true">
-            <Icon name="search" size={20} />
-          </span>
-          {searchButtonLabel(tab)}
-        </button>
       </form>
       {note && (
         <p className="sw-note" role="status">

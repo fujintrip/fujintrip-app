@@ -14,7 +14,7 @@
 
 import { buildPlan } from './planner';
 import { discoveryDestinations, type DiscoveryEntry } from './discovery';
-import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from './data';
+import { leadPhotoFor } from './data';
 
 export type PackageTier = { name: 'Cheapest' | 'Best value' | 'Premium'; perTraveler: number };
 
@@ -37,17 +37,13 @@ export type Package = {
 
 export const PACKAGE_ESTIMATE_LABEL = 'planning estimate';
 
-// The photo for a trip: the first stop's city photo, else the
+// The photo for a trip: one shared rule (lib/data.ts leadPhotoFor)
+// — the route override, then the first stop with a photo, then the
 // destination's own photo, else null (the card renders a labeled
-// fallback, never a broken image). Same map the destination cards
-// use, so a package and its destination card never disagree.
+// fallback, never a broken image). A package and its destination
+// card never disagree.
 function photoFor(entry: DiscoveryEntry): string | null {
-  const byName = new Map<string, string>([
-    ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
-    ...HIDDEN_GEMS.map((d) => [d.name, d.image] as const),
-    ...Object.entries(CITY_PHOTOS),
-  ]);
-  return byName.get(entry.stops[0]?.city ?? '') ?? byName.get(entry.destination) ?? null;
+  return leadPhotoFor(entry.destination, entry.stops.map((s) => s.city));
 }
 
 export function packageFor(destination: string): Package | null {

@@ -18,9 +18,11 @@
 // or departure sorts last, price breaking the tie — nothing is
 // dropped for lacking a time.
 import type { DuffelFareOffer } from './duffel';
+import { perTravelerPrice, timeBucketFor } from './duffel';
 import type { IgnavItinerary } from './ignav';
-import { letsfgItineraryDuration, type LetsfgItinerary } from './letsfg';
-import type { RowSort } from './searchPlaces';
+import { ignavItineraryStops } from './ignav';
+import { letsfgItineraryDuration, letsfgItineraryStops, type LetsfgItinerary } from './letsfg';
+import { LIVE_PRICE_BANDS, type LiveFilterOptions, type RowSort } from './searchPlaces';
 
 export type FlightOption =
   | {
@@ -141,4 +143,47 @@ export function mergeFlightOptions(args: {
   // 'cheapest' and 'best' both order live fares by trip total — the
   // planner's best-value order applies to estimate rows, not fares.
   return options.sort((a, b) => byTotal(a, b) || byDuration(a, b) || byDeparture(a, b));
+}
+
+// Facet counts for the merged card grid (audit round, Nov 17, 2026):
+// the counts count CARDS, not legs. The old leg-based counts read
+// "Under $1,000 (23)" next to 6 cards, because a round-trip pair is
+// two legs and every itinerary is one or two legs — the counts came
+// from another dataset than the list on screen. The caller passes
+// the FILTERED merge, so the counts match what is actually shown:
+// "Nonstop (3)" means 3 of the visible cards are nonstop.
+//   stops — a Duffel pair counts under the most stops on either leg
+//     (the pair survives only when both legs match the filter, so
+//     the worst leg is the honest value); an Ignav/LetsFG trip uses
+//     the outbound-first rule, the same as its filter.
+//   airlines — every airline on the card, so a mixed-airline trip
+//     counts for each carrier it includes.
+//   time — the outbound departure bucket, the same as the filter.
+//   price — the trip total per traveler against each band.
+export function countFlightCards(options: FlightOption[], travelers: number): LiveFilterOptions['counts'] {
+  const counts: LiveFilterOptions['counts'] = { airlines: {}, stops: {}, times: {}, prices: {} };
+  for (const band of LIVE_PRICE_BANDS) counts.prices[band] = 0;
+  for (const opt of options) {
+    const stops =
+      opt.kind === 'duffel-pair'
+        ? Math.max(opt.out.stops, opt.back.stops)
+        : opt.kind === 'duffel-oneway'
+          ? opt.offer.stops
+          : opt.kind === 'ignav'
+            ? ignavItineraryStops(opt.itinerary)
+            : letsfgItineraryStops(opt.itinerary);
+    counts.stops[stops] = (counts.stops[stops] ?? 0) + 1;
+    const airlines =
+      opt.kind === 'duffel-pair'
+        ? [...new Set([opt.out.airline, opt.back.airline])]
+        : opt.kind === 'duffel-oneway'
+          ? [opt.offer.airline]
+          : [...new Set(opt.itinerary.legs.map((l) => l.airline))];
+    for (const a of airlines) counts.airlines[a] = (counts.airlines[a] ?? 0) + 1;
+    const bucket = timeBucketFor(opt.departMinutes);
+    if (bucket) counts.times[bucket] = (counts.times[bucket] ?? 0) + 1;
+    const perTraveler = perTravelerPrice(opt.total, travelers);
+    for (const band of LIVE_PRICE_BANDS) if (perTraveler <= band) counts.prices[band] += 1;
+  }
+  return counts;
 }

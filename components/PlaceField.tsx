@@ -76,6 +76,12 @@ export default function PlaceField({
       return;
     }
     setLoading(true);
+    // The listbox opens as soon as the fetch starts (audit round,
+    // Nov 17, 2026 — gap 12): a slow source used to leave the field
+    // looking dead for seconds — no list, no "Searching…" — because
+    // the box only opened after the fetch resolved. "New York"
+    // produced no list at all on a slow first fetch.
+    setOpen(true);
     timerRef.current = setTimeout(async () => {
       const places = await fetchPlaceSuggestions(q);
       if (seq !== seqRef.current) return; // a newer keystroke won

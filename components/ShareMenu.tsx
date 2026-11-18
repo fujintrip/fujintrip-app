@@ -22,11 +22,17 @@ export default function ShareMenu({
   text,
   title,
   label = 'Share',
+  // The trigger's style (audit round, Nov 17, 2026): cards keep one
+  // primary pill + one text link in the action row, so share sits in
+  // the card's top row as a text link — pass 'linklike'. Reels and
+  // plans keep the ghost button.
+  buttonClassName = 'ghost',
 }: {
   url: string;
   text: string;
   title?: string;
   label?: string;
+  buttonClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState('');
@@ -71,7 +77,7 @@ export default function ShareMenu({
 
   return (
     <>
-      <button type="button" className="ghost" onClick={() => void share()} aria-expanded={open}>
+      <button type="button" className={buttonClassName} onClick={() => void share()} aria-expanded={open}>
         {label}
       </button>
       {open && (
