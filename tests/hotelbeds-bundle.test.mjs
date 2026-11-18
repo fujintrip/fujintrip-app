@@ -6,9 +6,11 @@
 // + hotelPackage: 'YES' under one confirmation. The planner is
 // untouched: it already builds packages from its own legs. The
 // route answers GET with its status so activation can be checked
-// without spending a quota call. These tests pin the toggle (off),
-// the disabled path, the packaging flags in the request, and that
-// the planner stays bundle-free.
+// without spending a quota call. These tests pin the toggle (ON
+// since Nov 17, 2026 — activated with the packages API; the Bundle
+// key is live in DigitalOcean), the disabled path (toggle forced
+// off), the packaging flags in the request, and that the planner
+// stays bundle-free.
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/hotelbeds-bundle.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -88,16 +90,20 @@ const BARCELONA = {
   rooms: 1,
 };
 
-test('toggle: bundle is wired but switched off by default', () => {
-  assert.equal(HOTELBEDS_PRODUCTS.bundle, false);
+test('toggle: bundle is switched ON by default (activated Nov 17, 2026)', () => {
+  assert.equal(HOTELBEDS_PRODUCTS.bundle, true);
   const status = hotelbedsBundleStatus();
   assert.equal(status.source, 'hotelbeds-bundle');
-  assert.equal(status.enabled, false);
+  assert.equal(status.enabled, true);
+  // No keys in the test env, so configured/active stay false — the
+  // toggle is on, the connection is not.
+  assert.equal(status.configured, false);
   assert.equal(status.active, false);
   assert.ok(status.note.includes('planner'), 'the note says the planner builds packages itself');
 });
 
-test('status: off means disabled, even when the keys are set', () => {
+test('status: switched off means disabled, even when the keys are set', () => {
+  HOTELBEDS_PRODUCTS.bundle = false;
   withKeys();
   try {
     const status = hotelbedsBundleStatus();
@@ -117,6 +123,7 @@ test('search: switched off means disabled and no network call, whatever the keys
     return { ok: true, status: 200, json: async () => ({}) };
   };
   try {
+    HOTELBEDS_PRODUCTS.bundle = false;
     withKeys();
     const res = await searchHotelbedsBundle(BARCELONA);
     assert.equal(res.live, false);

@@ -126,3 +126,82 @@ export function packagePrice(
   }
   return { perTraveler: pkg.best.perTraveler, label: PACKAGE_ESTIMATE_LABEL, source: null };
 }
+
+// --- The packages API seam (GET /api/packages) ----------------------
+// collectLivePackageFares(): the ONE place live package fares enter
+// the API. Today it returns [] — TourRadar, Intrepid and Viator are
+// all awaiting replies (enquiries sent Nov 17, 2026; no keys yet),
+// and the Hotelbeds Bundle product is a dated hotel-packaging
+// search, not a per-package tour total, so it does not feed this
+// list. When a tour supplier goes live, its adapter fills this list
+// and packagePrice() prefers the live fare, labeled with source +
+// check time. The API stays honest meanwhile: every price is the
+// planner's planning estimate.
+export async function collectLivePackageFares(): Promise<LivePackageFare[]> {
+  return [];
+}
+
+export type PackageApiPrice = {
+  perTraveler: number;
+  label: string;
+  source: string | null;
+};
+
+export type PackageApiEntry = Package & { price: PackageApiPrice };
+
+export type PackageApiResponse = {
+  source: 'fujintrip-packages';
+  checkedAt: string;
+  packages: PackageApiEntry[];
+  liveFares: LivePackageFare[];
+  sources: {
+    hotelbedsBundle: { enabled: boolean; configured: boolean; active: boolean; sandbox: true };
+    tourRadar: { status: 'awaiting_reply'; note: string };
+    intrepid: { status: 'awaiting_reply'; note: string };
+    viator: { status: 'awaiting_reply'; note: string };
+  };
+  note: string;
+};
+
+// The response GET /api/packages serves. `featured` narrows to the
+// six featured packages; `destination` narrows to one package (empty
+// list when the planner cannot price it). Always 200, never an
+// invented price: without a live fare every price is the planner's
+// planning estimate, labeled as such.
+export async function packagesResponse(
+  opts: { featured?: boolean; destination?: string },
+  bundleStatus: { enabled: boolean; configured: boolean; active: boolean; sandbox: true }
+): Promise<PackageApiResponse> {
+  const liveFares = await collectLivePackageFares();
+  let list: Package[];
+  if (opts.destination) {
+    const one = packageFor(opts.destination);
+    list = one ? [one] : [];
+  } else if (opts.featured) {
+    list = featuredPackages();
+  } else {
+    list = allPackages();
+  }
+  return {
+    source: 'fujintrip-packages',
+    checkedAt: new Date().toISOString(),
+    packages: list.map((pkg) => ({ ...pkg, price: packagePrice(pkg, liveFares) })),
+    liveFares,
+    sources: {
+      hotelbedsBundle: bundleStatus,
+      tourRadar: {
+        status: 'awaiting_reply',
+        note: 'Wholesale enquiry sent Nov 17, 2026 — no key yet.',
+      },
+      intrepid: {
+        status: 'awaiting_reply',
+        note: 'API enquiry sent Nov 17, 2026 — payment model unconfirmed.',
+      },
+      viator: {
+        status: 'awaiting_reply',
+        note: 'Merchant tier enquiry sent Nov 17, 2026 — approval pending.',
+      },
+    },
+    note: 'Prices are planning estimates until a live tour supplier connects. Hotelbeds Bundle (flight + hotel packaging) is a separate dated search at /api/hotelbeds-bundle.',
+  };
+}

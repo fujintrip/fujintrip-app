@@ -552,17 +552,17 @@ test('wiring: the Stays tab renders the sandbox section with Save this search, n
   assert.ok(route.includes("sandbox: true"), 'the route marks every response sandbox');
 });
 
-test('toggles: hotel, activities and transfers on, bundle off — one place flips a product (Nov 16 2026, P0 #8)', () => {
+test('toggles: all four products on — one place flips a product (Nov 16 2026, P0 #8; bundle on since Nov 17, 2026)', () => {
   assert.deepEqual(HOTELBEDS_PRODUCTS, {
     hotel: true,
     activities: true,
     transfers: true,
-    bundle: false,
+    bundle: true,
   });
   assert.equal(hotelbedsProductEnabled('hotel'), true);
   assert.equal(hotelbedsProductEnabled('activities'), true);
   assert.equal(hotelbedsProductEnabled('transfers'), true);
-  assert.equal(hotelbedsProductEnabled('bundle'), false);
+  assert.equal(hotelbedsProductEnabled('bundle'), true);
 });
 
 test('toggles: a product is active only when its toggle is on AND its keys are set', () => {
@@ -595,12 +595,16 @@ test('toggles: a product is active only when its toggle is on AND its keys are s
     assert.equal(hotelbedsProductActive('activities'), true, 'toggle on + keys = active');
     assert.equal(hotelbedsProductConfigured('transfers'), true);
     assert.equal(hotelbedsProductActive('transfers'), true, 'toggle on + keys = active');
-    // Keys set but toggle off (bundle is still off): configured,
-    // never active — the toggle wins over set keys.
+    // Bundle: toggle on + keys = active (activated Nov 17, 2026).
     process.env.HOTELBEDS_BUNDLE_API_KEY = 'test-bundle-key';
     process.env.HOTELBEDS_BUNDLE_API_SECRET = 'test-bundle-secret';
     assert.equal(hotelbedsProductConfigured('bundle'), true);
+    assert.equal(hotelbedsProductActive('bundle'), true, 'toggle on + keys = active');
+    // Flipping the toggle off wins over set keys.
+    HOTELBEDS_PRODUCTS.bundle = false;
+    assert.equal(hotelbedsProductEnabled('bundle'), false);
     assert.equal(hotelbedsProductActive('bundle'), false, 'toggle off wins over set keys');
+    HOTELBEDS_PRODUCTS.bundle = true;
     // Hotel: toggle on + keys = active.
     withKeys();
     assert.equal(hotelbedsProductConfigured('hotel'), true);
@@ -611,6 +615,7 @@ test('toggles: a product is active only when its toggle is on AND its keys are s
     assert.equal(hotelbedsProductActive('hotel'), false);
   } finally {
     HOTELBEDS_PRODUCTS.hotel = true;
+    HOTELBEDS_PRODUCTS.bundle = true;
     if (saved.activitiesKey === undefined) delete process.env.HOTELBEDS_ACTIVITIES_API_KEY;
     else process.env.HOTELBEDS_ACTIVITIES_API_KEY = saved.activitiesKey;
     if (saved.activitiesSecret === undefined) delete process.env.HOTELBEDS_ACTIVITIES_API_SECRET;

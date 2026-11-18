@@ -1661,3 +1661,33 @@ test('homepage restructure: no emoji icons anywhere in the served homepage (Nov 
   // The Lucide icons render as inline svg, not as text.
   assert.ok(html.includes('<svg'), 'icons render as svg');
 });
+
+test('packages API: GET /api/packages serves the 21 trips as JSON with labeled estimates (Nov 17 2026)', async () => {
+  const r = await fetch(`${BASE}/api/packages`);
+  assert.equal(r.status, 200);
+  const body = await r.json();
+  assert.equal(body.source, 'fujintrip-packages');
+  assert.ok(Array.isArray(body.packages));
+  assert.ok(body.packages.length >= 21, 'the full package list is served');
+  assert.deepEqual(body.liveFares, [], 'no live tour fares yet');
+  for (const pkg of body.packages) {
+    assert.equal(pkg.price.label, 'planning estimate', `${pkg.destination}: planning estimate`);
+    assert.equal(pkg.price.source, null);
+  }
+  assert.equal(body.sources.tourRadar.status, 'awaiting_reply');
+  assert.equal(body.sources.intrepid.status, 'awaiting_reply');
+  assert.equal(body.sources.viator.status, 'awaiting_reply');
+  // Dev server has no keys: Bundle is switched on but not configured.
+  assert.equal(body.sources.hotelbedsBundle.enabled, true);
+  assert.equal(body.sources.hotelbedsBundle.configured, false);
+
+  const featured = await (await fetch(`${BASE}/api/packages?featured=1`)).json();
+  assert.equal(featured.packages.length, 6, 'featured narrows to six');
+
+  const one = await (await fetch(`${BASE}/api/packages?destination=Japan`)).json();
+  assert.equal(one.packages.length, 1);
+  assert.equal(one.packages[0].destination, 'Japan');
+
+  const none = await (await fetch(`${BASE}/api/packages?destination=Nowhere`)).json();
+  assert.deepEqual(none.packages, []);
+});

@@ -142,7 +142,9 @@ export const HOTELBEDS_PRODUCTS: Record<HotelbedsProduct, boolean> = {
   hotel: true,
   activities: true,
   transfers: true,
-  bundle: false,
+  // Bundle activated Nov 17, 2026 (user: add API for packages and
+  // trip offers) — the Bundle key is live in DigitalOcean.
+  bundle: true,
 };
 
 export const HOTELBEDS_PRODUCT_KEYS: Record<HotelbedsProduct, { key: string; secret: string }> = {
