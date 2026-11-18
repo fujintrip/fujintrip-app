@@ -346,7 +346,13 @@ type HotelbedsRateRaw = {
 
 type HotelbedsRoomRaw = {
   name?: unknown;
+  // The spec (OpenAPI 3.0, ApiHotel.room / room.rate) names the
+  // arrays singular: room.rate. The 1.0 test host's JSON has been
+  // seen in the wild with the plural wrapper names (rooms/rates)
+  // too, so both spellings are accepted — never guessed, just
+  // read either way Hotelbeds writes it.
   rate?: unknown;
+  rates?: unknown;
 };
 
 type HotelbedsHotelRaw = {
@@ -361,6 +367,7 @@ type HotelbedsHotelRaw = {
   minRate?: unknown;
   currency?: unknown;
   room?: unknown;
+  rooms?: unknown;
 };
 
 type HotelbedsImageRaw = {
@@ -413,7 +420,13 @@ function cheapestRate(roomRaw: unknown): {
     boardName?: string;
   } | null = null;
   for (const room of rooms) {
-    const rates = (Array.isArray(room.rate) ? room.rate : []).filter(isObj) as HotelbedsRateRaw[];
+    // Spec spelling is rate[]; the 1.0 host may write rates[].
+    const rateList = Array.isArray(room.rate)
+      ? room.rate
+      : Array.isArray(room.rates)
+        ? room.rates
+        : [];
+    const rates = rateList.filter(isObj) as HotelbedsRateRaw[];
     for (const rate of rates) {
       const net = asNum(rate.net);
       if (net === undefined || net <= 0) continue;
@@ -443,7 +456,13 @@ export function mapAvailabilityHotel(
   const code = asNum(raw.code);
   const name = asStr(raw.name);
   if (code === undefined || !name) return null;
-  const rate = cheapestRate(raw.room);
+  // Spec spelling is room[]; the 1.0 host may write rooms[].
+  const roomList = Array.isArray(raw.room)
+    ? raw.room
+    : Array.isArray(raw.rooms)
+      ? raw.rooms
+      : [];
+  const rate = cheapestRate(roomList);
   const minRate = asNum(raw.minRate);
   const price = rate?.net ?? minRate;
   if (price === undefined || price <= 0) return null;
@@ -472,9 +491,48 @@ export function mapAvailabilityHotel(
 // The availability response shape, validated: the raw hotel list
 // or null when the shape is wrong — a malformed 200 is an error,
 // never a guessed hotel list.
+//
+// Two live-host variances (Nov 17, 2026 — the Stays dead end):
+// the sandbox omits the hotel array entirely when a search finds
+// nothing (total 0, no `hotel` key), which the old strict check
+// read as a broken response instead of an honest empty result; and
+// the 1.0 test host may write the plural wrapper names
+// (hotels/rooms/rates) where the 3.0 spec writes singular. So:
+// a missing array is an empty list, a single hotel object is
+// wrapped, either spelling is read — but a hotels container that
+// is absent, or a `hotel` value that is neither an array nor an
+// object, is still a malformed response (null).
 export function parseAvailabilityResponse(value: unknown): unknown[] | null {
-  if (!isObj(value) || !isObj(value.hotels) || !Array.isArray(value.hotels.hotel)) return null;
-  return value.hotels.hotel as unknown[];
+  if (!isObj(value) || !isObj(value.hotels)) return null;
+  const container = value.hotels as Record<string, unknown>;
+  const list = container.hotel ?? container.hotels;
+  if (list === undefined) return [];
+  if (Array.isArray(list)) return list as unknown[];
+  if (isObj(list)) return [list];
+  return null;
+}
+
+// Server-side diagnosis only (Nov 17, 2026): when the availability
+// answer is still unreadable after the tolerant parse, log what it
+// actually looked like — top-level keys, the hotels container's
+// keys, and any error object Hotelbeds sent — to the runtime log
+// (DigitalOcean logs), never to the client response. The shape is
+// the only thing logged; no request data, no credentials.
+export function logBadAvailabilityResponse(value: unknown): void {
+  try {
+    const top = isObj(value) ? Object.keys(value) : [];
+    const hotels = isObj(value) && isObj(value.hotels) ? Object.keys(value.hotels as Record<string, unknown>) : [];
+    const err =
+      isObj(value) && isObj(value.error)
+        ? JSON.stringify(value.error).slice(0, 300)
+        : undefined;
+    console.error(
+      '[hotelbeds] availability shape not recognized',
+      JSON.stringify({ top, hotels, error: err ?? null })
+    );
+  } catch {
+    // Logging must never break the search.
+  }
 }
 
 // Availability hotels mapped + sorted cheapest first, capped at the
@@ -738,7 +796,10 @@ export async function searchHotelbedsStays(input: HotelbedsSearchInput): Promise
     return { ...base, reason: errorReason(availability.status) };
   }
   const hotels = mapAvailabilityHotels(availability.json, nights, input.guests);
-  if (!hotels) return { ...base, reason: 'bad_response' };
+  if (!hotels) {
+    logBadAvailabilityResponse(availability.json);
+    return { ...base, reason: 'bad_response' };
+  }
   if (!hotels.length) return { ...base, reason: 'no_hotels' };
   // Photos, one ContentAPI call for the hotels on screen — the
   // gallery per hotel, first photo as the card image.

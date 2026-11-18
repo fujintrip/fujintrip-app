@@ -221,10 +221,68 @@ test('availability mapping: priceless and nameless hotels are dropped, malformed
   assert.ok(hotels);
   assert.ok(!hotels.some((h) => h.code === 9999 || h.code === 8888));
   assert.equal(mapAvailabilityHotels({}, 7, 2), null);
-  assert.equal(mapAvailabilityHotels({ hotels: {} }, 7, 2), null);
+  // A hotels container with no hotel array is an honest empty
+  // result, not a broken response (Nov 17, 2026 — the Stays dead
+  // end: the sandbox omits the array when total is 0).
+  assert.deepEqual(mapAvailabilityHotels({ hotels: {} }, 7, 2), []);
   assert.equal(mapAvailabilityHotels({ hotels: { hotel: 'nope' } }, 7, 2), null);
   assert.equal(parseAvailabilityResponse(AVAILABILITY_SAMPLE)?.length, 4);
   assert.equal(parseAvailabilityResponse(null), null);
+});
+
+test('availability mapping: the live dead-end shapes parse honestly (Nov 17, 2026)', () => {
+  // The shape the sandbox actually returned for New York and Paris
+  // (Dec 10–12, 2026): a 200 with a hotels container and no hotel
+  // array — zero test hotels, not a broken response. It must read
+  // as an empty list (route: no_hotels), never bad_response.
+  assert.deepEqual(
+    mapAvailabilityHotels({ hotels: { total: 0, checkIn: '2026-12-10', checkOut: '2026-12-12' } }, 2, 2),
+    []
+  );
+  // The 1.0 test host may write the plural wrapper names where the
+  // 3.0 spec writes singular — both spellings must map.
+  const plural = {
+    hotels: {
+      total: 1,
+      hotels: [
+        {
+          code: 77,
+          name: 'Hotel Plural',
+          categoryCode: '3EST',
+          zoneName: 'Downtown',
+          minRate: 300,
+          currency: 'USD',
+          rooms: [
+            { name: 'Double', rates: [{ rateKey: 'rk1', rateType: 'BOOKABLE', net: 280, boardCode: 'BB', boardName: 'BED AND BREAKFAST' }] },
+          ],
+        },
+      ],
+    },
+  };
+  const mapped = mapAvailabilityHotels(plural, 2, 2);
+  assert.ok(mapped);
+  assert.equal(mapped.length, 1);
+  assert.equal(mapped[0].name, 'Hotel Plural');
+  assert.equal(mapped[0].price, 280);
+  assert.equal(mapped[0].roomName, 'Double');
+  assert.equal(mapped[0].boardName, 'BED AND BREAKFAST');
+  // A single hotel object (not an array) wraps instead of failing.
+  const single = {
+    hotels: {
+      total: 1,
+      hotel: { code: 78, name: 'Hotel Single', minRate: 150, currency: 'USD', room: [] },
+    },
+  };
+  const one = mapAvailabilityHotels(single, 2, 2);
+  assert.ok(one);
+  assert.equal(one.length, 1);
+  assert.equal(one[0].name, 'Hotel Single');
+  // An error payload is still a broken response, never an empty
+  // list — and the route logs its shape for the server log.
+  assert.equal(
+    mapAvailabilityHotels({ auditData: { processTime: '4' }, error: { code: '400', message: 'Invalid request' } }, 2, 2),
+    null
+  );
 });
 
 test('availability mapping: the list caps at the panel count, cheapest first', () => {
