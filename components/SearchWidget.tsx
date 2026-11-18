@@ -531,11 +531,17 @@ export default function SearchWidget({
         setNote('That date is in the past — pick a date from today on.');
         return;
       }
-      if (ret && ret < now) {
+      // One-way flights carry no return (Nov 17, 2026): a return
+      // left over from a round-trip switch — or a deep link — is
+      // dropped at submit, so it must never block the search with a
+      // return-date verdict. The return field is hidden for one-way,
+      // but the state still holds the stale date.
+      const hasReturn = !(tab === 'flights' && tripType === 'oneway');
+      if (hasReturn && ret && ret < now) {
         setNote('That return date is in the past — pick a date from today on.');
         return;
       }
-      if (depart && ret && ret < depart) {
+      if (hasReturn && depart && ret && ret < depart) {
         setNote('The return date is before the departure date — check the dates.');
         return;
       }

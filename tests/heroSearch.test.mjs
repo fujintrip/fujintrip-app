@@ -110,3 +110,15 @@ test('audit round Nov 17: date fields never garble, search button sits in the gr
   // a slow source shows "Searching…" instead of looking dead.
   assert.ok(field.includes('setOpen(true);\n    timerRef.current = setTimeout'), 'the listbox opens when the fetch starts');
 });
+
+test('one-way flights: a stale return never blocks the search with a return-date verdict (Nov 17 2026)', () => {
+  const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
+  // The generic validation block gates both return checks on
+  // one-way: the return field is hidden for one-way, but the state
+  // still holds the stale date from a round-trip switch or a deep
+  // link, and the submit drops it — so validation must not judge it.
+  assert.ok(widget.includes("const hasReturn = !(tab === 'flights' && tripType === 'oneway');"), 'one-way has no return');
+  assert.ok(widget.includes('if (hasReturn && ret && ret < now)'), 'the past-return verdict is gated on one-way');
+  assert.ok(widget.includes('if (hasReturn && depart && ret && ret < depart)'), 'the before-departure verdict is gated on one-way');
+  assert.ok(widget.includes("if (tab === 'flights' && tripType === 'oneway') q.ret = '';"), 'one-way still submits with no return');
+});
