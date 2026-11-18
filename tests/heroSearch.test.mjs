@@ -86,7 +86,7 @@ test('seedForDestination: an unknown name seeds as a bare destination', () => {
   });
 });
 
-test('audit round Nov 17: date fields never garble, search button sits in the grid', () => {
+test('audit round Nov 17: date fields never garble, search is a pill bar ending in a circular button', () => {
   const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const field = readFileSync(new URL('../components/PlaceField.tsx', import.meta.url), 'utf8');
@@ -99,13 +99,21 @@ test('audit round Nov 17: date fields never garble, search button sits in the gr
   assert.ok(widget.includes('defaultValue={value}'), 'DateField is uncontrolled');
   assert.ok(widget.includes('if (el && el.value !== value) el.value = value;'), 'external changes sync through the ref');
   assert.ok(widget.includes('<DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />'), 'the Return field uses DateField');
-  // The search button is the last cell of the fields grid, level
-  // with the inputs — not a lone button below a half-empty row.
-  assert.ok(widget.includes('<button type="submit" className="primary sw-search">'), 'the search button exists');
-  const gridClose = widget.indexOf('</div>\n      </form>');
-  const buttonAt = widget.indexOf('<button type="submit" className="primary sw-search">');
-  assert.ok(buttonAt > 0 && buttonAt < gridClose, 'the search button sits inside the fields grid');
-  assert.ok(css.includes('.sw-fields .sw-search{margin-top:0;align-self:end;min-height:48px;width:100%}'), 'the grid button aligns with the inputs');
+  // Expedia rebuild (Nov 17, 2026): the search is ONE pill bar — the
+  // fields are segments, and the bar ends in a circular navy button,
+  // magnifier only. The label stays in the HTML (visually hidden)
+  // and in aria-label, so the button keeps its name. Multi-city
+  // keeps the stacked leg editor with a full-width navy pill.
+  assert.ok(widget.includes('<div className="sw-bar">'), 'the search is a pill bar');
+  assert.ok(widget.includes('<div className="sw-multicity">'), 'multi-city keeps the stacked editor');
+  assert.ok(widget.includes('<button type="submit" className="primary sw-search" aria-label={searchButtonLabel(tab)}>'), 'the search button exists, with its label as its accessible name');
+  assert.ok(widget.includes('<span className="sw-search-text">{searchButtonLabel(tab)}</span>'), 'the button label stays in the HTML');
+  const barAt = widget.indexOf('<div className="sw-bar">');
+  const barButtonAt = widget.lastIndexOf('<button type="submit" className="primary sw-search" aria-label={searchButtonLabel(tab)}>');
+  const formClose = widget.indexOf('</form>');
+  assert.ok(barAt > 0 && barButtonAt > barAt && barButtonAt < formClose, 'the circular button ends the pill bar');
+  assert.ok(css.includes('.sw-bar .sw-search{flex:0 0 auto;width:56px;height:56px;min-height:56px;border-radius:50%;padding:0;margin:0 0 0 8px}'), 'the bar button is a 56px circle');
+  assert.ok(css.includes('.sw-multicity .sw-search{width:100%}'), 'the multi-city button is full-width');
   // The type-ahead opens its listbox as soon as a fetch starts, so
   // a slow source shows "Searching…" instead of looking dead.
   assert.ok(field.includes('setOpen(true);\n    timerRef.current = setTimeout'), 'the listbox opens when the fetch starts');

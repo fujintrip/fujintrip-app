@@ -612,7 +612,58 @@ export default function SearchWidget({
         ))}
       </div>
       <form onSubmit={submit}>
-        <div className="sw-fields">
+        {tab === 'flights' && tripType === 'multicity' ? (
+        <div className="sw-multicity">
+          <TripTypeControl value={tripType} onChange={switchTripType} />
+          <div className="flight-legs">
+            {legs.map((leg, i) => (
+              <div key={i} className="flight-leg">
+                <div className="flight-leg-head">
+                  <span className="flight-leg-title">Leg {i + 1}</span>
+                  {i >= 1 && legs.length > 2 && (
+                    <button
+                      type="button"
+                      className="ghost flight-leg-remove"
+                      aria-label={`Remove leg ${i + 1}`}
+                      onClick={() => setLegs(legs.filter((_, j) => j !== i))}
+                    >
+                      <Icon name="close" size={16} /> Remove
+                    </button>
+                  )}
+                </div>
+                <div className="sw-fields">
+                  <Field label="From" icon="pin">
+                    <PlaceField id={`flights-leg${i + 1}-from`} label={`Leg ${i + 1} flying from`} value={leg.from} onChange={(v) => updateLeg(i, { from: v })} placeholder="Departure city" />
+                  </Field>
+                  <Field label="To" icon="pin">
+                    <PlaceField id={`flights-leg${i + 1}-to`} label={`Leg ${i + 1} flying to`} value={leg.to} onChange={(v) => updateLeg(i, { to: v })} placeholder="Destination" />
+                  </Field>
+                  <Field label="Date" icon="calendar">
+                    <DateField min={today || undefined} value={leg.depart} onChange={(v) => updateLeg(i, { depart: v })} ariaLabel={`Leg ${i + 1} date`} />
+                  </Field>
+                </div>
+              </div>
+            ))}
+            {legs.length < MAX_FLIGHT_LEGS && (
+              <button
+                type="button"
+                className="ghost flight-leg-add"
+                onClick={() => setLegs([...legs, { from: legs[legs.length - 1].to, to: '', depart: '' }])}
+              >
+                <Icon name="plus" size={16} /> Add another flight
+              </button>
+            )}
+          </div>
+          <button type="submit" className="primary sw-search" aria-label={searchButtonLabel(tab)}>
+            <span className="sw-search-icon" aria-hidden="true">
+              <Icon name="search" size={20} />
+            </span>
+            <span className="sw-search-text">{searchButtonLabel(tab)}</span>
+          </button>
+        </div>
+        ) : (
+        <div className="sw-bar">
+          {tab === 'flights' && <TripTypeControl value={tripType} onChange={switchTripType} />}
           {tab === 'hotels' && (
             <>
               <Field label="Destination" icon="pin">
@@ -634,64 +685,19 @@ export default function SearchWidget({
           )}
           {tab === 'flights' && (
             <>
-              <TripTypeControl value={tripType} onChange={switchTripType} />
-              {tripType === 'multicity' ? (
-                <div className="flight-legs">
-                  {legs.map((leg, i) => (
-                    <div key={i} className="flight-leg">
-                      <div className="flight-leg-head">
-                        <span className="flight-leg-title">Leg {i + 1}</span>
-                        {i >= 1 && legs.length > 2 && (
-                          <button
-                            type="button"
-                            className="ghost flight-leg-remove"
-                            aria-label={`Remove leg ${i + 1}`}
-                            onClick={() => setLegs(legs.filter((_, j) => j !== i))}
-                          >
-                            <Icon name="close" size={16} /> Remove
-                          </button>
-                        )}
-                      </div>
-                      <div className="sw-fields">
-                        <Field label="From" icon="pin">
-                          <PlaceField id={`flights-leg${i + 1}-from`} label={`Leg ${i + 1} flying from`} value={leg.from} onChange={(v) => updateLeg(i, { from: v })} placeholder="Departure city" />
-                        </Field>
-                        <Field label="To" icon="pin">
-                          <PlaceField id={`flights-leg${i + 1}-to`} label={`Leg ${i + 1} flying to`} value={leg.to} onChange={(v) => updateLeg(i, { to: v })} placeholder="Destination" />
-                        </Field>
-                        <Field label="Date" icon="calendar">
-                          <DateField min={today || undefined} value={leg.depart} onChange={(v) => updateLeg(i, { depart: v })} ariaLabel={`Leg ${i + 1} date`} />
-                        </Field>
-                      </div>
-                    </div>
-                  ))}
-                  {legs.length < MAX_FLIGHT_LEGS && (
-                    <button
-                      type="button"
-                      className="ghost flight-leg-add"
-                      onClick={() => setLegs([...legs, { from: legs[legs.length - 1].to, to: '', depart: '' }])}
-                    >
-                      <Icon name="plus" size={16} /> Add another flight
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <Field label="From" icon="pin">
-                    <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
-                  </Field>
-                  <Field label="To" icon="pin">
-                    <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
-                  </Field>
-                  <Field label="Depart" icon="calendar">
-                    <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Departure date" />
-                  </Field>
-                  {tripType === 'roundtrip' && (
-                    <Field label="Return" icon="calendar">
-                      <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />
-                    </Field>
-                  )}
-                </>
+              <Field label="From" icon="pin">
+                <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
+              </Field>
+              <Field label="To" icon="pin">
+                <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
+              </Field>
+              <Field label="Depart" icon="calendar">
+                <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Departure date" />
+              </Field>
+              {tripType === 'roundtrip' && (
+                <Field label="Return" icon="calendar">
+                  <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />
+                </Field>
               )}
               <TravelersSelect value={travelers} onChange={setTravelers} label="Travelers" />
               <Field label="Cabin" icon="ticket">
@@ -800,17 +806,18 @@ export default function SearchWidget({
               <TravelersSelect value={travelers} onChange={setTravelers} label="Passengers" />
             </>
           )}
-          {/* The search button is the last grid cell (audit round, Nov
-              17, 2026 — gap 12): it used to sit below the grid,
-              left-aligned, with the second row half empty. Expedia's
-              search bar terminates in its search button the same way. */}
-          <button type="submit" className="primary sw-search">
+          {/* Expedia rebuild (Nov 17, 2026): the bar ends in a circular
+              navy button, magnifier only — the label stays in the HTML
+              (visually hidden) and in aria-label, so the button keeps
+              its name. */}
+          <button type="submit" className="primary sw-search" aria-label={searchButtonLabel(tab)}>
             <span className="sw-search-icon" aria-hidden="true">
               <Icon name="search" size={20} />
             </span>
-            {searchButtonLabel(tab)}
+            <span className="sw-search-text">{searchButtonLabel(tab)}</span>
           </button>
         </div>
+        )}
       </form>
       {note && (
         <p className="sw-note" role="status">

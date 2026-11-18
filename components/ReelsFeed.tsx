@@ -115,7 +115,6 @@ export default function ReelsFeed({
         </button>
       </div>
       {notice && <p className="plan-note">{notice}</p>}
-      {loading && <p className="plan-note">Loading travelers’ reels…</p>}
       {!loading && posts.length === 0 && (
         <div className="reel-empty">
           <p>

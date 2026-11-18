@@ -641,9 +641,13 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   assert.ok(css.includes('.wrap{max-width:1200px;margin:0 auto;padding:0 24px}'), 'the container is 1200px with 24px gutters');
   assert.ok(css.includes('calc((100vw - 1200px)/2 + 24px)'), 'the sticky header caps at the same 1200px container');
-  for (const cls of ['.card', '.search-widget', '.result-card', '.pkg-card', '.fare-card', '.flight-option-card', '.step', '.voices-teaser']) {
+  for (const cls of ['.card', '.result-card', '.pkg-card', '.fare-card', '.flight-option-card', '.step', '.voices-teaser']) {
     assert.ok(new RegExp(`\\${cls}\\{[^}]*border-radius:12px`).test(css), `${cls} uses the 12px card radius`);
   }
+  // Expedia rebuild (Nov 17, 2026): the search widget is a transparent
+  // wrapper now — the 12px radius lives on the pill bar's phone form,
+  // and the bar itself is a 999px pill.
+  assert.ok(/\.sw-bar\{[^}]*border-radius:999px/.test(css), 'the search bar is a 999px pill');
   assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:8px/.test(css), 'search fields use the 8px radius');
   assert.ok(/\.results-bar\{[^}]*border-radius:12px/.test(css), 'the results bar uses the 12px radius');
   // The stays top bar is gone (review round, Nov 17 2026 — gap 6:

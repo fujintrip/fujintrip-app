@@ -590,7 +590,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
             {!account.configured ? (
               <>
                 <strong>Free account — sign-in isn&apos;t set up yet</strong>
-                <p className="plan-muted">A free account saves your trips so they follow you to other devices. Sign-in isn&apos;t connected yet — the site owner adds the Clerk keys first. Until then your trips stay saved on this device only, and everything else works as normal.</p>
+                <p className="plan-muted">A free account saves your trips so they follow you to other devices. Sign-in isn&apos;t available yet — until then your trips stay saved on this device only, and everything else works as normal.</p>
               </>
             ) : !account.signedIn ? (
               <>

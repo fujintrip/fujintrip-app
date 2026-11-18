@@ -42,7 +42,7 @@ a{color:var(--ink)}
 header{border-bottom:1px solid var(--line);background:var(--card)}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 24px}
 .logo{font-family:var(--font-display,'DM Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
-.logo span{color:var(--accent)}
+.logo span{color:var(--brand)}
 .tag{font-size:13px;color:var(--muted)}
 .hero{padding:48px 0 24px;text-align:center}
 .hero h1{font-size:clamp(32px,4vw,40px);font-weight:700}
@@ -188,7 +188,7 @@ button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink
 .card .body .plan-muted{font-size:13px}
 .card .body p{font-size:16px;color:var(--muted)}
 .price{font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
-.pill{display:inline-block;background:var(--accent-soft);color:var(--accent-text);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:8px}
+.pill{display:inline-block;background:var(--surface);color:var(--brand);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;margin-bottom:8px}
 .card .body .pill,.pkg-body .pill{align-self:flex-start}
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .card-top .pill{margin-bottom:0}
@@ -687,8 +687,8 @@ html{scroll-padding-bottom:96px}
    checked Nov 15 9:17 PM". */
 .fare-card-source{font-size:12px;color:var(--muted);margin:10px 0 0}
 .fare-card-bags{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:10px 0 0}
-.fare-card-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:600;color:var(--accent-text);cursor:pointer}
-.fare-card-toggle:hover{color:var(--accent-ink)}
+.fare-card-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:600;color:var(--link);cursor:pointer}
+.fare-card-toggle:hover{color:var(--brand)}
 .fare-card-chevron{transition:transform 200ms ease}
 .fare-card-chevron.open{transform:rotate(180deg)}
 .fare-card-details{animation:fare-details-in 200ms ease}
@@ -707,8 +707,8 @@ html{scroll-padding-bottom:96px}
    trigger — the links themselves are plain anchors. */
 .booking-links ul{list-style:none;margin:8px 0 0;padding:0}
 .booking-links li{margin:0 0 6px}
-.booking-links a{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--accent-text)}
-.booking-links a:hover{color:var(--accent-ink)}
+.booking-links a{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:var(--link)}
+.booking-links a:hover{color:var(--brand)}
 .booking-links p{margin:8px 0 0}
 @media(max-width:640px){
   .fare-card{padding:12px}
@@ -719,8 +719,8 @@ html{scroll-padding-bottom:96px}
 }
 /* An inline text button for "Clear filters" — reads as a link, keeps
    the button behavior (keyboard, screen reader). */
-.linklike{background:none;border:none;padding:0;font:inherit;font-size:inherit;color:var(--accent-text);text-decoration:underline;cursor:pointer}
-.linklike:hover{color:var(--accent-ink)}
+.linklike{background:none;border:none;padding:0;font:inherit;font-size:inherit;color:var(--link);text-decoration:underline;cursor:pointer}
+.linklike:hover{color:var(--brand)}
 
 
 /* Direction v3 site header (Nov 14, 2026): sticky, one row — logo,
@@ -735,11 +735,11 @@ html{scroll-padding-bottom:96px}
 .site-link{white-space:nowrap;font-size:14px;font-weight:600;color:var(--ink);text-decoration:none;padding:8px 6px}
 .site-link:hover{text-decoration:underline}
 .site-theme{min-height:40px;white-space:nowrap}
-.ai-pill{display:inline-flex;align-items:center;gap:6px;background:var(--accent-text);color:#fff;border-radius:999px;padding:9px 16px;font-size:14px;font-weight:700;text-decoration:none;white-space:nowrap;min-height:40px}
-.ai-pill:hover{background:var(--accent-ink);color:#fff}
+.ai-pill{display:inline-flex;align-items:center;gap:6px;background:var(--brand);color:#fff;border-radius:999px;padding:9px 16px;font-size:14px;font-weight:700;text-decoration:none;white-space:nowrap;min-height:40px}
+.ai-pill:hover{background:var(--brand-hover);color:#fff}
 .ai-pill-short{display:none}
-[data-theme="dark"] .ai-pill{background:var(--accent);color:#141210}
-[data-theme="dark"] .ai-pill:hover{background:var(--accent);color:#141210}
+[data-theme="dark"] .ai-pill{background:var(--brand);color:#fff}
+[data-theme="dark"] .ai-pill:hover{background:var(--brand-hover);color:#fff}
 .hamburger{display:none}
 .site-menu{display:none}
 @media(max-width:900px){
@@ -769,43 +769,61 @@ html{scroll-padding-bottom:96px}
    headline, and the search card doing the visual work. No photo, no
    scrim, no dots, no rotation. */
 .hero-booking{background:var(--card)}
-.hero-booking-inner{padding:72px 24px 64px}
-.hero-booking-inner h1{color:var(--ink);font-size:clamp(38px,5vw,56px);letter-spacing:-.03em}
-.hero-booking-sub{color:var(--muted);font-size:18px;margin:12px 0 32px;max-width:640px}
+.hero-booking-inner{padding:40px 24px 32px}
+.hero-booking-inner h1{color:var(--ink);font-size:clamp(28px,3.2vw,40px);letter-spacing:-.03em}
+.hero-booking-sub{color:var(--muted);font-size:16px;margin:8px 0 24px;max-width:640px}
 
-/* Search widget: white card, category tabs across the top, fields
-   below, one accent Search button, one honest line. On the white
-   hero the card carries the section — a clear border and a soft
-   layered shadow keep it prominent without a photo behind it. */
-.search-widget{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;box-shadow:0 2px 8px rgba(13,16,35,.06),0 12px 32px rgba(13,16,35,.08)}
-.sw-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin:-4px -4px 16px;padding:0 4px 12px}
-.sw-tab{flex:0 0 auto;border:1px solid transparent;background:transparent;border-radius:999px;padding:9px 14px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap}
+/* Search widget (Expedia rebuild, Nov 17, 2026): the tabs are text
+   links above ONE pill bar — the bar is the search. Each field is a
+   segment with a small caption label above a borderless control,
+   divided from the next by a hairline; the bar ends in a 56px
+   circular navy button, magnifier only (its label stays in the HTML,
+   visually hidden, and in aria-label). Multi-city keeps the stacked
+   leg editor with a full-width navy pill. The widget itself is
+   transparent — the bar carries the section. */
+.search-widget{background:transparent;border:none;border-radius:0;padding:0;box-shadow:none}
+.sw-bar{display:flex;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:999px;box-shadow:0 2px 8px rgba(13,16,35,.06),0 12px 32px rgba(13,16,35,.08);padding:4px}
+.sw-bar .sw-field{flex:1 1 0;min-width:0;padding:6px 16px;border-left:1px solid var(--line);justify-content:center}
+.sw-bar .sw-field:first-child{border-left:none}
+.sw-bar .sw-field>span:first-child{text-transform:uppercase;font-size:11px;letter-spacing:.05em;font-weight:700;color:var(--muted)}
+.sw-bar .sw-field input,.sw-bar .sw-field select{border:none;padding:0;background:transparent;font-size:15px}
+.sw-bar .sw-field input:focus,.sw-bar .sw-field select:focus{outline:none;border-color:transparent}
+.sw-bar .sw-field:focus-within{background:var(--surface);border-radius:12px}
+.sw-bar .sw-field-icon{display:none}
+.sw-bar .sw-field-control input,.sw-bar .sw-field-control select{padding-left:0}
+.sw-bar .sw-stepper{min-height:36px}
+.sw-bar .sw-stepper button{width:36px;height:36px}
+.sw-bar .sw-stepper strong{min-width:56px}
+.sw-bar .sw-check{align-self:center;padding-top:0;white-space:nowrap}
+.sw-bar .sw-search{flex:0 0 auto;width:56px;height:56px;min-height:56px;border-radius:50%;padding:0;margin:0 0 0 8px}
+.sw-bar .sw-search-text{display:none}
+.sw-multicity{display:flex;flex-direction:column;gap:12px}
+.sw-multicity .sw-search{width:100%}
+.sw-tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin:-4px -4px 16px;padding:0 4px}
+.sw-tab{flex:0 0 auto;border:1px solid transparent;background:transparent;border-radius:0;padding:10px 12px 12px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap}
 .sw-tab:hover{background:var(--surface)}
-.sw-tab.selected{background:var(--ink);color:var(--on-ink)}
+.sw-tab.selected{background:transparent;color:var(--ink);box-shadow:inset 0 -2px 0 var(--brand)}
 .sw-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
 .sw-field{position:relative;display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
 .sw-field input,.sw-field select{border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:15px;font-family:inherit;background:var(--card);color:var(--ink);width:100%}
-.sw-field input:focus,.sw-field select:focus{outline:2px solid var(--accent-text);outline-offset:1px;border-color:var(--accent-text)}
+.sw-field input:focus,.sw-field select:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:var(--brand)}
 .sw-check{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding-top:26px}
-.sw-search{margin-top:16px;min-height:52px;padding:0 28px;font-size:16px}
-/* The search button is the last cell of the fields grid (audit
-   round, Nov 17, 2026 — gap 12): it sits at the bottom of its cell,
-   level with the inputs, instead of below the grid. */
-.sw-fields .sw-search{margin-top:0;align-self:end;min-height:48px;width:100%}
+.sw-search{min-height:52px;padding:0 28px;font-size:16px}
 .sw-note{margin:12px 0 0;font-size:14px;color:var(--danger)}
 .sw-honest{margin:12px 0 0;font-size:13px;color:var(--muted)}
 /* Flights trip types (Nov 15, 2026): One-way / Round-trip /
    Multi-city as a pill segmented control above the flight fields.
-   The selected segment is filled in the accent — white on
-   --accent-text in light mode, ink on --accent-text in dark — the
-   same pair the search button uses, so the contrast holds in both
-   themes. The control spans the full width of the field grid. */
-.sw-trip-type{grid-column:1/-1;display:inline-flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;margin-bottom:4px;justify-self:start}
+   The selected segment is filled in the brand navy (Nov 17, 2026
+   rebuild — it was the orange accent, which made the whole hero
+   read as the old interface). White on navy in both themes, so the
+   contrast holds. The control sits above the search bar (or above
+   the leg editor for multi-city), never inside the bar itself. */
+.sw-trip-type{display:inline-flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;margin-bottom:12px}
 .sw-trip-type button{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border:1px solid transparent;background:transparent;border-radius:999px;font-size:14px;font-weight:600;color:var(--ink);cursor:pointer;font-family:inherit;white-space:nowrap;transition:background-color 200ms ease,color 200ms ease,transform 200ms ease}
 .sw-trip-type button:hover{background:var(--card)}
 .sw-trip-type button:active{transform:scale(.98)}
-.sw-trip-type button.selected{background:var(--accent-text);color:var(--on-ink)}
-.sw-trip-type button:focus-visible{outline:2px solid var(--accent-text);outline-offset:2px}
+.sw-trip-type button.selected{background:var(--brand);color:#fff}
+.sw-trip-type button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .sw-trip-type-icon{display:inline-flex;align-items:center}
 .sw-trip-type-icon svg{display:block}
 /* Icons inside the search fields (Nov 15, 2026): a Lucide icon sits
@@ -830,8 +848,8 @@ html{scroll-padding-bottom:96px}
    with a search icon — the one action on the card. Hover lifts,
    press settles; transform + shadow only, 200ms. The button.primary
    selector beats a bare class, so this rule names the full chain. */
-button.primary.sw-search{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--accent-text);color:var(--on-ink);border-radius:999px;min-height:56px;padding:0 32px;font-size:17px;transition:transform 200ms ease,box-shadow 200ms ease}
-button.primary.sw-search:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(13,16,35,.16)}
+button.primary.sw-search{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border-radius:999px;min-height:56px;padding:0 32px;font-size:17px;transition:transform 200ms ease,box-shadow 200ms ease}
+button.primary.sw-search:hover{background:var(--brand-hover);transform:translateY(-1px);box-shadow:0 8px 20px rgba(13,16,35,.16)}
 button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:none}
 .sw-search-icon{display:inline-flex;align-items:center}
 .sw-search-icon svg{display:block}
@@ -843,8 +861,8 @@ button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:no
 .flight-leg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .flight-leg-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .flight-leg-remove{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px}
-.flight-leg-add{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px;width:100%;border:1px dashed var(--line);border-radius:12px;background:transparent;color:var(--accent-text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform 200ms ease,border-color 200ms ease}
-.flight-leg-add:hover{border-color:var(--accent-text);transform:translateY(-1px)}
+.flight-leg-add{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px;width:100%;border:1px dashed var(--line);border-radius:12px;background:transparent;color:var(--link);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:transform 200ms ease,border-color 200ms ease}
+.flight-leg-add:hover{border-color:var(--link);transform:translateY(-1px)}
 .flight-leg-add:active{transform:scale(.99)}
 /* Place type-ahead (API phase round 1, Nov 14, 2026): the suggestion
    listbox drops below its field, above the hero and the sections
@@ -1021,6 +1039,14 @@ button.continue-card:hover{border-color:var(--ink)}
      near the top instead. */
   .hero-booking-inner{padding:32px 16px 28px}
   .sw-fields{grid-template-columns:1fr}
+  /* The pill bar stacks on a phone: segments become full-width rows
+     with hairlines between them, and the circular button becomes a
+     full-width navy pill with its label shown again. */
+  .sw-bar{flex-direction:column;border-radius:12px;padding:8px}
+  .sw-bar .sw-field{border-left:none;border-bottom:1px solid var(--line);padding:10px 12px}
+  .sw-bar .sw-field:last-of-type{border-bottom:none}
+  .sw-bar .sw-search{width:100%;height:48px;min-height:48px;border-radius:999px;margin:8px 0 0}
+  .sw-bar .sw-search-text{display:inline}
   .sw-search{width:100%}
   /* Flights trip types on a phone: the three segments share the row
      instead of overflowing it; the leg cards lose their desktop
