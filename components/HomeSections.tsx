@@ -138,7 +138,17 @@ function voicePhoto(place: string): string | null {
 // destinations, so no place appears twice.
 export const LOCAL_VOICES_PLACES = ['Kyoto', 'Barcelona', 'Tokyo'];
 
-export function LocalVoicesTeaser() {
+export function LocalVoicesTeaser({
+  photoByPlace,
+}: {
+  // P2-4: the homepage's one-photo-per-destination assignment
+  // (lib/data.ts assignPhotos), keyed by place. When given, the
+  // card shows exactly the assigned photo — `null` means its photo
+  // was claimed by another card, so it renders the labeled
+  // fallback, never a borrowed photo. When absent, the place's own
+  // photo is used (other pages that render this teaser on its own).
+  photoByPlace?: Map<string, string | null>;
+}) {
   const places = LOCAL_VOICES_PLACES;
   // A <div>, not a <section> (UX direction, Nov 19 2026 — P1-1):
   // FujinApp renders the merged Community band as the section, and
@@ -180,10 +190,16 @@ export function LocalVoicesTeaser() {
       <div className="grid voices-grid">
         {places.map((p) => {
           const guide = guideFor(p);
-          const photo = voicePhoto(p);
+          const photo = photoByPlace ? photoByPlace.get(p) ?? null : voicePhoto(p);
           return (
             <article className="card" key={p}>
-              {photo ? <SafeImg src={photo} alt={p} label={p} /> : null}
+              {photo ? (
+                <SafeImg src={photo} alt={p} label={p} />
+              ) : (
+                <div className="img-fallback" role="img" aria-label={p}>
+                  <span>{p}</span>
+                </div>
+              )}
               <div className="body">
                 <span className="pill">Local voices</span>
                 <h3>{p}</h3>

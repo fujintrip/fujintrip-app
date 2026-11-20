@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS, leadPhotoFor } from '../lib/data';
+import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, assignPhotos } from '../lib/data';
 import { discoveryDestinations } from '../lib/discovery';
 import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
@@ -390,22 +390,45 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       ]),
     []
   );
+  // One-photo-per-destination (UX direction, Nov 19 2026 — P2-4):
+  // the homepage's photo assignment for every card on the page —
+  // featured packages, hidden gems, Local Voices places, Popular
+  // destinations — in claim order (see lib/data.ts assignPhotos).
+  // The same map feeds PackagesSection, the gems, the voices and
+  // the library entries below, so no photo URL appears on two
+  // homepage cards. A card whose photo was claimed elsewhere gets
+  // an empty list and renders the labeled fallback.
+  const homepagePhotos = useMemo(() => {
+    const cards: Array<{ key: string; destination: string; stopCities?: string[]; ownPhoto?: string | null }> = [];
+    for (const p of featuredPackages()) {
+      cards.push({ key: `pkg:${p.id}`, destination: p.destination, stopCities: p.stops });
+    }
+    for (const g of HIDDEN_GEMS) {
+      cards.push({ key: `gem:${g.name}`, destination: g.name, ownPhoto: g.image });
+    }
+    for (const place of LOCAL_VOICES_PLACES) {
+      cards.push({ key: `voice:${place}`, destination: place });
+    }
+    for (const e of discovery) {
+      if (homeBandNames.has(e.destination)) continue;
+      cards.push({ key: `popular:${e.destination}`, destination: e.destination, stopCities: e.stops.map((s) => s.city) });
+    }
+    for (const d of GLOBAL_DESTINATIONS) {
+      if (discovery.some((e) => e.destination === d.name)) continue;
+      if (homeBandNames.has(d.name)) continue;
+      cards.push({ key: `popular:${d.name}`, destination: d.name });
+    }
+    return assignPhotos(cards);
+  }, [discovery, homeBandNames]);
   const libraryEntries = useMemo<LibraryEntry[]>(() => {
-    const imageByName = new Map<string, string>([
-      ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
-      ...HIDDEN_GEMS.map((d) => [d.name, d.image] as const),
-      ...Object.entries(CITY_PHOTOS),
-    ]);
     const entries: LibraryEntry[] = [];
     for (const e of discovery) {
       if (homeBandNames.has(e.destination)) continue;
-      const stopPhotos = [...new Set(e.stops.map((s) => s.city).map((c) => imageByName.get(c)).filter((x): x is string => Boolean(x)))];
-      const lead = leadPhotoFor(e.destination, e.stops.map((s) => s.city));
       entries.push({
         key: e.key,
         name: e.destination,
         tag: e.tag,
-        photos: lead ? [lead, ...stopPhotos.filter((p) => p !== lead)] : stopPhotos,
+        photos: homepagePhotos.get(`popular:${e.destination}`) ?? [],
         routeLine: e.stops.length > 1 ? e.stops.map((s) => s.city).join(' → ') : undefined,
         stays: e.stays,
         transports: e.transports,
@@ -421,7 +444,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
         name: d.name,
         country: d.country,
         tag: d.tag,
-        photos: [d.image],
+        photos: homepagePhotos.get(`popular:${d.name}`) ?? [],
         routeLine: (info?.cities.length ?? 0) > 1 ? info?.cities.join(' → ') : undefined,
         stays: info?.hotels ?? null,
         transports: info?.transports ?? null,
@@ -429,7 +452,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       });
     }
     return entries;
-  }, [discovery, cardInfo, homeBandNames]);
+  }, [discovery, cardInfo, homeBandNames, homepagePhotos]);
   // Direction v3 (spec section 1d): the template library is
   // "Popular destinations" now — 8 cards with a "Show more
   // destinations" expander. No filter pills, no pagination. The
@@ -713,7 +736,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             /account now, not on the homepage. */}
         {!search && (
         <>
-        <PackagesSection />
+        <PackagesSection photosById={homepagePhotos} />
 
         <section id="destinations">
           <h2>Popular destinations</h2>
@@ -756,9 +779,17 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           <h3 style={{ marginTop: 28 }}>Featured hidden gems</h3>
           <p className="sub">Three US places worth the detour — explored properly, with a full plan, not just a photo.</p>
           <div className="grid">
-            {HIDDEN_GEMS.map((d) => (
+            {HIDDEN_GEMS.map((d) => {
+              const gemPhoto = homepagePhotos.get(`gem:${d.name}`)?.[0] ?? null;
+              return (
               <article className="card" key={d.name}>
-                <SafeImg src={d.image} alt={d.name} label={d.name} />
+                {gemPhoto ? (
+                  <SafeImg src={gemPhoto} alt={d.name} label={d.name} />
+                ) : (
+                  <div className="img-fallback" role="img" aria-label={d.name}>
+                    <span>{d.name}</span>
+                  </div>
+                )}
                 <div className="body">
                   <div className="card-top">
                     <span className="pill">{d.tag}</span>
@@ -779,7 +810,8 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                   <a className="primary" href={`/destination/${encodeURIComponent(d.name)}`}>View trip</a>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -790,10 +822,12 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             part hides while the feed is empty; the voices are curated
             content, so the band itself always has something to show. */}
         <section className="home-section" aria-label="Community">
-          <LocalVoicesTeaser />
+          <LocalVoicesTeaser
+            photoByPlace={new Map(LOCAL_VOICES_PLACES.map((p) => [p, homepagePhotos.get(`voice:${p}`)?.[0] ?? null]))}
+          />
           {reelsCount !== 0 && (
             <div style={{ marginTop: 32 }}>
-              <h3>Travelers&apos; stories</h3>
+              <h3>Travelers&apos; stories{reelsCount !== null ? ` · ${reelsCount} reel${reelsCount === 1 ? '' : 's'}` : ''}</h3>
               <p className="sub">Photos and short reels from travelers who took the trip — verified trips only on the trip cards, shareable to social media.</p>
               <ReelsFeed onPost={() => openComposer()} onCount={setReelsCount} />
               <p style={{ marginTop: 12 }}>

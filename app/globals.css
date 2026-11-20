@@ -3,7 +3,7 @@
    self-hosted via next/font/google, system stack fallback. Prices
    use Inter with tabular-nums. Rounded cards, pill buttons,
    generous space. */
-:root{--ink:#191e3b;--muted:#4f5375;--line:#dcdee5;--line-soft:#eaecf0;--surface:#eff3f7;--brand:#00255d;--brand-hover:#001b47;--brand-active:#001436;--link:#1668e3;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#0c8a4a;--success-soft:#e9f5ee;--danger:#c81e34;--danger-soft:#fdecea;--font-display:'DM Sans';--font-body:'Inter';--on-ink:#ffffff;--on-ink-muted:#dddddd;--glass-bg:rgba(255,255,255,.92);--sticky-bg:rgba(255,255,255,.96);--warn-bg:#fff7e8;--warn-line:#ead9a8;--warn-ink:#5c4a12}
+:root{--ink:#191e3b;--muted:#4f5375;--line:#dcdee5;--line-soft:#eaecf0;--surface:#eff3f7;--brand:#00255d;--brand-hover:#001b47;--brand-active:#001436;--link:#1668e3;--accent:#ea580c;--accent-soft:#fff1e8;--card:#ffffff;--accent-text:#c2410c;--accent-ink:#9a3412;--success:#0b7f45;--success-soft:#e9f5ee;--danger:#c81e34;--danger-soft:#fdecea;--font-display:'DM Sans';--font-body:'Inter';--on-ink:#ffffff;--on-ink-muted:#dddddd;--glass-bg:rgba(255,255,255,.92);--sticky-bg:rgba(255,255,255,.96);--warn-bg:#fff7e8;--warn-line:#ead9a8;--warn-ink:#5c4a12}
 /* Expedia-style radius + shadow scale (Nov 16, 2026 — "copy
    everything" restyle): one scale for the whole site, Expedia's
    language — 8px small boxes and fields, 12px floating panels and
@@ -24,6 +24,17 @@
 [data-theme="dark"] body{background:#0b0a09}
 [data-theme="dark"] .skeleton{background:linear-gradient(90deg,#1f1f1d 25%,#2a2a28 50%,#1f1f1d 75%)}
 [data-theme="dark"] .img-fallback,[data-theme="dark"] .reel-media-fallback{background:linear-gradient(135deg,#1f1f1d,#2a2a28)}
+/* Accessibility + dark-mode pass (UX direction, Nov 19 2026 —
+   P2-5): the navy system keeps its light-theme text color on
+   brand backgrounds in dark mode — --on-ink is near-black there
+   (#0b0a09 on #1668e3 is 3.88:1, below 4.5:1), while white on the
+   same brand blue is 5.09:1. The dark brand blue itself (#1668e3
+   vs the light #00255d) is deliberate: the light navy would be
+   nearly invisible on a dark card. Pills in dark mode read in the
+   link blue (#7aa8f0 on #141210 is 7.73:1) instead of the brand
+   blue (3.67:1). */
+[data-theme="dark"] button.primary,[data-theme="dark"] a.primary,[data-theme="dark"] .hero-cta a{color:#fff}
+[data-theme="dark"] .pill{color:var(--link)}
 [data-theme="dark"] .leaflet-container{background:#0b0a09}
 [data-theme="dark"] .leaflet-bar a{background:#141210;color:#f5f4f0;border-color:#2a2a28}
 [data-theme="dark"] .leaflet-control-attribution{background:rgba(20,18,16,.8);color:#a3a3a3}
@@ -106,8 +117,8 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
    map scale on hover. */
 :root{--ease:cubic-bezier(.25,.1,.25,1);--dur:200ms}
 button{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),background-color var(--dur) var(--ease),border-color var(--dur) var(--ease),opacity var(--dur) var(--ease)}
-button.primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(13,16,35,.18)}
-button.primary:active{transform:translateY(1px);box-shadow:none}
+button.primary:hover,a.primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(13,16,35,.18)}
+button.primary:active,a.primary:active{transform:translateY(1px);box-shadow:none}
 button.ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
 button.ghost:active{transform:translateY(1px)}
 button:disabled{opacity:.4;cursor:not-allowed}
@@ -148,12 +159,16 @@ button:disabled{opacity:.4;cursor:not-allowed}
 }
 .row{display:flex;gap:8px;flex-wrap:wrap}
 input,select,button{font-family:inherit;font-size:15px}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 img{max-width:100%}
 input,select{flex:1;border:1px solid var(--line);border-radius:8px;padding:12px 16px;background:var(--card);color:var(--ink);min-width:0}
-button.primary{background:var(--brand);color:var(--on-ink);border:none;border-radius:999px;padding:12px 22px;cursor:pointer;font-weight:600}
-button.primary:hover{background:var(--brand-hover)}
-button.primary:active{background:var(--brand-active)}
+/* P2-5: the primary style also applies to <a className="primary">
+   links (View trip on every card, the hero CTA) — they were
+   unstyled anchors before this round, so the primary action on a
+   card had no button styling at all. */
+button.primary,a.primary{background:var(--brand);color:var(--on-ink);border:none;border-radius:999px;padding:12px 22px;cursor:pointer;font-weight:600;text-decoration:none;display:inline-block}
+button.primary:hover,a.primary:hover{background:var(--brand-hover)}
+button.primary:active,a.primary:active{background:var(--brand-active)}
 button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:10px 18px;cursor:pointer;font-weight:600}
 .selling{font-size:14px;color:var(--muted);text-align:center;margin:8px 0 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px}
@@ -511,7 +526,10 @@ html{scroll-padding-bottom:96px}
 .reels-strip .reelcard{flex:0 0 280px}
 .reelcard{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(13,16,35,.05);display:flex;flex-direction:column}
 .reelcard.compact{flex:0 0 280px}
-.reelcard img,.reelcard video{width:100%;max-height:320px;object-fit:cover;display:block;background:var(--line-soft)}
+/* P2-4: reserve the media box before the photo/video loads, so
+   the card never flashes blank white on scroll — the muted
+   background shows as the placeholder instead. */
+.reelcard img,.reelcard video{width:100%;aspect-ratio:4/3;max-height:320px;object-fit:cover;display:block;background:var(--line-soft)}
 .reelcard.compact img,.reelcard.compact video{max-height:200px}
 .reel-media-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0f0ee,#e8e8e6);color:var(--ink);font-size:20px;font-weight:700;min-height:180px;text-align:center;padding:16px}
 .reel-thumbs{display:flex;gap:6px;padding:8px 12px 0}
@@ -519,6 +537,9 @@ html{scroll-padding-bottom:96px}
 .reel-thumbs button.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
 .reel-body{padding:16px 20px 20px;flex:1;display:flex;flex-direction:column}
 .reel-author{font-size:14px;margin:0}
+/* P2-3: the trip's planning-estimate price on a reel card, shown
+   only when the reel's destination has a planner price. */
+.reel-trip-price{font-size:13px;color:var(--muted);margin:6px 0 0}
 .reel-badge{display:inline-block;background:var(--success-soft);color:var(--success);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin-left:8px}
 .reel-unverified{display:inline-block;background:var(--surface);color:var(--muted);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600;margin-left:8px}
 .reel-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:10px}
@@ -792,7 +813,10 @@ html{scroll-padding-bottom:96px}
 .sw-bar .sw-field>span:first-child{text-transform:uppercase;font-size:11px;letter-spacing:.05em;font-weight:700;color:var(--muted)}
 .sw-bar .sw-field input,.sw-bar .sw-field select{border:none;padding:0;background:transparent;font-size:15px}
 .sw-bar .sw-field input:focus,.sw-bar .sw-field select:focus{outline:none;border-color:transparent}
-.sw-bar .sw-field:focus-within{background:var(--surface);border-radius:12px}
+/* P2-5: the background change alone is invisible in dark mode
+   (--surface and --card are the same #141210 there), so a focused
+   search field also gets a visible brand outline in both themes. */
+.sw-bar .sw-field:focus-within{background:var(--surface);border-radius:12px;outline:2px solid var(--brand);outline-offset:2px}
 .sw-bar .sw-field-icon{display:none}
 .sw-bar .sw-field-control input,.sw-bar .sw-field-control select{padding-left:0}
 .sw-bar .sw-stepper{min-height:36px}
@@ -1157,6 +1181,12 @@ button.continue-card:hover{border-color:var(--ink)}
 .pkg-body h3{margin:10px 0 2px;font-size:18px;font-weight:600}
 .pkg-route{margin:0 0 6px;font-size:13px;color:var(--muted)}
 .pkg-meta{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0 0 12px}
+/* P2-1: the Trip-of-the-week hero card's 3-day preview — a
+   compact day list between the meta line and the price. */
+.pkg-preview{list-style:none;margin:0 0 12px;padding:12px 0 0;border-top:1px solid var(--line-soft);display:grid;gap:8px}
+.pkg-preview li{display:grid;gap:2px;font-size:13px}
+.pkg-preview li strong{font-size:13px}
+.pkg-preview li span{color:var(--muted)}
 .pkg-price{font-family:var(--font-display);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin:0}
 .pkg-price span{font-family:var(--font-sans);font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
 .pkg-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto;padding-top:16px}

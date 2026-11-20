@@ -269,6 +269,30 @@ test('package cards name the trip, not planner math (UX direction, Nov 19 2026 �
   assert.ok(!pkgHtml.includes('Stay $'), 'no per-leg dollar breakdown on the card');
 });
 
+test('trip of the week: the homepage hero package is labeled and carries a 3-day preview (UX direction, Nov 19 2026 — P2-1)', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  const pkgHtml = html.slice(html.indexOf('Ready-made packages'), html.indexOf('Popular destinations'));
+  assert.ok(pkgHtml.includes('Trip of the week'), 'the hero package is labeled Trip of the week');
+  assert.ok(pkgHtml.includes('Day 1'), 'the hero card previews day 1 of the real plan');
+  assert.ok(pkgHtml.includes('Day 3'), 'the hero card previews day 3 of the real plan');
+  // One price, one "View trip" — the preview adds no second action.
+  assert.ok(pkgHtml.includes('View trip'), 'the hero card still has its one View trip action');
+});
+
+test('reels feed: only real, moderated posts with media — nothing invented (UX direction, Nov 19 2026 — P2-3)', async () => {
+  const r = await fetch(`${BASE}/api/reels?limit=10`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(Array.isArray(j.posts), 'the feed returns a post list');
+  assert.ok(typeof j.total === 'number' && j.total >= j.posts.length, 'the total is a real count, never invented');
+  for (const p of j.posts) {
+    assert.ok(p.moderation === 'published' || p.moderation === 'strip', `only moderated posts are visible, got ${p.moderation}`);
+    assert.ok(Array.isArray(p.media) && p.media.length >= 1, 'every visible reel carries real media');
+    assert.ok(typeof p.destination === 'string' && p.destination.length > 0, 'every visible reel names its trip');
+  }
+});
+
 test('hidden gems carry FujinTrip framing, never a competitor trend claim (UX direction, Nov 19 2026 — P1-9)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");

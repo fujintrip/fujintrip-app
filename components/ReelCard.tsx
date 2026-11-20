@@ -8,9 +8,14 @@
 //  - like/save counts (soft counts — no accounts yet) and a share menu
 //    whose link lands on the post inside its trip, never a login wall;
 //  - a report path on every post.
+//  - (P2-3) when the feed asks for it, the trip's planning-estimate
+//    price (lib/discovery priceFor — the same Best value total the
+//    destination cards quote), labeled as an estimate; a destination
+//    with no planner price shows no price line, never a guessed one.
 'use client';
 import { useEffect, useState } from 'react';
 import { MONTH_NAMES } from '../lib/planner';
+import { priceFor } from '../lib/discovery';
 import ShareMenu from './ShareMenu';
 
 export type PublicReelPost = {
@@ -55,11 +60,16 @@ export default function ReelCard({
   post,
   compact = false,
   showModeration = false,
+  showTripPrice = false,
   onRemoved,
 }: {
   post: PublicReelPost;
   compact?: boolean;
   showModeration?: boolean;
+  // P2-3: the shelf shows the trip's price where the reel actually
+  // carries one (the destination has a planner price). The feed
+  // passes it; the destination-page strip does not.
+  showTripPrice?: boolean;
   onRemoved?: (id: string) => void;
 }) {
   const [mediaIdx, setMediaIdx] = useState(0);
@@ -244,6 +254,11 @@ export default function ReelCard({
         <p className="plan-note">
           {new Date(post.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · {post.destination}
         </p>
+        {showTripPrice && priceFor(post.destination) !== null && (
+          <p className="reel-trip-price">
+            This trip · from ${Math.round((priceFor(post.destination) ?? 0) / 2).toLocaleString()} per traveler · planning estimate
+          </p>
+        )}
         {editing ? (
           <div>
             <textarea value={editCaption} onChange={(e) => setEditCaption(e.target.value)} maxLength={280} rows={3} aria-label="Edit caption" style={{ width: '100%' }} />

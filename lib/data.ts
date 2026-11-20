@@ -124,6 +124,47 @@ export function leadPhotoFor(destination: string, stopCities: string[]): string 
   return byName.get(destination) ?? null;
 }
 
+// One-photo-per-destination (UX direction, Nov 19 2026 — P2-4):
+// assignPhotos hands each homepage card the photos it may show,
+// first-claimant-wins in the order the cards are passed in, so no
+// photo URL appears on two cards of the same page. The candidates
+// for a card are its lead photo, its own photo (hidden gems carry
+// theirs outside the city pool) and its stop photos, in that order
+// — all from the already-verified pool (CITY_PHOTOS /
+// GLOBAL_DESTINATIONS / HIDDEN_GEMS), never an invented URL and
+// never a borrowed one. A card whose candidates are all claimed
+// gets an empty list and renders the labeled fallback tile, not a
+// borrowed photo. Claim order is the caller's priority: featured
+// packages first (the Trip-of-the-week hero must be photo-led),
+// then hidden gems, then Local Voices, then Popular destinations —
+// the biggest band absorbs the fallbacks. Pure function: same
+// input, same assignment.
+export type PhotoCardInput = {
+  key: string;
+  destination: string;
+  stopCities?: string[];
+  ownPhoto?: string | null;
+};
+
+export function assignPhotos(cards: PhotoCardInput[]): Map<string, string[]> {
+  const claimed = new Set<string>();
+  const out = new Map<string, string[]>();
+  for (const card of cards) {
+    const stopCities = card.stopCities ?? [];
+    const candidates = [...new Set(
+      [
+        leadPhotoFor(card.destination, stopCities),
+        card.ownPhoto ?? null,
+        ...stopCities.map((c) => CITY_PHOTOS[c] ?? null),
+      ].filter((x): x is string => Boolean(x)),
+    )];
+    const photos = candidates.filter((p) => !claimed.has(p));
+    for (const p of photos) claimed.add(p);
+    out.set(card.key, photos);
+  }
+  return out;
+}
+
 // Weekend-trip photos (review round, Nov 17 2026 — gap 7): the trips
 // are generic local activities, not places, so each photo illustrates
 // the activity from the existing verified pool — it is not a photo of

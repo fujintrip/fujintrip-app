@@ -12,7 +12,7 @@
 // supplier goes live, only the fare source changes — the card, the
 // tiers and the actions stay exactly as they are.
 
-import { buildPlan } from './planner';
+import { buildPlan, type DayPlan } from './planner';
 import { discoveryDestinations, type DiscoveryEntry } from './discovery';
 import { HIDDEN_GEMS, leadPhotoFor } from './data';
 
@@ -96,6 +96,35 @@ const FEATURED = ['Central Europe', 'Japan', 'Greece', 'Morocco', 'Thailand', 'B
 
 export function featuredPackages(): Package[] {
   return FEATURED.map((d) => packageFor(d)).filter((p): p is Package => p !== null);
+}
+
+// Trip of the week (UX direction, Nov 19 2026 — P2-1): one of the
+// six featured packages gets the larger hero card in the Ready-made
+// trips band, with a 3-day preview of its real plan. The pick
+// rotates by ISO calendar week — week-of-year modulo the featured
+// list — so it changes weekly with no manual work and is
+// deterministic: the same week always picks the same trip, on the
+// server and in the browser. Week 53 wraps by the modulo. Dates are
+// read in UTC so the pick does not flip at local midnight.
+export function isoWeekOfYear(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7; // Monday = 1 … Sunday = 7
+  d.setUTCDate(d.getUTCDate() + 4 - day); // Thursday of this week
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+export function tripOfTheWeek(date: Date = new Date()): Package {
+  const featured = featuredPackages();
+  return featured[(isoWeekOfYear(date) - 1) % featured.length];
+}
+
+// The hero card's 3-day preview: the FIRST THREE DAYS of the
+// package's own day-by-day plan (buildPlan, same data the detail
+// page shows) — never invented itinerary days. Days carry the
+// planner's generic day titles; the body names the destination.
+export function tripOfTheWeekPreview(pkg: Package): DayPlan[] {
+  return buildPlan(pkg.destination, 2, pkg.days).days.slice(0, 3);
 }
 
 // Cheapest first by Best value per traveler, ties broken by name so

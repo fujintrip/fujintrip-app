@@ -130,7 +130,7 @@ export default function ReelsFeed({
       )}
       <div className="reels-grid">
         {posts.map((p) => (
-          <ReelCard key={p.id} post={p} onRemoved={removeFromFeed} />
+          <ReelCard key={p.id} post={p} onRemoved={removeFromFeed} showTripPrice />
         ))}
       </div>
       {!loading && posts.length > 0 && (
