@@ -912,12 +912,6 @@ button.continue-card:hover{border-color:var(--ink)}
 .trust-item .trust-icon{font-size:20px;line-height:1.2}
 
 /* Browse-by-category tiles. */
-.cat-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:20px}
-.cat-tile{display:flex;flex-direction:column;gap:4px;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;cursor:pointer;font-family:inherit;color:var(--ink)}
-.cat-tile:hover{border-color:var(--ink)}
-.cat-tile .cat-icon{font-size:28px}
-.cat-tile strong{font-size:16px}
-.cat-tile span{font-size:13px;color:var(--muted)}
 
 /* Results: sticky summary bar, sort above the list, filters left,
    cards in the middle. On a phone the filters collapse behind one
@@ -1091,14 +1085,18 @@ button.continue-card:hover{border-color:var(--ink)}
   .sw-tab{min-height:44px}
   /* iOS zooms the page when a form field under 16px is focused —
      16px fields keep the page still. Buttons stay 15px (they never
-     trigger the zoom). */
+     trigger the zoom). The bar's own 15px rule is more specific than
+     the generic one, so the bar fields are pinned here too — without
+     this, tapping "Flying from" zoomed the page (P1-7 audit). */
   input,select,textarea{font-size:16px}
+  .sw-bar .sw-field input,.sw-bar .sw-field select{font-size:16px}
   /* The results summary is long ("Flights · New York → London · …")
      — let the bar wrap instead of squeezing the Edit search button. */
   .results-bar{flex-wrap:wrap;row-gap:8px;padding:10px 12px}
   /* Result cards: the Save action is full-width, like the
      destination cards already are. */
   .result-body .primary{width:100%;text-align:center}
+  .mytrips li{flex-wrap:wrap}
   .appbar-total strong{font-size:24px}
   .mapdialog{padding:12px 16px}
   /* Touch targets in the trip panel. */
@@ -1137,23 +1135,21 @@ button.continue-card:hover{border-color:var(--ink)}
 /* Icons: inline-flex alignment for every Lucide icon in the header,
    tabs, tiles and cards — the svg is decorative, the text carries it. */
 .site-nav a{display:inline-flex;align-items:center;gap:6px}
-.site-nav a svg,.sw-tab-icon svg,.cat-icon svg,.trust-icon svg,.pkg-meta svg,.step-icon svg,.voices-icon svg{display:block}
+.site-nav a svg,.sw-tab-icon svg,.trust-icon svg,.pkg-meta svg,.step-icon svg,.voices-icon svg{display:block}
 .sw-tab{display:inline-flex;align-items:center;gap:6px}
 .sw-tab-icon{display:inline-flex;align-items:center}
 .trust-icon{display:inline-flex;align-items:center;color:var(--accent-text)}
-.cat-tile .cat-icon{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:var(--accent-soft);color:var(--accent-text);margin-bottom:8px}
-.cat-tile{transition:transform 200ms ease}
-.cat-tile:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(13,16,35,.08)}
 /* Ready-made packages: bento grid — the first card is the hero
    (2 cols x 2 rows), the rest fill around it. Photo-forward: the
    photo is the top of the card, the price is the largest type. */
 .pkg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .pkg-card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(13,16,35,.05);transition:transform 200ms ease}
 .pkg-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(13,16,35,.10)}
+.pkg-card:hover .pkg-photo{transform:scale(1.02)}
 .pkg-card--hero{grid-column:span 2;grid-row:span 2}
 /* Horizontal package rows (review round, Nov 17 2026 — gap 2): the
    deals shelf renders the same card as a wide row, photo left. */
-.pkg-photo{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block}
+.pkg-photo{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block;transition:transform 200ms ease}
 .pkg-card--hero .pkg-photo{height:300px}
 .pkg-photo-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:var(--accent-soft);color:var(--accent-text);font-family:var(--font-display);font-size:20px;font-weight:800;padding:16px;text-align:center}
 .pkg-card--hero .pkg-photo-fallback{height:300px}
@@ -1166,8 +1162,6 @@ button.continue-card:hover{border-color:var(--ink)}
 .pkg-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto;padding-top:16px}
 .pkg-actions button,.pkg-actions a{min-height:44px;transition:transform 150ms ease}
 .pkg-actions button:active,.pkg-actions a:active{transform:scale(.98)}
-/* Deals of the week: wide horizontal rows, not another card grid. */
-.deals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 /* How it works: three steps, one per job — Plan, Book, Follow. */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px}
@@ -1186,12 +1180,11 @@ button.continue-card:hover{border-color:var(--ink)}
   .pkg-grid{grid-template-columns:repeat(2,1fr)}
   .pkg-card--hero{grid-column:span 2;grid-row:auto}
   .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:220px}
-  .deals-grid{grid-template-columns:1fr}
   .steps{grid-template-columns:1fr}
 }
 @media (max-width:640px){
   .home-section{padding:28px 0 4px}
-  .pkg-grid,.deals-grid{grid-template-columns:1fr}
+  .pkg-grid{grid-template-columns:1fr}
   .pkg-card--hero{grid-column:auto}
   .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:200px}
   .voices-teaser{flex-direction:column;padding:20px}

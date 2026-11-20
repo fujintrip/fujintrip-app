@@ -140,8 +140,11 @@ export const LOCAL_VOICES_PLACES = ['Kyoto', 'Barcelona', 'Tokyo'];
 
 export function LocalVoicesTeaser() {
   const places = LOCAL_VOICES_PLACES;
+  // A <div>, not a <section> (UX direction, Nov 19 2026 — P1-1):
+  // FujinApp renders the merged Community band as the section, and
+  // the voices teaser + the reels feed are its two sub-blocks.
   return (
-    <section className="home-section" aria-label="Local voices">
+    <div aria-label="Local voices">
       <div className="voices-teaser">
         <span className="voices-icon" aria-hidden="true">
           <Icon name="compass" size={28} />
@@ -196,6 +199,6 @@ export function LocalVoicesTeaser() {
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }

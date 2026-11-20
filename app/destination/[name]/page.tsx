@@ -98,7 +98,7 @@ export default function DestinationPage() {
               {bestValue && (
                 <p className="price">from ${Math.round(bestValue.total / 2).toLocaleString()} per traveler</p>
               )}
-              {bestValue && <p className="plan-muted">Best value · 2 travelers · 3 days · planning estimate</p>}
+              {bestValue && <p className="plan-muted">Best value · 2 travelers · 3 days</p>}
               <p style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                 <a className="primary" href={planHref}>
                   Search this destination
@@ -110,7 +110,7 @@ export default function DestinationPage() {
             {plan && (
               <section>
                 <h2>Plan it in three ways</h2>
-                <p className="sub">Planning estimates from FujinTrip&apos;s planner — not live quotes.</p>
+                <p className="sub">Prices are planning estimates until live suppliers connect — <a href="/faq#pricing">how pricing works →</a></p>
                 <div className="result-cards">
                   {plan.options.map((o) => (
                     <article className="result-card" key={o.name}>
@@ -207,8 +207,7 @@ export default function DestinationPage() {
                         <span className="pill">{selectedEntry.tag}</span>
                         <h3>{selectedEntry.destination}</h3>
                         <p>
-                          {selectedEntry.days} days · {selectedEntry.nights} nights · Best value · 2 travelers ·
-                          planning estimate
+                          {selectedEntry.days} days · {selectedEntry.nights} nights · Best value · 2 travelers
                         </p>
                         {selectedEntry.price !== null && (
                           <p className="price">from ${selectedEntry.price.toLocaleString()} total</p>
@@ -234,7 +233,7 @@ export default function DestinationPage() {
                         <span className="pill">{d.tag}</span>
                         <h3>{d.destination}</h3>
                         {d.price !== null && <p className="price">from ${Math.round(d.price / 2).toLocaleString()} per traveler</p>}
-                        <p className="plan-muted">Best value · 2 travelers · planning estimate</p>
+                        <p className="plan-muted">Best value · 2 travelers</p>
                         <a className="primary" href={`/destination/${encodeURIComponent(d.destination)}`}>View trip</a>
                       </div>
                     </article>
@@ -253,7 +252,6 @@ export default function DestinationPage() {
           <p>
             <a href="/">Back to FujinTrip</a> · <a href="/privacy">Privacy Policy</a>
           </p>
-          <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
         </div>
       </footer>
     </div>

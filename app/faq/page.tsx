@@ -15,7 +15,7 @@ export default function Faq() {
           <h1>Frequently asked questions</h1>
           <p className="sub">Short answers, drawn from how the site actually works today.</p>
 
-          <h2 style={{ marginTop: 28 }}>Are the prices on FujinTrip live?</h2>
+          <h2 style={{ marginTop: 28 }} id="pricing">Are the prices on FujinTrip live?</h2>
           <p>Prices marked &ldquo;planning estimate&rdquo; are estimates from our planner, not live quotes. {duffelMode() === 'live' ? 'Flight searches show live fares from our flight supplier (Duffel) — real-time prices, labeled with their source.' : 'Flight searches show fares from our flight supplier (Duffel) — currently in test mode, and the page labels them as test fares, not live bookable quotes.'} Fares shown from other sites are cached and labeled with when they were checked, never presented as live.</p>
 
           <h2 style={{ marginTop: 28 }}>Do I need an account?</h2>
@@ -38,7 +38,6 @@ export default function Faq() {
         <div className="wrap">
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Named for Fujin, Japan&rsquo;s wind god.</p>
           <p><a href="/">Back to FujinTrip</a> · <a href="/privacy">Privacy Policy</a></p>
-          <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
         </div>
       </footer>
     </div>

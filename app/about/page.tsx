@@ -12,11 +12,11 @@ export default function About() {
       <main className="wrap">
         <section>
           <h1>About FujinTrip</h1>
-          <p className="sub">Travel globally, act locally.</p>
+          <p className="sub">Named for Fujin, Japan&rsquo;s wind god — ride the wind, pay less.</p>
           <p>FujinTrip is a one-stop travel platform: flights, stays, car rental, attractions, cruises, buses and taxis in one place, with an AI assistant that gathers them into a full day-by-day travel plan.</p>
           <p>The idea is simple. A traveler should be able to plan a trip, book it, and follow the plan on the trip — without juggling seven websites and without hidden fees. Prices marked as planning estimates are estimates from our planner; live fares are labeled with their source and when they were checked.</p>
           <p>Our standard is quality plus affordable prices, even if that means less profit. No hidden margin on fares — the airline fare is passed through at cost, and our service fee is shown separately at checkout, so you always see fare plus fee before you pay.</p>
-          <p>FujinTrip is named for Fujin, Japan&rsquo;s wind god. The artwork on the site is Ogata Korin&rsquo;s Wind God, c.1700 (public domain).</p>
+          <p>The artwork on the site is Ogata Korin&rsquo;s Wind God, c.1700 (public domain).</p>
           <p>
             Questions? See our <a href="/faq">FAQ</a> or <a href="/contact">contact us</a>.
           </p>
@@ -26,7 +26,6 @@ export default function About() {
         <div className="wrap">
           <p><strong>FujinTrip</strong> — Ride the wind. Pay less. Named for Fujin, Japan&rsquo;s wind god.</p>
           <p><a href="/">Back to FujinTrip</a> · <a href="/privacy">Privacy Policy</a></p>
-          <p>Prices on this site are planning estimates unless marked live. fujintrip.com</p>
         </div>
       </footer>
     </div>

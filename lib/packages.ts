@@ -26,6 +26,10 @@ export type Package = {
   stops: string[];
   nights: number;
   days: number;
+  // What the trip IS (UX direction, Nov 19 2026 — P1-8): the card
+  // names the trip — nights, cities, experiences — and the per-leg
+  // dollar breakdown stays on the detail page only.
+  experiences: number;
   photo: string | null;
   tiers: [PackageTier, PackageTier, PackageTier];
   best: PackageTier;
@@ -61,6 +65,7 @@ export function packageFor(destination: string): Package | null {
     stops: entry.stops.map((s) => s.city),
     nights: entry.nights,
     days: entry.days,
+    experiences: entry.experiences,
     photo: photoFor(entry),
     tiers: [
       { name: 'Cheapest', perTraveler: cheapest.total },

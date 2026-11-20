@@ -650,7 +650,6 @@ test('restructure: the new section styles exist in the CSS', () => {
     '.pkg-price',
     '.pkg-actions',
     '.fare-test-warning',
-    '.deals-grid',
     '.steps',
     '.step',
     '.voices-teaser',
@@ -685,16 +684,17 @@ test('restructure: icons are Lucide, one pack, one stroke — no emoji, no hand-
   }
 });
 
-test('restructure: the header, the widget tabs and the category tiles share one icon key per category', () => {
+test('restructure: the header nav and the widget tabs share one icon key per category', () => {
   const icons = readFileSync(new URL('../components/icons.tsx', import.meta.url), 'utf8');
   for (const t of ['flights', 'hotels', 'cars', 'tours', 'cruises', 'buses', 'taxis']) {
     assert.ok(icons.includes(`${t}:`), `TAB_ICONS covers ${t}`);
   }
   const fujinApp = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
-  assert.ok(fujinApp.includes('<Icon name={t.icon} size={26} />'), 'category tiles render the shared key');
+  // The category tiles are gone (UX direction, Nov 19 2026 — P1-1):
+  // the header nav and the widget tabs are the category entries.
+  assert.ok(!fujinApp.includes('CATEGORY_TILES'), 'no category tiles remain');
   const header = readFileSync(new URL('../components/SiteHeader.tsx', import.meta.url), 'utf8');
-  // The header nav is text-only (review round, Nov 17 2026 — gap 12):
-  // the category tiles below the hero already carry the icons.
+  // The header nav is text-only (review round, Nov 17 2026 — gap 12).
   assert.ok(!header.includes('<Icon name={t.icon}'), 'no category icon in the header nav');
   const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
   assert.ok(widget.includes('<Icon name={t.icon} size={16} />'), 'widget tabs render the shared key');
@@ -731,9 +731,9 @@ test('restructure: micro-interactions animate transform only, 150–300ms', () =
 test('restructure: the new grids stack to one column at 390px', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const mobile = css.slice(css.indexOf('@media (max-width:640px){', css.indexOf('/* Homepage restructure')));
-  assert.ok(mobile.includes('.pkg-grid,.deals-grid{grid-template-columns:1fr}'), 'package + deals grids collapse to one column');
+  assert.ok(mobile.includes('.pkg-grid{grid-template-columns:1fr}'), 'the package grid collapses to one column');
   assert.ok(mobile.includes('.pkg-card--hero{grid-column:auto}'), 'the hero card stops spanning on a phone');
-  assert.ok(!css.includes('.fares-strip'), 'the cheapest-fares strip is gone (merged into Deals)');
+  assert.ok(!css.includes('.fares-strip'), 'the cheapest-fares strip is gone');
   assert.ok(css.includes('.pkg-actions button,.pkg-actions a{min-height:44px'), 'package actions are 44px touch targets');
 });
 
@@ -764,7 +764,7 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   assert.ok(!css.includes('.flight-filter-bar'), 'the flights filter bar is gone — its facets live in the rail');
   assert.ok(css.includes('.results-count-row{display:flex'), 'the flight count row sits above the list');
   assert.ok(!css.includes('.stay-filter-bar'), 'the stays filter bar is gone — its filters live in the sidebar');
-  for (const grid of ['.result-cards', '.pkg-grid', '.deals-grid', '.flight-card-grid', '.cat-tiles']) {
+  for (const grid of ['.result-cards', '.pkg-grid', '.flight-card-grid']) {
     assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:20px`).test(css), `${grid} breathes at a 20px gap`);
   }
   assert.ok(css.includes('footer{border-top:1px solid var(--line);padding:48px 0 32px;color:var(--muted);font-size:13px;background:var(--surface)}'), 'the footer is a surface-1 band with tightened bottom padding');
@@ -782,9 +782,13 @@ test('review fixes: flights shelf copy, summary headings, price indentation', ()
   const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   assert.ok(!app.includes('Live fares arrive as suppliers connect'), 'the flights shelf never claims live fares are still coming');
+  // The flights shelf is gone (UX direction, Nov 19 2026 — P1-1):
+  // the live-sources line lives in the results bar now, where the
+  // fares actually appear.
+  assert.ok(!app.includes('Live fares from Ignav and LetsFG appear in the flight results'), 'no flights-shelf copy remains on the homepage');
   assert.ok(
-    app.includes('Live fares from Ignav and LetsFG appear in the flight results'),
-    'the flights shelf names the live fare sources',
+    results.includes('plus live fares from Ignav and LetsFG'),
+    'the results bar names the live fare sources',
   );
   assert.ok(!app.includes('<summary><h3'), 'no heading sits inside a summary element');
   assert.ok(app.includes('className="details-heading"'), 'the summary headings use the styled span');
@@ -802,23 +806,27 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const pkgs = readFileSync(new URL('../components/PackagesSection.tsx', import.meta.url), 'utf8');
-  const deals = readFileSync(new URL('../components/DealsSection.tsx', import.meta.url), 'utf8');
+  const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
   const data = readFileSync(new URL('../lib/data.ts', import.meta.url), 'utf8');
   const voices = readFileSync(new URL('../components/HomeSections.tsx', import.meta.url), 'utf8');
   const header = readFileSync(new URL('../components/SiteHeader.tsx', import.meta.url), 'utf8');
-  // 1 — the landing shelf shows only when the URL carries a ?tab=.
-  assert.ok(homeTabs.includes('homeTabIdFromQueryOrNull'), 'the null-returning tab parser exists');
-  assert.ok(page.includes('initialLandingTab={homeTabIdFromQueryOrNull'), 'the homepage passes the landing tab separately');
-  assert.ok(app.includes('initialLandingTab ?? null'), 'the shelf state starts from the landing tab, not the widget tab');
+  // 1 — the landing shelf is cut (UX direction, Nov 19 2026 —
+  // P1-1): a ?tab= link switches the widget tab, nothing more. No
+  // shelf state, no shelf copy, no null-returning tab parser.
+  assert.ok(!homeTabs.includes('homeTabIdFromQueryOrNull'), 'the null-returning tab parser is gone with the shelf');
+  assert.ok(!page.includes('initialLandingTab'), 'the homepage passes no landing tab anymore');
+  assert.ok(page.includes('initialTab={homeTabIdFromQuery'), 'a ?tab= link still switches the widget tab');
+  assert.ok(!app.includes('SHELF_COPY'), 'no shelf copy remains');
+  assert.ok(!app.includes('shelfEntries'), 'no shelf entries remain');
   // 2 — distinct section grammars: photo destination cards, deals grid.
   assert.ok(!app.includes('dest-card--photo'), 'destination cards no longer use the overlay variant');
   assert.ok(!app.includes('dest-overlay'), 'the name + from-price no longer overlay the photo');
   assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the white body, below the photo');
-  assert.ok(!deals.includes('            row'), 'the deals shelf no longer renders the wide-row layout');
   assert.ok(!css.includes('.dest-overlay'), 'the overlay style is gone');
   assert.ok(css.includes('.card .body .result-price{font-size:22px'), 'the body price is the 22px price-card');
   assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
-  assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:repeat(3,1fr)'), 'deals are a 3-column grid');
+  assert.ok(!existsSync(new URL('../components/DealsSection.tsx', import.meta.url)), 'the deals component is deleted with the band');
+  assert.ok(!css.includes('.deals-grid'), 'no deals-grid style remains');
   // 3 — package cards show one price and one action (UX direction,
   // Nov 19 2026 — P0-3): the includes breakdown + tiers moved to
   // the package detail page; the expander is gone.
@@ -841,28 +849,37 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(results.includes('type="checkbox"'), 'the facets use real checkboxes');
   assert.ok(css.includes('.facet-check{'), 'the facet checkbox style exists');
   assert.ok(!css.includes('.stay-filter-bar'), 'the stays bar rule is gone from the CSS');
-  // 7 — weekend trips carry photos.
-  assert.ok(data.includes("image: weekendPhoto('Paris')"), 'the default trips have photos');
-  assert.ok(data.includes("image: CITY_PHOTOS['New York']"), 'the New York trips use the real skyline');
-  assert.ok(app.includes('l.image'), 'the weekend cards render the photo');
+  // 7 — the weekend band is cut (UX direction, Nov 19 2026 —
+  // P1-1): "Weekend trips near you" goes until location actually
+  // works. The local-trip data stays in lib/data.ts for the future
+  // "Near you" filter — the band just doesn't render it.
+  assert.ok(!app.includes('Weekend trips near you'), 'no weekend band on the homepage');
+  assert.ok(!app.includes('LOCAL_TRIPS'), 'the homepage no longer reads the local trips');
+  assert.ok(data.includes('LOCAL_TRIPS'), 'the local-trip data stays for later');
   // 8 — Local Voices is photo cards with one View trip action
   // (UX direction, Nov 19 2026 — P0-3).
   assert.ok(voices.includes('voicePhoto'), 'each place resolves a photo');
   assert.ok(voices.includes('>View trip<'), 'the cards carry one View trip action');
   assert.ok(!voices.includes('Destination guide →'), 'no separate guide link — View trip is the one action');
   assert.ok(!voices.includes('<strong>To try</strong>'), 'the full guide text moved off the card');
-  // 9 — My Trips collapses behind one details when empty.
-  assert.ok(app.includes('myTripsEmpty'), 'the empty state is computed');
-  assert.ok(app.includes('Your trips, account and settings'), 'the collapsed section has one summary');
+  // 9 — My Trips lives on /account now (UX direction, Nov 19 2026
+  // — P1-1): the account page renders the trips, preferences,
+  // emergency contact, embassy number and price watches directly —
+  // never collapsed behind a homepage <details> anymore.
+  assert.ok(app.includes("variant === 'account'"), 'the account variant exists');
+  assert.ok(app.includes('<h1 id="mytrips">My Trips</h1>'), 'the account page carries the My Trips heading');
+  assert.ok(!app.includes('myTripsEmpty'), 'no homepage collapse state remains');
   // 10 — the results page no longer triple-stacks chrome.
   assert.ok(!results.includes('<h2>{label}</h2>'), 'the redundant results heading is gone');
   assert.ok(!results.includes('results-honesty'), 'the standalone honesty paragraph is gone');
   assert.ok(results.includes('results-bar-note'), 'the honesty line lives in the results bar');
   assert.ok(!css.includes('.results-honesty'), 'the honesty style is gone');
-  // 11 — the fares strip is gone; its honesty copy lives in the
-  // Deals band now (UX direction, Nov 19 2026 — P0-7).
+  // 11 — the fares strip is gone; the honesty line lives in the
+  // widget now (UX direction, Nov 19 2026 — P1-3): one line per
+  // page, not twenty. The deals band is gone with it (P1-1).
   assert.ok(!existsSync(new URL('../components/FaresStrip.tsx', import.meta.url)), 'the fares strip component is deleted');
-  assert.ok(deals.includes('planning estimates until live suppliers connect'), 'the deals band still says the prices are estimates');
+  assert.ok(widget.includes('Prices are planning estimates until live suppliers connect'), 'the widget carries the one honesty line');
+  assert.ok(widget.includes('how pricing works'), 'the honesty line links the pricing explainer');
   // 12 — the header nav is text-only.
   assert.ok(!header.includes('<Icon name={t.icon}'), 'no category icon in the header nav');
 });
@@ -875,7 +892,7 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   // direction, Nov 19 2026 — P0-2: results pages are results only),
   // and "Clear search" brings the browse sections back.
   assert.ok(app.includes('{!search && ('), 'the browse sections hide while a search is active');
-  assert.equal((app.match(/\{!search && \(/g) || []).length, 2, 'browse sections and My Trips both gate on no search');
+  assert.equal((app.match(/\{!search && \(/g) || []).length, 1, 'the browse sections gate once — My Trips lives on /account, not behind the search gate');
   assert.ok(app.includes("{variant === 'home' && !search && ("), 'the trust strip hides on results pages too');
   assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
   assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
@@ -889,8 +906,9 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   // Tokens — section headings 24px, sections 48px apart.
   assert.ok(css.includes('section h2{font-size:24px'), 'section headings are 24px');
   assert.ok(css.includes('.home-section{padding:48px 0}'), 'sections sit 48px apart');
-  // 4 + 5 + 6 — deals grid, package photos, section rhythm.
-  assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:repeat(3,1fr)'), 'deals are a 3-column grid, not empty rows');
+  // 4 + 5 + 6 — package photos, section rhythm. (The deals grid is
+  // gone with the deals band — UX direction, Nov 19 2026, P1-1.)
+  assert.ok(!css.includes('.deals-grid'), 'no deals-grid style remains');
   assert.ok(css.includes('.pkg-photo{width:100%;aspect-ratio:4/3'), 'package photos are 4:3, not thin strips');
   assert.ok(css.includes('.pkg-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto'), 'package actions pin to the card bottom');
   assert.ok(css.includes('section{padding:48px 0}'), 'sections sit 48px apart, not 64px');

@@ -824,7 +824,13 @@ export default function SearchWidget({
           {note}
         </p>
       )}
-      <p className="sw-honest">All-in prices. No hidden fees. Planning estimates until live suppliers connect.</p>
+      {/* One honesty line for the homepage (UX direction, Nov 19
+          2026 — P1-3): the per-card "planning estimate" repetition is
+          gone, this line + the trust strip carry it. */}
+      <p className="sw-honest">
+        Prices are planning estimates until live suppliers connect —{' '}
+        <a href="/faq#pricing">how pricing works →</a>
+      </p>
     </div>
   );
 }

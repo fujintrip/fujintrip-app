@@ -85,7 +85,9 @@ test('homepage: white hero + search widget with 7 tabs, destinations, trust stri
   // Flights is the default form (airline booking is the first window,
   // Nov 15 2026); the honest line sits under the button.
   assert.ok(html.includes('Search flights'), 'the Flights search form renders by default');
-  assert.ok(html.includes('All-in prices. No hidden fees. Planning estimates until live suppliers connect.'), 'the widget honesty line renders');
+  assert.ok(html.includes('Prices are planning estimates until live suppliers connect'), 'the widget honesty line renders');
+  assert.ok(html.includes('href="/faq#pricing"'), 'the honesty line links the pricing explainer');
+  assert.ok(html.includes('how pricing works'), 'the honesty line names the explainer');
   // Exactly ONE AI entry point on the site — the header pill.
   assert.equal((html.match(/Plan with AI/g) || []).length, 1, 'exactly one Plan with AI pill');
   assert.equal((html.match(/Build full plan with AI/g) || []).length, 0, 'no big AI button under the hero');
@@ -96,12 +98,16 @@ test('homepage: white hero + search widget with 7 tabs, destinations, trust stri
   assert.ok(html.includes('All-in prices — the price you see is the price you pay'), 'trust: all-in prices');
   assert.ok(html.includes('No hidden fees — our flight service fee is shown separately at checkout'), 'trust: no hidden fees');
   assert.ok(html.includes('Compare prices from different sources'), 'trust: compare prices');
-  // Browse sections below the hero.
+  // Browse sections below the hero — six bands (P1-1): the category
+  // tiles and the weekend band are cut; the hidden gems live inside
+  // Destinations now, and the stories live in the merged Community
+  // band with Local Voices.
   assert.ok(html.includes('Popular destinations'), 'Popular destinations renders');
-  assert.ok(html.includes('What do you need for your trip?'), 'category tiles render');
-  assert.ok(html.includes('Weekend trips near you'), 'Near you renders');
-  assert.ok(html.includes('Featured hidden gems'), 'hidden gems render');
-  assert.ok(html.includes("Travelers' stories"), 'community stories render');
+  assert.ok(!html.includes('What do you need for your trip?'), 'no category tiles band');
+  assert.ok(!html.includes('Weekend trips near you'), 'no weekend band until location works');
+  assert.ok(html.includes('Featured hidden gems'), 'hidden gems render inside Destinations');
+  assert.ok(html.includes("Travelers' stories"), 'community stories render in the merged band');
+  assert.ok(html.includes('Local voices'), 'local voices render in the merged band');
   assert.ok(html.includes('Show more destinations'), 'the destinations expander renders');
   assert.ok(html.includes('per traveler'), 'destination cards carry a per-traveler price line');
   // NO results before a search — the results shell renders only after
@@ -139,6 +145,30 @@ test('homepage hero is white: no background photo, no rotation, headline + sub +
   // The Kyoto photo still renders on the homepage — but only as the
   // Kyoto destination card, not as a hero background.
   assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto card photo still renders');
+});
+
+test('search widget is server-rendered: the homepage SSR text carries the widget shell (UX direction, Nov 19 2026 — P1-4)', async () => {
+  // The expert review reported no search widget in the SSR text.
+  // It is there now: the pill bar, the tabs and every field label
+  // render server-side (client components SSR in Next.js). What is
+  // still client-only, honestly: the place suggestions (fetched on
+  // typing), the date min (set after mount so the server UTC date
+  // never mismatches the traveler's local date), and the deep-link
+  // auto-submit (a mount effect).
+  const r = await fetch(`${BASE}/`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  assert.ok(html.includes('sw-bar'), 'the pill bar renders server-side');
+  for (const label of ['Flights', 'Stays', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']) {
+    assert.ok(html.includes(label), `widget tab ${label} renders server-side`);
+  }
+  for (const field of ['Flying from', 'Flying to', 'Depart', 'Return', 'Travelers', 'Cabin']) {
+    assert.ok(html.includes(field), `Flights field ${field} renders server-side`);
+  }
+  assert.ok(html.includes('aria-label="Search flights"'), 'the search button renders server-side with its label');
+  assert.ok(html.includes('Round-trip'), 'the trip-type control renders server-side');
+  // And the widget comes before the trust strip, not after it.
+  assert.ok(html.indexOf('sw-bar') < html.indexOf('All-in prices — the price you see is the price you pay'), 'the widget precedes the trust strip');
 });
 
 test('footer pages: /about, /faq and /contact are real pages, and the footer links to them (defect, Nov 15 2026)', async () => {
@@ -196,6 +226,56 @@ test('search deep link: flights with dates renders the results shell — budget,
   assert.ok(!html.includes('Popular destinations'), 'no destinations shelf below the results');
   assert.ok(!html.includes('id="mytrips"'), 'no My Trips block below the results');
   assert.ok(!html.includes('Book now'), 'no Book now in the results');
+});
+
+test('deep-link integrity: a Dec 10–17 flight link renders Dec 10–17, never Dec 10–23 (UX direction, Nov 19 2026 — P1-5)', async () => {
+  // The expert review reported a Dec 17 return rendering as Dec
+  // 10–23. It does not reproduce: Dec 10–23 is exactly the no-return
+  // fallback (depart + 13 days), and the param seam round-trips the
+  // return (see normalSite.test.mjs). This pins the rendered result.
+  const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=London&depart=2026-12-10&return=2026-12-17&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('2026-12-10'), 'the departure renders');
+  assert.ok(html.includes('2026-12-17'), 'the return renders as Dec 17');
+  assert.ok(!html.includes('2026-12-23'), 'no Dec 23 fallback date appears');
+});
+
+test('stays results: sandbox hotels sit behind a Sample stays disclosure, tiers lead (UX direction, Nov 19 2026 — P1-2)', async () => {
+  const r = await fetch(`${BASE}/?tab=hotels&dest=London&depart=2026-12-10&return=2026-12-17&guests=2&rooms=1`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  // The planning-estimate tiers lead: they render server-side.
+  assert.ok(html.includes('Stays in London'), 'the stays tiers render');
+  assert.ok(html.includes('Best value'), 'the Best value stay tier renders');
+  // The sandbox hotels are behind the disclosure, closed by default
+  // — the summary renders, the hotel list does not headline. (The
+  // literal name also appears in the intro paragraph above the
+  // tiers, so the order check uses the disclosure element itself.)
+  assert.ok(html.includes('Sample stays (test data)'), 'the sample-stays disclosure renders');
+  assert.ok(html.indexOf('class="sample-stays"') > html.indexOf('Stays in London'), 'the disclosure element sits below the tiers');
+});
+
+test('package cards name the trip, not planner math (UX direction, Nov 19 2026 — P1-8)', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  const pkgHtml = html.slice(html.indexOf('Ready-made packages'), html.indexOf('Popular destinations'));
+  // "13 nights, 3 cities, 9 experiences" — what the trip IS.
+  assert.ok(pkgHtml.includes('nights ·'), 'package cards name the nights');
+  assert.ok(pkgHtml.includes('cities ·'), 'package cards name the cities');
+  assert.ok(pkgHtml.includes('experiences'), 'package cards name the experiences');
+  // The per-leg dollar breakdown stays on the detail page only.
+  assert.ok(!pkgHtml.includes('Flight $'), 'no per-leg dollar breakdown on the card');
+  assert.ok(!pkgHtml.includes('Stay $'), 'no per-leg dollar breakdown on the card');
+});
+
+test('hidden gems carry FujinTrip framing, never a competitor trend claim (UX direction, Nov 19 2026 — P1-9)', async () => {
+  const r = await fetch(`${BASE}/`);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Our fastest-growing US hidden gem'), 'St. George carries our own framing');
+  assert.ok(!html.includes('on Expedia'), 'no Expedia trend claim on any card');
+  assert.ok(!html.includes('Google Flights'), 'no Google Flights trend claim on any card');
+  assert.ok(!html.includes('+125% accommodation searches'), 'no invented search-growth percentage');
 });
 
 test('search deep link: a Business-cabin flight search labels the planner budget as the economy estimate (defect, Nov 15 2026)', async () => {
@@ -968,10 +1048,11 @@ test('community: /community renders the hub, the honest notes, and links back; t
   const homeHtml = await home.text();
   assert.ok(homeHtml.includes('href="/community"'), 'homepage links to the Community');
   assert.ok(homeHtml.includes('Visit the Community'), 'stories section points at the Community');
-  // Share-out renders on every shareable card: 9 package cards
-  // (6 featured + 3 deals) + 8 destination cards + 3 hidden gems.
+  // Share-out renders on every shareable card: 6 package cards
+  // (the deals band is gone — P1-1) + 8 destination cards + 3
+  // hidden gems.
   const shareButtons = (homeHtml.match(/>Share<\/button>/g) ?? []).length;
-  assert.equal(shareButtons, 20, 'one Share button per package and destination card');
+  assert.equal(shareButtons, 17, 'one Share button per package and destination card');
   assert.ok(homeHtml.includes('href="/community"'), 'header links to the Community');
 
   const reelsPage = await fetch(`${BASE}/reels`);
@@ -1127,11 +1208,13 @@ test('popular destinations (direction v3): 8 cards + expander, per-traveler pric
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // Eight cards on load; the rest wait behind the expander — 12
-  // total now, not 26: the featured packages, the deals, the hidden
-  // gems, Europe and the Local Voices places each have a band of
-  // their own and are excluded from Popular.
-  assert.ok(html.includes('Show more destinations (4 more)'), 'the expander counts the remaining 4');
+  // Eight cards on load; the rest wait behind the expander — 15
+  // total now, not 26: the featured packages, the hidden gems,
+  // Europe and the Local Voices places each have a band of their own
+  // and are excluded from Popular. The 3 former deals destinations
+  // live here now that the deals band is gone (P1-1) — India leads
+  // the visible eight.
+  assert.ok(html.includes('Show more destinations (7 more)'), 'the expander counts the remaining 7');
   // The first 8 are the first deduped discovery entries, so the
   // standalone destinations (Maldives, Paris) are not on it.
   assert.ok(!html.includes('>Maldives<'), 'Maldives waits behind the expander');
@@ -1149,7 +1232,8 @@ test('popular destinations (direction v3): 8 cards + expander, per-traveler pric
   // separate elements instead of one overlay line.)
   assert.ok(html.includes('from $1,450'), 'Portugal card carries the per-traveler price');
   assert.ok(html.includes('class="result-price"'), 'the price is the 22px price-card in the body');
-  assert.ok(html.includes('Best value · 2 travelers · planning estimate'), 'the price line is labeled a planning estimate');
+  assert.ok(html.includes('Best value · 2 travelers'), 'the price line names the tier');
+  assert.ok(!html.includes('Best value · 2 travelers · planning estimate'), 'no per-card planning-estimate label — the widget line covers the page');
   // The card action opens the trip — it never seeds the chat, and
   // the old library actions are gone.
   assert.ok(html.includes('View trip'), 'the card action opens the trip');
@@ -1536,19 +1620,29 @@ test('account gate: /sign-in and /sign-up render the not-set-up state with no Cl
   }
 });
 
-test('account gate: the homepage and /chat still work with no Clerk keys, and My Trips says sign-in is not set up (Nov 14)', async () => {
-  for (const path of ['/', '/chat']) {
+test('account gate: the homepage, /chat and /account still work with no Clerk keys, and My Trips says sign-in is not set up (Nov 14)', async () => {
+  for (const path of ['/', '/chat', '/account']) {
     const r = await fetch(`${BASE}${path}`);
     assert.equal(r.status, 200, `${path} 200 without Clerk keys`);
     const html = await r.text();
     assert.ok(!html.includes('Missing publishable key'), `${path}: no Clerk key error`);
     assert.ok(!html.includes('Clerk: '), `${path}: no Clerk error text`);
   }
-  // The My Trips account box renders server-side with the honest
+  // My Trips lives on /account now (UX direction, Nov 19 2026 —
+  // P1-1): the account box renders server-side with the honest
   // not-configured state — the gate never blocks the page itself.
+  // The homepage carries no My Trips section anymore.
   const home = await (await fetch(`${BASE}/`)).text();
-  assert.ok(home.includes('Free account'), 'My Trips shows the free-account box');
-  assert.ok(home.includes('sign-in isn'), 'My Trips says sign-in is not set up yet');
+  assert.ok(!home.includes('id="mytrips"'), 'no My Trips section on the homepage');
+  assert.ok(!home.includes('Your travel preferences'), 'no preferences block on the homepage');
+  const account = await (await fetch(`${BASE}/account`)).text();
+  assert.ok(account.includes('My Trips'), 'the account page carries My Trips');
+  assert.ok(account.includes('Free account'), 'My Trips shows the free-account box');
+  assert.ok(account.includes('sign-in isn'), 'My Trips says sign-in is not set up yet');
+  assert.ok(account.includes('Your travel preferences'), 'preferences live on the account page');
+  assert.ok(account.includes('Emergency contact'), 'emergency contact lives on the account page');
+  assert.ok(account.includes('Price watches'), 'price watches live on the account page');
+  assert.ok(account.includes('href="/account"'), 'the header My Trips link points at the account page');
 });
 
 test('mobile: viewport meta is device-width and the hamburger is served', async () => {
@@ -1574,37 +1668,41 @@ test('mobile: the served stylesheet carries the phone rules', async () => {
   assert.ok(css.includes('input,select,textarea{font-size:16px}'), '16px form fields at phone width');
   assert.ok(css.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
   assert.ok(css.includes('.results-bar{top:65px}'), 'the results bar clears the phone header');
+  // P1-7 audit: the bar's 15px rule beat the generic 16px rule, so
+  // tapping a search field zoomed iOS — the bar fields are pinned
+  // to 16px at phone width now.
+  assert.ok(css.includes('.sw-bar .sw-field input,.sw-bar .sw-field select{font-size:16px}'), 'bar fields stay 16px on a phone — no iOS zoom');
+  assert.ok(css.includes('.mytrips li{flex-wrap:wrap}'), 'My Trips rows wrap on the account page at phone width');
 });
 
-test('homepage restructure: sections in order — trust under the hero/results, tiles, packages, fares, deals, destinations, how it works, stories, voices, near you, My Trips (Nov 16 2026)', async () => {
+test('homepage restructure: six bands in order — hero, trust, packages, destinations, how it works, community (UX direction, Nov 19 2026 — P1-1)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The order is the interface round (Nov 16 2026): the trust strip
-  // sits directly under the hero (under the results when a search is
-  // active), the category tiles come first in the page body, and only
-  // then the packages centerpiece, the deals, and the browse
-  // sections. The cheapest-fares strip is gone (UX direction, Nov 19
-  // 2026 — P0-7): its trips live in the Deals band now. The trust
-  // lines repeat in the footer.
+  // The order is the P1 cut: the trust strip sits directly under the
+  // hero (under the results when a search is active), then the
+  // ready-made trips, the Destinations band (Popular + hidden gems),
+  // Plan/Book/Follow, and the merged Community band (voices, then
+  // stories). The tiles, the deals, the weekend band and the homepage
+  // My Trips section are all gone.
   const order = [
     'Where to?',
     'All-in prices — the price you see is the price you pay',
-    'What do you need for your trip?',
     'Ready-made packages',
-    'Our lowest prices this week',
     'Popular destinations',
+    'Featured hidden gems',
     'Plan, book, follow',
-    "Travelers' stories",
     'What travelers say, from the places you go',
-    'Weekend trips near you',
-    'id="mytrips"',
+    "Travelers' stories",
   ];
   let prev = -1;
   for (const marker of order) {
     const i = html.indexOf(marker);
     assert.ok(i > prev, `${marker} renders after the previous section (at ${i}, prev ${prev})`);
     prev = i;
+  }
+  for (const gone of ['What do you need for your trip?', 'Our lowest prices this week', 'Weekend trips near you', 'id="mytrips"']) {
+    assert.ok(!html.includes(gone), `cut band stays cut: ${gone}`);
   }
 });
 
@@ -1644,22 +1742,23 @@ test('activity detail page: without keys the sandbox search answers honestly emp
   assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on an activity detail page');
 });
 
-test('homepage restructure: package cards are honest — planning estimates, one View trip action, never Book now (Nov 15 2026; UX direction, Nov 19 2026 — P0-3)', async () => {
+test('homepage restructure: package cards are honest — one honesty line, one View trip action, never Book now (Nov 15 2026; UX direction, Nov 19 2026 — P0-3, P1-1, P1-3)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
   assert.ok(html.includes('Pick a trip, ready to go'), 'packages heading renders');
   assert.ok(html.includes('Ready-made trips'), 'packages eyebrow renders');
-  // 6 featured packages + 3 deals = 9 cards, each with one action —
-  // counted inside the packages + deals sections only, since the
-  // Popular, gem and voices cards carry View trip too.
+  // 6 featured packages, each with one action — counted inside the
+  // packages section only, since the Popular, gem and voices cards
+  // carry View trip too. (The deals band is gone — P1-1.)
   const pkgHtml = html.slice(html.indexOf('Ready-made packages'), html.indexOf('Popular destinations'));
-  assert.equal((pkgHtml.match(/View trip/g) || []).length, 9, '9 package cards render View trip');
+  assert.equal((pkgHtml.match(/View trip/g) || []).length, 6, '6 package cards render View trip');
   assert.equal((pkgHtml.match(/View package/g) || []).length, 0, 'no View package action remains');
-  // Every card price is a planning estimate — 9 package cards, 8
-  // Popular destinations and 3 hidden gems carry the label.
-  assert.ok((html.match(/planning estimate/g) || []).length >= 20, 'every package, destination and gem price is labeled planning estimate');
-  assert.ok(!html.includes('The lowest prices across our routes'), 'the cheapest-fares strip is gone — merged into Deals');
-  assert.ok(html.includes('Our lowest prices this week'), 'deals of the week renders');
+  // One honesty line per page (P1-3): the widget line under the
+  // search carries it — no per-card "planning estimate" repetition.
+  assert.ok(html.includes('Prices are planning estimates until live suppliers connect'), 'the one honesty line renders');
+  assert.ok(!pkgHtml.includes('planning estimate'), 'no per-card estimate label on package cards');
+  assert.ok(!html.includes('The lowest prices across our routes'), 'the cheapest-fares strip is gone');
+  assert.ok(!html.includes('Our lowest prices this week'), 'the deals band is gone');
   assert.ok(html.includes('How it works') || html.includes('Plan, book, follow'), 'how it works renders');
   assert.ok(html.includes('What travelers say, from the places you go'), 'local voices teaser renders');
   assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on the packages either');

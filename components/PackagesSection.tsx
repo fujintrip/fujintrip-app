@@ -53,15 +53,21 @@ export function PackageCard({
         <h3>{pkg.destination}</h3>
         <p className="pkg-route">{pkg.stops.join(' → ')}</p>
         <p className="pkg-meta">
-          <Icon name="calendar" size={15} /> {pkg.nights} nights · {pkg.days} days
+          <Icon name="calendar" size={15} /> {pkg.nights} nights · {pkg.stops.length}{' '}
+          {pkg.stops.length === 1 ? 'city' : 'cities'} · {pkg.experiences} experiences
         </p>
         <p className="pkg-price">
           from ${price.perTraveler.toLocaleString()} <span>per traveler</span>
         </p>
-        <p className="plan-muted">
-          {price.label}
-          {price.source ? ` · ${price.source}` : ''}
-        </p>
+        {/* The estimate label is gone from the card (UX direction,
+            Nov 19 2026 — P1-3): one honesty line per page — the
+            widget line under the search — covers it. A LIVE fare
+            keeps its label + source, because that is the quote. */}
+        {price.source && (
+          <p className="plan-muted">
+            {price.label} · {price.source}
+          </p>
+        )}
         <div className="pkg-actions">
           <a className="primary" href={`/destination/${encodeURIComponent(pkg.destination)}`}>View trip</a>
         </div>
@@ -83,8 +89,7 @@ export default function PackagesSection({
       <p className="eyebrow">Ready-made trips</p>
       <h2>Pick a trip, ready to go</h2>
       <p className="sub">
-        Full plans — flights, stay, car and activities in one price. Pick one ready instead of building your own; the
-        price is a planning estimate until live suppliers connect.
+        Full plans — flights, stay, car and activities in one price. Pick one ready instead of building your own.
       </p>
       <div className="pkg-grid">
         {pkgs.map((pkg, i) => (

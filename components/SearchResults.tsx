@@ -1631,12 +1631,23 @@ function HotelbedsStays({
   const nights = state.data?.nights ?? null;
   const anyFilter = maxPrice !== null || starFilter !== null || zoneFilter !== null || boardFilter !== null;
   return (
-    <div aria-label="Hotelbeds sandbox hotels">
+    // Sample stays (UX direction, Nov 19 2026 — P1-2): the sandbox
+    // hotels sit behind a clearly labelled disclosure, closed by
+    // default — the planning-estimate tiers lead the stays results,
+    // so 1–3-star Room Only test hotels in Ilford/Heathrow are never
+    // the only named hotels a search returns. The sandbox label stays
+    // on every card inside, and never hides behind a filter (that
+    // exemption stands).
+    <details className="sample-stays">
+      <summary>
+        <span className="details-heading">Sample stays (test data)</span>
+        <span className="plan-muted">
+          {' '}
+          — test hotels from the Hotelbeds evaluation account, not live quotes, and the rooms cannot be booked.
+        </span>
+      </summary>
+      <div aria-label="Hotelbeds sandbox hotels">
       <h4>Hotels in {query.dest || 'your destination'} — Hotelbeds sandbox</h4>
-      <p className="plan-muted">
-        Test hotels from the Hotelbeds evaluation account — the prices below are sandbox test data, not live quotes,
-        and the rooms cannot be booked.
-      </p>
       {state.status === 'loading' && <p className="plan-muted">Checking Hotelbeds sandbox hotels…</p>}
       {state.status === 'done' && !state.data && (
         <p className="plan-muted">Hotelbeds could not be reached right now.</p>
@@ -1674,7 +1685,8 @@ function HotelbedsStays({
           </p>
         </>
       )}
-    </div>
+      </div>
+    </details>
   );
 }
 
@@ -1718,16 +1730,15 @@ function StayResults({
         {nights !== null ? ` · ${nights} night${nights > 1 ? 's' : ''}` : ''} · {guests} · {rooms}
       </h3>
       <p className="plan-muted">
-        Hotelbeds sandbox is connected — the test hotels below come from the Hotelbeds evaluation account. Live hotel
-        prices arrive when Expedia Rapid / Duffel Stays connect.
+        Hotelbeds sandbox is connected — sample test hotels are behind the &ldquo;Sample stays (test data)&rdquo;
+        disclosure below. Live hotel prices arrive when Expedia Rapid / Duffel Stays connect.
       </p>
       <p className="plan-muted">
-        Stay prices below are planning estimates from FujinTrip&apos;s planner — not live quotes, and no named property is
-        attached to them. Live bookable stays open as suppliers connect.
+        No named property is attached to these prices. Live bookable stays open as suppliers connect.
       </p>
       {tiers && (
         <>
-          <h4>Stays in {query.dest} — planning estimates</h4>
+          <h4>Stays in {query.dest}</h4>
           <div className="result-cards">
             {tiers.map((t) => (
               <article key={t.tier} className={`result-card${t.tier === stayTier ? ' result-match' : ''}`}>
@@ -1801,14 +1812,13 @@ function CarResults({
       </h3>
       <p className="plan-muted">Live car prices arrive when Rentalcars / CarTrawler connect.</p>
       <p className="plan-muted">
-        Car rental prices below are planning estimates from FujinTrip&apos;s planner — not live quotes, and no company or
-        model is attached to them. Live bookable cars open as suppliers connect.
+        No company or model is attached to these prices. Live bookable cars open as suppliers connect.
       </p>
       {query.pickupTime && <p className="plan-muted">Pick-up {query.pickupTime}.</p>}
       {!query.sameLocation && query.dropoff && <p className="plan-muted">Drop-off in {query.dropoff}.</p>}
       {tiers && (
         <>
-          <h4>Car rental in {query.dest} — planning estimates</h4>
+          <h4>Car rental in {query.dest}</h4>
           <div className="result-cards">
             {tiers.map((t) => (
               <article key={t.tier} className={`result-card${t.tier === carTier ? ' result-match' : ''}`}>
@@ -2077,12 +2087,11 @@ function TourResults({
       </h3>
       <p className="plan-muted">Live tours arrive when Viator / GetYourGuide / Klook connect.</p>
       <p className="plan-muted">
-        Attraction prices below are planning estimates from FujinTrip&apos;s planner — not live quotes, and no attraction,
-        tour, or operator is attached to them. Live bookable attractions open as suppliers connect.
+        No attraction, tour, or operator is attached to these prices. Live bookable attractions open as suppliers connect.
       </p>
       {tiers && (
         <>
-          <h4>Attractions in {query.dest} — planning estimates</h4>
+          <h4>Attractions in {query.dest}</h4>
           <div className="result-cards">
             {tiers.map((t) => (
               <article key={t.tier} className={`result-card${t.tier === tourTier ? ' result-match' : ''}`}>
@@ -2148,12 +2157,12 @@ function CruiseResults({
       <p className="plan-muted">Live cruise prices arrive when Traveltek connects.</p>
       {note && <p className="results-note">{note}</p>}
       <p className="plan-muted">
-        Cruise prices below are full-trip planning estimates from FujinTrip&apos;s planner — not cruise prices and not live
-        quotes, and no cruise line, ship, or sailing is attached to them. Live bookable cruises open as suppliers connect.
+        These are full-trip totals, not cruise prices, and no cruise line, ship, or sailing is attached to them. Live
+        bookable cruises open as suppliers connect.
       </p>
       {tiers && (
         <>
-          <h4>Cruises in {query.dest} — full-trip planning estimates</h4>
+          <h4>Cruises in {query.dest}</h4>
           <div className="result-cards">
             {tiers.map((t) => (
               <article key={t.tier} className={`result-card${t.tier === cruiseTier ? ' result-match' : ''}`}>
@@ -2216,12 +2225,12 @@ function BusResults({
       <p className="plan-muted">Live bus prices arrive when Distribusion / Busbud / FlixBus connect.</p>
       {note && <p className="results-note">{note}</p>}
       <p className="plan-muted">
-        Bus prices below are full-trip planning estimates from FujinTrip&apos;s planner — not bus prices and not live
-        quotes, and no bus operator, route, or timetable is attached to them. Live bookable buses open as suppliers connect.
+        These are full-trip totals, not bus prices, and no bus operator, route, or timetable is attached to them. Live
+        bookable buses open as suppliers connect.
       </p>
       {tiers && (
         <>
-          <h4>Buses to {query.to} — full-trip planning estimates</h4>
+          <h4>Buses to {query.to}</h4>
           <div className="result-cards">
             {tiers.map((t) => (
               <article key={t.tier} className={`result-card${t.tier === busTier ? ' result-match' : ''}`}>
@@ -2499,12 +2508,12 @@ function TaxiResults({
       <p className="plan-muted">Live taxi prices arrive when Uber / Lyft / Mozio connect.</p>
       {note && <p className="results-note">{note}</p>}
       <p className="plan-muted">
-        Taxi prices below are full-trip planning estimates from FujinTrip&apos;s planner — not taxi prices and not live
-        quotes, and no taxi company, route, or timetable is attached to them. Live bookable taxis open as suppliers connect.
+        These are full-trip totals, not taxi prices, and no taxi company, route, or timetable is attached to them. Live
+        bookable taxis open as suppliers connect.
       </p>
       {tiers && (
         <>
-          <h4>Taxis to {dropOff} — full-trip planning estimates</h4>
+          <h4>Taxis to {dropOff}</h4>
           <div className="result-cards">
             {tiers.map((t) => (
               <article key={t.tier} className={`result-card${t.tier === taxiTier ? ' result-match' : ''}`}>
@@ -3092,7 +3101,8 @@ export default function SearchResults({
         <span className="results-bar-note">
           {query.tab === 'flights'
             ? 'Planning estimates from FujinTrip\u2019s planner, plus live fares from Ignav and LetsFG.'
-            : 'Planning estimates from FujinTrip\u2019s planner — not live prices. Live inventory arrives as suppliers connect.'}
+            : 'Planning estimates from FujinTrip\u2019s planner — not live prices. Live inventory arrives as suppliers connect.'}{' '}
+          <a href="/faq#pricing">How pricing works →</a>
         </span>
         <button type="button" className="ghost" onClick={onEditSearch}>
           Edit search
