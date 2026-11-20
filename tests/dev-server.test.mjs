@@ -177,7 +177,7 @@ test('tabs: ?tab=flights shows the Flights form, still no results before a searc
   assert.ok(!html.includes('result-body'), 'no result cards before a search');
 });
 
-test('search deep link: flights with dates renders the results shell — budget, loading states, per-route estimates, honesty labels', async () => {
+test('search deep link: flights with dates renders the results shell — budget, loading states, honesty labels, results only (UX direction, Nov 19 2026 — P0-2)', async () => {
   const r = await fetch(`${BASE}/?tab=flights&from=New%20York&to=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
@@ -189,10 +189,12 @@ test('search deep link: flights with dates renders the results shell — budget,
   // until the effect fires), so its heading is not in the SSR HTML —
   // the API-level test below covers its honest empty state.
   assert.ok(!html.includes('Other sites (cached)'), 'the competitor column waits for the client fetch');
-  assert.ok(html.includes('Flights by destination — planning estimates'), 'the per-route flight estimates render');
-  assert.ok(html.includes('from $756 per traveler'), 'Central Europe flights from $756 per traveler');
-  assert.ok(html.includes('planning estimate'), 'the estimates are labeled');
-  assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
+  assert.ok(html.includes('planning estimate'), 'the budget is labeled');
+  // Results only: no browse shelf below the results.
+  assert.ok(!html.includes('Flights by destination'), 'no per-destination shelf below the results');
+  assert.ok(!html.includes('Our lowest prices this week'), 'no deals shelf below the results');
+  assert.ok(!html.includes('Popular destinations'), 'no destinations shelf below the results');
+  assert.ok(!html.includes('id="mytrips"'), 'no My Trips block below the results');
   assert.ok(!html.includes('Book now'), 'no Book now in the results');
 });
 
@@ -213,7 +215,7 @@ test('search deep link: stays with dates renders per-destination rows with Best 
   const html = (await r.text()).replace(/<!-- -->/g, '');
   assert.ok(html.includes('Planning estimates from FujinTrip'), 'the results honesty header renders');
   assert.ok(html.includes('from $594 per traveler'), 'Central Europe stays from $594 per traveler');
-  assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
+  assert.ok(html.includes('· planning estimate'), 'the tier-card prices are labeled planning estimates');
   assert.ok(html.includes('Show on map'), 'the Stays map toggle renders');
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
   // The Stays section (Nov 15, 2026): the searched destination's
@@ -233,12 +235,13 @@ test('search deep link: a tiered stays link renders that tier on first paint', a
   const r = await fetch(`${BASE}/?tab=hotels&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&guests=2&rooms=1&tier=cheapest`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The list prices in the Cheapest tier, and the tier is named on
-  // every card and in the count line — a tiered search is shareable.
-  assert.ok(html.includes('Cheapest · planning estimate'), 'the list labels the Cheapest tier');
-  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
-  assert.ok(html.includes('Cheapest stays'), 'the count line names the tier');
-  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The tiered link highlights the Cheapest tier card on first
+  // paint — the highlighted card is the Cheapest one, at its price
+  // — so a tiered search is shareable. (UX direction, Nov 19 2026
+  // — P0-2: the per-destination list and its count line are gone;
+  // the tier lives on the tier cards now.)
+  assert.ok(/result-card result-match[\s\S]{0,800}from \$396 per traveler/.test(html), 'the highlighted card is the Cheapest tier at $396');
+  assert.ok(!html.includes('Showing 21 of 21 destinations'), 'no per-destination count line remains');
   // The Best value figure is still there — on the tier cards, where
   // all three tiers always show.
   assert.ok(html.includes('from $594 per traveler'), 'the Best value tier card still renders');
@@ -268,7 +271,7 @@ test('search deep link: car rental with dates renders per-destination rows with 
   assert.ok(html.includes('$288 total for 2 travelers'), 'the Best value total is the party leg, not the rounded share times two');
   assert.ok(html.includes('13 days'), 'the heading and cards name the searched rental days');
   assert.ok(html.includes('Pick-up 10:00.'), 'the pick-up time from the link renders');
-  assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
+  assert.ok(html.includes('· planning estimate'), 'the tier-card prices are labeled planning estimates');
   assert.ok(html.includes('Car price'), 'the tier filter renders');
   assert.ok(html.includes('Live car prices arrive when Rentalcars / CarTrawler connect.'), 'the honest supplier line renders');
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
@@ -280,12 +283,11 @@ test('search deep link: a tiered car rental link renders that tier on first pain
   const r = await fetch(`${BASE}/?tab=cars&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2&tier=cheapest`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The list prices in the Cheapest tier, and the tier is named on
-  // every card and in the count line — a tiered search is shareable.
-  assert.ok(html.includes('Cheapest · planning estimate'), 'the list labels the Cheapest tier');
-  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
-  assert.ok(html.includes('Cheapest cars'), 'the count line names the tier');
-  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The tiered link highlights the Cheapest tier card on first
+  // paint (see the stays test — the per-destination list and its
+  // count line are gone, UX direction, Nov 19 2026 — P0-2).
+  assert.ok(/result-card result-match[\s\S]{0,800}from \$90 per traveler/.test(html), 'the highlighted card is the Cheapest tier at $90');
+  assert.ok(!html.includes('Showing 21 of 21 destinations'), 'no per-destination count line remains');
   // The Best value figure is still there — on the tier cards, where
   // all three tiers always show.
   assert.ok(html.includes('from $144 per traveler'), 'the Best value tier card still renders');
@@ -313,7 +315,7 @@ test('search deep link: attractions with dates renders per-destination rows with
   assert.ok(html.includes('from $504 per traveler'), 'the Premium tier card is $504 per traveler');
   assert.ok(html.includes('$612 total for 2 travelers'), 'the Best value total is the party leg, not the rounded share times two');
   assert.ok(html.includes('13 days'), 'the heading and cards name the searched visit days');
-  assert.ok(html.includes('Best value · planning estimate'), 'the rows are labeled planning estimates');
+  assert.ok(html.includes('· planning estimate'), 'the tier-card prices are labeled planning estimates');
   assert.ok(html.includes('Attraction price'), 'the tier filter renders');
   assert.ok(html.includes('Live tours arrive when Viator / GetYourGuide / Klook connect.'), 'the honest supplier line renders');
   assert.ok(html.includes('Save this search'), 'the primary action is Save this search');
@@ -324,12 +326,11 @@ test('search deep link: a tiered attractions link renders that tier on first pai
   const r = await fetch(`${BASE}/?tab=tours&dest=Central%20Europe&depart=2027-01-04&return=2027-01-17&travelers=2&tier=cheapest`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The list prices in the Cheapest tier, and the tier is named on
-  // every card and in the count line — a tiered search is shareable.
-  assert.ok(html.includes('Cheapest · planning estimate'), 'the list labels the Cheapest tier');
-  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
-  assert.ok(html.includes('Cheapest attractions'), 'the count line names the tier');
-  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The tiered link highlights the Cheapest tier card on first
+  // paint (see the stays test — the per-destination list and its
+  // count line are gone, UX direction, Nov 19 2026 — P0-2).
+  assert.ok(/result-card result-match[\s\S]{0,800}from \$162 per traveler/.test(html), 'the highlighted card is the Cheapest tier at $162');
+  assert.ok(!html.includes('Showing 21 of 21 destinations'), 'no per-destination count line remains');
   // The Best value figure is still there — on the tier cards, where
   // all three tiers always show.
   assert.ok(html.includes('from $306 per traveler'), 'the Best value tier card still renders');
@@ -394,7 +395,8 @@ test('search deep link: flights with past dates falls back to flexible dates (Fl
   assert.ok(visible.includes('aria-label="Departure date" value=""'), 'the Depart field is empty, not pre-filled with a past date');
   assert.ok(visible.includes('aria-label="Return date" value=""'), 'the Return field is empty, not pre-filled with a past date');
   assert.ok(html.includes('Plan flight budget'), 'the results still render with the planner budget');
-  assert.ok(html.includes('Save this search'), 'the primary action is still Save this search');
+  assert.ok(html.includes('Checking live fares'), 'the live-fares loading state still renders');
+  assert.ok(!html.includes('Popular destinations'), 'no browse shelf below the results');
 });
 
 test('search deep link: cruises renders the honest not-broken-out note and full-trip totals', async () => {
@@ -413,12 +415,11 @@ test('search deep link: a tiered cruise link renders that tier on first paint', 
   const r = await fetch(`${BASE}/?tab=cruises&dest=Central%20Europe&month=12&travelers=2&tier=cheapest`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The list prices in the Cheapest tier, and the tier is named on
-  // every card and in the count line — a tiered search is shareable.
-  assert.ok(html.includes('Cheapest · Full trip · planning estimate'), 'the list labels the Cheapest tier');
-  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
-  assert.ok(html.includes('Cheapest cruises'), 'the count line names the tier');
-  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The tiered link highlights the Cheapest tier card on first
+  // paint (see the stays test — the per-destination list and its
+  // count line are gone, UX direction, Nov 19 2026 — P0-2).
+  assert.ok(/result-card result-match[\s\S]{0,800}from \$1,152 per traveler/.test(html), 'the highlighted card is the Cheapest tier at $1,152');
+  assert.ok(!html.includes('Showing 21 of 21 destinations'), 'no per-destination count line remains');
   assert.ok(html.includes('Cruise price'), 'the tier filter renders');
   // The Best value figure is still there — on the tier cards, where
   // all three tiers always show.
@@ -465,12 +466,11 @@ test('search deep link: a tiered bus link renders that tier on first paint', asy
   const r = await fetch(`${BASE}/?tab=buses&from=New%20York&to=Central%20Europe&depart=2027-01-15&return=2027-01-22&travelers=2&tier=cheapest`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The list prices in the Cheapest tier, and the tier is named on
-  // every card and in the count line — a tiered search is shareable.
-  assert.ok(html.includes('Cheapest · Full trip · planning estimate'), 'the list labels the Cheapest tier');
-  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
-  assert.ok(html.includes('Cheapest buses'), 'the count line names the tier');
-  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The tiered link highlights the Cheapest tier card on first
+  // paint (see the stays test — the per-destination list and its
+  // count line are gone, UX direction, Nov 19 2026 — P0-2).
+  assert.ok(/result-card result-match[\s\S]{0,800}from \$1,152 per traveler/.test(html), 'the highlighted card is the Cheapest tier at $1,152');
+  assert.ok(!html.includes('Showing 21 of 21 destinations'), 'no per-destination count line remains');
   assert.ok(html.includes('Bus price'), 'the tier filter renders');
   // The Best value figure is still there — on the tier cards, where
   // all three tiers always show.
@@ -521,12 +521,11 @@ test('search deep link: a tiered taxi link renders that tier on first paint', as
   const r = await fetch(`${BASE}/?tab=taxis&from=New%20York&dropoff=Central%20Europe&depart=2027-01-15&time=09:30&travelers=2&tier=cheapest`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The list prices in the Cheapest tier, and the tier is named on
-  // every card and in the count line — a tiered search is shareable.
-  assert.ok(html.includes('Cheapest · Full trip · planning estimate'), 'the list labels the Cheapest tier');
-  assert.ok(html.includes('Showing 21 of 21 destinations'), 'the count line names the filtered list');
-  assert.ok(html.includes('Cheapest taxis'), 'the count line names the tier');
-  assert.ok(html.includes('Clear filters'), 'the count line offers to clear the filters');
+  // The tiered link highlights the Cheapest tier card on first
+  // paint (see the stays test — the per-destination list and its
+  // count line are gone, UX direction, Nov 19 2026 — P0-2).
+  assert.ok(/result-card result-match[\s\S]{0,800}from \$1,152 per traveler/.test(html), 'the highlighted card is the Cheapest tier at $1,152');
+  assert.ok(!html.includes('Showing 21 of 21 destinations'), 'no per-destination count line remains');
   assert.ok(html.includes('Taxi price'), 'the tier filter renders');
   // The Best value figure is still there — on the tier cards, where
   // all three tiers always show.
@@ -1124,32 +1123,42 @@ test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exi
   assert.ok(css.includes('.sos-missed'), 'stylesheet has the missed check-in banner');
 });
 
-test('popular destinations (direction v3): 8 cards + expander, per-traveler price lines, no filter pills, no pagination', async () => {
+test('popular destinations (direction v3): 8 cards + expander, per-traveler price lines, no filter pills, no pagination (UX direction, Nov 19 2026 — P0-7)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // Eight cards on load; the rest wait behind the expander (26 total).
-  assert.ok(html.includes('Show more destinations (18 more)'), 'the expander counts the remaining 18');
-  // The first 8 are the first discovery entries, so the standalone
-  // destinations (Maldives, Paris) are not on it.
+  // Eight cards on load; the rest wait behind the expander — 12
+  // total now, not 26: the featured packages, the deals, the hidden
+  // gems, Europe and the Local Voices places each have a band of
+  // their own and are excluded from Popular.
+  assert.ok(html.includes('Show more destinations (4 more)'), 'the expander counts the remaining 4');
+  // The first 8 are the first deduped discovery entries, so the
+  // standalone destinations (Maldives, Paris) are not on it.
   assert.ok(!html.includes('>Maldives<'), 'Maldives waits behind the expander');
   assert.ok(!html.includes('>Paris<'), 'Paris waits behind the expander');
+  assert.ok(html.includes('>Portugal<'), 'Portugal leads the deduped list');
+  // Central Europe has its own band (featured package) — it must
+  // not appear in the Popular section at all.
+  const popularHtml = html.slice(html.indexOf('Popular destinations'), html.indexOf('Plan, book, follow'));
+  assert.ok(!popularHtml.includes('Central Europe'), 'Central Europe is not repeated in Popular');
+  assert.ok(!popularHtml.includes('Japan'), 'Japan is not repeated in Popular');
   // A card carries the per-traveler Best value price line, never a
-  // counts line or a guessed rate. Central Europe is $3,600 for 2.
+  // counts line or a guessed rate. Portugal is $2,900 for 2.
   // (Audit round, Nov 17, 2026 — gap 10: the price lives in the
-  // white body now, so "from $1,800" and "per traveler" sit in
+  // white body now, so "from $1,450" and "per traveler" sit in
   // separate elements instead of one overlay line.)
-  assert.ok(html.includes('from $1,800'), 'Central Europe card carries the per-traveler price');
+  assert.ok(html.includes('from $1,450'), 'Portugal card carries the per-traveler price');
   assert.ok(html.includes('class="result-price"'), 'the price is the 22px price-card in the body');
   assert.ok(html.includes('Best value · 2 travelers · planning estimate'), 'the price line is labeled a planning estimate');
-  // The card action prefills the search widget — it never seeds the
-  // chat, and the old library actions are gone.
-  assert.ok(html.includes('Search this destination'), 'the card action prefills the search widget');
+  // The card action opens the trip — it never seeds the chat, and
+  // the old library actions are gone.
+  assert.ok(html.includes('View trip'), 'the card action opens the trip');
+  assert.ok(!html.includes('Search this destination'), 'no search-prefill button on the cards');
   assert.ok(!html.includes('Make it yours'), 'no Make it yours on the new cards');
   assert.ok(!html.includes('Plan this trip'), 'no Plan this trip on the homepage');
   // No filter pills, no pagination: the library is browse-only now.
   assert.ok(!html.includes('Filter packages by kind'), 'no filter pills group');
-  assert.ok(!html.includes('All (26)'), 'no All pill');
+  assert.ok(!html.includes('All (12)'), 'no All pill');
   assert.ok(!html.includes('Page 1 of 3'), 'no pagination');
 });
 
@@ -1574,14 +1583,15 @@ test('homepage restructure: sections in order — trust under the hero/results, 
   // The order is the interface round (Nov 16 2026): the trust strip
   // sits directly under the hero (under the results when a search is
   // active), the category tiles come first in the page body, and only
-  // then the packages centerpiece, the fares strip, the deals, and
-  // the browse sections. The trust lines repeat in the footer.
+  // then the packages centerpiece, the deals, and the browse
+  // sections. The cheapest-fares strip is gone (UX direction, Nov 19
+  // 2026 — P0-7): its trips live in the Deals band now. The trust
+  // lines repeat in the footer.
   const order = [
     'Where to?',
     'All-in prices — the price you see is the price you pay',
     'What do you need for your trip?',
     'Ready-made packages',
-    'The lowest prices across our routes',
     'Our lowest prices this week',
     'Popular destinations',
     'Plan, book, follow',
@@ -1634,18 +1644,21 @@ test('activity detail page: without keys the sandbox search answers honestly emp
   assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now on an activity detail page');
 });
 
-test('homepage restructure: package cards are honest — planning estimates, Save first, never Book now (Nov 15 2026)', async () => {
+test('homepage restructure: package cards are honest — planning estimates, one View trip action, never Book now (Nov 15 2026; UX direction, Nov 19 2026 — P0-3)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
   assert.ok(html.includes('Pick a trip, ready to go'), 'packages heading renders');
   assert.ok(html.includes('Ready-made trips'), 'packages eyebrow renders');
-  // 6 featured packages + 3 deals = 9 cards, each with both actions.
-  assert.equal((html.match(/View package/g) || []).length, 9, '9 package cards render View package');
-  assert.equal((html.match(/Save this search/g) || []).length, 9, '9 package cards render Save this search');
-  // Every card price is a planning estimate — 9 cards + 8 fare chips.
-  assert.ok((html.match(/planning estimate/g) || []).length >= 17, 'every package and fare-chip price is labeled planning estimate');
-  assert.ok(html.includes('Planning estimates, not live quotes'), 'the fares strip says the estimates are not live quotes');
-  assert.ok(html.includes('The lowest prices across our routes'), 'cheapest-fares strip renders');
+  // 6 featured packages + 3 deals = 9 cards, each with one action —
+  // counted inside the packages + deals sections only, since the
+  // Popular, gem and voices cards carry View trip too.
+  const pkgHtml = html.slice(html.indexOf('Ready-made packages'), html.indexOf('Popular destinations'));
+  assert.equal((pkgHtml.match(/View trip/g) || []).length, 9, '9 package cards render View trip');
+  assert.equal((pkgHtml.match(/View package/g) || []).length, 0, 'no View package action remains');
+  // Every card price is a planning estimate — 9 package cards, 8
+  // Popular destinations and 3 hidden gems carry the label.
+  assert.ok((html.match(/planning estimate/g) || []).length >= 20, 'every package, destination and gem price is labeled planning estimate');
+  assert.ok(!html.includes('The lowest prices across our routes'), 'the cheapest-fares strip is gone — merged into Deals');
   assert.ok(html.includes('Our lowest prices this week'), 'deals of the week renders');
   assert.ok(html.includes('How it works') || html.includes('Plan, book, follow'), 'how it works renders');
   assert.ok(html.includes('What travelers say, from the places you go'), 'local voices teaser renders');

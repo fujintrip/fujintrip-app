@@ -528,7 +528,7 @@ html{scroll-padding-bottom:96px}
 /* Share menu (social/community, Nov 15, 2026): the fallback panel
    wraps to its own line inside the flex action rows (reel cards,
    package cards), so it never squeezes beside the buttons. */
-.reel-actions .share-panel,.pkg-actions .share-panel{flex-basis:100%;margin-top:10px}
+.reel-actions .share-panel{flex-basis:100%;margin-top:10px}
 .share-panel .plan-note{margin-bottom:0}
 .reel-empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:20px;text-align:center}
 .reel-composer{border:1px solid var(--line);border-radius:12px;padding:18px;background:var(--card)}
@@ -686,6 +686,10 @@ html{scroll-padding-bottom:96px}
    discreet, muted, one line — "Duffel · test fare" / "Ignav · live,
    checked Nov 15 9:17 PM". */
 .fare-card-source{font-size:12px;color:var(--muted);margin:10px 0 0}
+/* Test-fare warning (UX direction, Nov 19 2026 — P0-4): unmissable
+   — bold, danger red, on every Duffel test-fare card. It never
+   hides behind a filter, unlike the small source tag above it. */
+.fare-test-warning{font-size:13px;font-weight:700;color:var(--danger);margin:10px 0 0}
 .fare-card-bags{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:10px 0 0}
 .fare-card-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;background:none;border:none;padding:0;font:inherit;font-size:14px;font-weight:600;color:var(--link);cursor:pointer}
 .fare-card-toggle:hover{color:var(--brand)}
@@ -1133,7 +1137,7 @@ button.continue-card:hover{border-color:var(--ink)}
 /* Icons: inline-flex alignment for every Lucide icon in the header,
    tabs, tiles and cards — the svg is decorative, the text carries it. */
 .site-nav a{display:inline-flex;align-items:center;gap:6px}
-.site-nav a svg,.sw-tab-icon svg,.cat-icon svg,.trust-icon svg,.pkg-meta svg,.pkg-includes svg,.step-icon svg,.voices-icon svg,.fare-chip-route svg{display:block}
+.site-nav a svg,.sw-tab-icon svg,.cat-icon svg,.trust-icon svg,.pkg-meta svg,.step-icon svg,.voices-icon svg{display:block}
 .sw-tab{display:inline-flex;align-items:center;gap:6px}
 .sw-tab-icon{display:inline-flex;align-items:center}
 .trust-icon{display:inline-flex;align-items:center;color:var(--accent-text)}
@@ -1159,28 +1163,9 @@ button.continue-card:hover{border-color:var(--ink)}
 .pkg-meta{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin:0 0 12px}
 .pkg-price{font-family:var(--font-display);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin:0}
 .pkg-price span{font-family:var(--font-sans);font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
-.pkg-includes{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:13px}
-.pkg-includes li{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
-.pkg-tiers{display:flex;flex-wrap:wrap;gap:4px 14px;font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:var(--muted);margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)}
-.pkg-tiers strong{color:var(--ink)}
-/* "See what's included" expander (review round, Nov 17 2026 —
-   gap 3): the includes breakdown + tier row hide behind a details
-   so the card shows one loud price. */
-.pkg-details{margin-top:14px}
-.pkg-details summary{cursor:pointer;font-weight:600;font-size:13px}
-.pkg-details .pkg-includes{margin-top:10px}
-.pkg-details .pkg-tiers{margin-top:10px}
 .pkg-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:auto;padding-top:16px}
-.pkg-actions button{min-height:44px;transition:transform 150ms ease}
-.pkg-actions button:active{transform:scale(.98)}
-/* Cheapest-fares strip: horizontal scroll with snap — the cheapest
-   routes, one chip each, planning estimate labeled on every chip. */
-.fares-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
-.fare-chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;cursor:pointer;text-align:left;color:var(--ink);min-height:44px;transition:transform 200ms ease}
-.fare-chip:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(13,16,35,.08);border-color:var(--ink)}
-.fare-chip-route{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:15px}
-.fare-chip-price{font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
-.fare-chip-label{font-size:12px;color:var(--muted)}
+.pkg-actions button,.pkg-actions a{min-height:44px;transition:transform 150ms ease}
+.pkg-actions button:active,.pkg-actions a:active{transform:scale(.98)}
 /* Deals of the week: wide horizontal rows, not another card grid. */
 .deals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 /* How it works: three steps, one per job — Plan, Book, Follow. */
@@ -1190,7 +1175,7 @@ button.continue-card:hover{border-color:var(--ink)}
 .step-num{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 4px}
 .step h3{margin:0 0 6px;font-size:19px}
 .step p:last-child{margin:0;font-size:14px;color:var(--muted)}
-/* Local voices teaser: one calm panel, chips that prefill the search. */
+/* Local voices teaser: one calm panel, chips that open the place's trip page. */
 .voices-teaser{display:flex;gap:20px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px}
 .voices-icon{display:flex;align-items:center;justify-content:center;flex:none;width:56px;height:56px;border-radius:12px;background:var(--accent-soft);color:var(--accent-text)}
 .voices-teaser h2{margin:0 0 6px}
@@ -1198,7 +1183,6 @@ button.continue-card:hover{border-color:var(--ink)}
 .voices-chips .chip{min-height:44px}
 .voices-link{display:inline-flex;align-items:center;gap:6px;text-decoration:none}
 @media (max-width:900px){
-  .fares-strip{grid-template-columns:repeat(2,1fr)}
   .pkg-grid{grid-template-columns:repeat(2,1fr)}
   .pkg-card--hero{grid-column:span 2;grid-row:auto}
   .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:220px}
@@ -1207,7 +1191,7 @@ button.continue-card:hover{border-color:var(--ink)}
 }
 @media (max-width:640px){
   .home-section{padding:28px 0 4px}
-  .pkg-grid,.deals-grid,.fares-strip{grid-template-columns:1fr}
+  .pkg-grid,.deals-grid{grid-template-columns:1fr}
   .pkg-card--hero{grid-column:auto}
   .pkg-card--hero .pkg-photo,.pkg-card--hero .pkg-photo-fallback{height:200px}
   .voices-teaser{flex-direction:column;padding:20px}

@@ -5,7 +5,7 @@
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/normalSite.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   cheapestOutBackTotal,
   destinationPhoto,
@@ -42,11 +42,17 @@ test('knownPlaceNames: every place the app knows, sorted, no duplicates', () => 
 });
 
 test('flightBudgetCopy: the planner budget is an economy figure — a non-economy cabin says so', () => {
-  assert.deepEqual(flightBudgetCopy('Economy'), { label: 'Plan flight budget', qualifier: 'planning estimate' });
-  assert.deepEqual(flightBudgetCopy(undefined), { label: 'Plan flight budget', qualifier: 'planning estimate' });
+  assert.deepEqual(flightBudgetCopy('Economy'), {
+    label: 'Plan flight budget',
+    qualifier: 'planning estimate — based on typical prices, not today’s fares',
+  });
+  assert.deepEqual(flightBudgetCopy(undefined), {
+    label: 'Plan flight budget',
+    qualifier: 'planning estimate — based on typical prices, not today’s fares',
+  });
   assert.deepEqual(flightBudgetCopy('Business'), {
     label: 'Plan flight budget (economy estimate)',
-    qualifier: 'economy planning estimate',
+    qualifier: 'economy planning estimate — based on typical prices, not today’s fares',
   });
   assert.deepEqual(flightBudgetCopy('First').label, 'Plan flight budget (economy estimate)');
   assert.deepEqual(flightBudgetCopy('Premium economy').label, 'Plan flight budget (economy estimate)');
@@ -129,6 +135,38 @@ test('searchQueryFromParams: a full deep link round-trips, junk drops', () => {
   const flipped = searchQueryFromParams({ tab: 'flights', from: 'New York', to: 'Japan', depart: '2027-03-10', return: '2027-03-01' });
   assert.equal(flipped?.depart, '2027-03-10');
   assert.equal(flipped?.ret, '');
+});
+
+test('searchQueryFromParams: a Dec 10–17 deep link round-trips exactly — no Dec 23 (UX review, Nov 19 2026)', () => {
+  // The expert review reported a Dec 17 return rendering as Dec
+  // 10–23. It does not reproduce: the params parse to the searched
+  // dates, the serializer round-trips identically, and the flight
+  // context keeps Dec 17 with an 8-day trip. Dec 10–23 is exactly
+  // the no-return fallback (depart + 13 days), so the reviewed link
+  // most likely carried no return param. This test pins the exact
+  // round-trip so a future seam change cannot silently shift it.
+  const q = searchQueryFromParams({
+    tab: 'flights',
+    from: 'New York',
+    to: 'London',
+    depart: '2026-12-10',
+    return: '2026-12-17',
+    travelers: '2',
+  });
+  assert.equal(q?.depart, '2026-12-10');
+  assert.equal(q?.ret, '2026-12-17');
+  const back = searchQueryFromParams(Object.fromEntries(new URLSearchParams(searchQueryToParams(q))));
+  assert.deepEqual(back, q, 'serialize then parse is the identity — the return survives');
+  const ctx = flightContextFromSearch({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'London',
+    depart: '2026-12-10',
+    ret: '2026-12-17',
+  });
+  assert.equal(ctx.depart, '2026-12-10');
+  assert.equal(ctx.return, '2026-12-17');
+  assert.equal(ctx.durationDays, 8, 'Dec 10–17 is 8 days, not 14');
 });
 
 test('flightContextFromSearch: dates map to month + length, else the planner defaults', () => {
@@ -310,6 +348,30 @@ test('searchRequestLabel: the saved request names the search, never a booking', 
   for (const label of [f, s, c]) {
     assert.ok(!/book now|Book now|confirmed|paid/i.test(label), 'a saved request never claims a booking');
   }
+});
+
+test('searchRequestLabel: traveler count pluralizes — "1 traveler", "2 travelers" (UX direction, Nov 19 2026 — P0-8)', () => {
+  const one = searchRequestLabel({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'London',
+    depart: '2026-12-10',
+    ret: '2026-12-17',
+    travelers: 1,
+    cabin: 'Economy',
+  });
+  assert.ok(one.includes('1 traveler ·'), 'one traveler, singular');
+  assert.ok(!one.includes('1 travelers'), 'no plural on one');
+  const two = searchRequestLabel({
+    ...emptySearchQuery('flights'),
+    from: 'New York',
+    to: 'London',
+    depart: '2026-12-10',
+    ret: '2026-12-17',
+    travelers: 2,
+    cabin: 'Economy',
+  });
+  assert.ok(two.includes('2 travelers ·'), 'two travelers, plural');
 });
 
 // --- Mobile layout (Nov 15, 2026): phones first ---
@@ -510,6 +572,54 @@ test('flights: one merged live-fares list — no supplier column headers, a smal
   assert.ok(!src.includes("primary") || src.includes('Save this search'), 'the primary action is Save this search');
 });
 
+test('UX direction Nov 19 P0-4: a Duffel test fare is unmissable and never headlines cheapest', () => {
+  const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  const tabs = readFileSync(new URL('../lib/homeTabs.ts', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+  const merge = readFileSync(new URL('../lib/flightOptions.ts', import.meta.url), 'utf8');
+  // The warning text lives in one place and says exactly what it is.
+  assert.ok(tabs.includes("DUFFEL_TEST_FARE_WARNING = 'Test fare — not bookable, not a real price'"), 'the warning names the fare as test, unbookable, not real');
+  // Every Duffel card renders it, in both formats and multi-city.
+  assert.ok(src.includes('testFare={duffelTest}'), 'Duffel cards get the test flag');
+  assert.ok(src.includes('<p className="fare-test-warning">{DUFFEL_TEST_FARE_WARNING}</p>'), 'the warning renders on the card');
+  assert.ok(css.includes('.fare-test-warning{'), 'the warning has its own style');
+  assert.ok(css.includes('color:var(--danger)'), 'the warning is danger red, not small grey');
+  // The merge sorts test fares after live fares (see
+  // tests/flightOptions.test.mjs for the ordering itself).
+  assert.ok(merge.includes('duffelTest?: boolean'), 'the merge takes the test flag');
+  assert.ok(merge.includes('testRank'), 'test fares rank behind live fares in every sort');
+  assert.ok(src.includes('duffelTest,'), 'the results pass the flag into the merge');
+});
+
+test('UX direction Nov 19 P0-2: results pages are results only — no browse shelf below the results', () => {
+  const src = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
+  for (const shelf of [
+    'Flights by destination',
+    'Stays by destination',
+    'Cars by destination',
+    'Attractions by destination',
+    'Cruises by destination',
+    'Buses by destination',
+    'Taxis by destination',
+  ]) {
+    assert.ok(!src.includes(shelf), `no "${shelf}" shelf in the results`);
+  }
+  // The per-destination row cards are gone with the shelves.
+  for (const card of ['StayCard', 'CarCard', 'TourCard', 'CruiseCard', 'BusCard', 'TaxiCard']) {
+    assert.ok(!src.includes(`function ${card}(`), `no ${card} component remains`);
+  }
+  // The live sections stay: Hotelbeds sandbox hotels, activities and
+  // transfers are results, not browse shelves.
+  assert.ok(src.includes('HotelbedsStays'), 'sandbox hotels stay on the Stays results page');
+  assert.ok(src.includes('HotelbedsActivities'), 'sandbox activities stay on the Attractions results page');
+  assert.ok(src.includes('HotelbedsTransfers'), 'sandbox transfers stay on the Taxis results page');
+  // One loading state: the per-source lines are gone; the count-row
+  // line is the single "Checking live fares…" in the results.
+  assert.ok(!src.includes('Checking live fares from Ignav'), 'no per-source Ignav loading line');
+  assert.ok(!src.includes('Checking live fares from LetsFG'), 'no per-source LetsFG loading line');
+  assert.ok(src.includes("Checking live fares…"), 'one loading line remains');
+});
+
 test('cheapestOutBackTotal: the total follows the visible fares, never a filtered-out fare', () => {
   const out = [
     { airline: 'Cheap', price: 218, currency: 'USD', stops: 0, duration: '7h 5m' },
@@ -538,11 +648,8 @@ test('restructure: the new section styles exist in the CSS', () => {
     '.pkg-photo',
     '.pkg-body',
     '.pkg-price',
-    '.pkg-includes',
-    '.pkg-tiers',
     '.pkg-actions',
-    '.fares-strip',
-    '.fare-chip',
+    '.fare-test-warning',
     '.deals-grid',
     '.steps',
     '.step',
@@ -624,11 +731,10 @@ test('restructure: micro-interactions animate transform only, 150–300ms', () =
 test('restructure: the new grids stack to one column at 390px', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const mobile = css.slice(css.indexOf('@media (max-width:640px){', css.indexOf('/* Homepage restructure')));
-  assert.ok(mobile.includes('.pkg-grid,.deals-grid,.fares-strip{grid-template-columns:1fr}'), 'package + deals + fares grids collapse to one column');
+  assert.ok(mobile.includes('.pkg-grid,.deals-grid{grid-template-columns:1fr}'), 'package + deals grids collapse to one column');
   assert.ok(mobile.includes('.pkg-card--hero{grid-column:auto}'), 'the hero card stops spanning on a phone');
-  assert.ok(css.includes('.fares-strip{display:grid;grid-template-columns:repeat(4,1fr)'), 'the fares strip is a 4-column grid');
-  assert.ok(css.includes('.pkg-grid,.deals-grid,.fares-strip{grid-template-columns:1fr}'), 'the fares grid collapses to one column on a phone');
-  assert.ok(css.includes('.pkg-actions button{min-height:44px'), 'package actions are 44px touch targets');
+  assert.ok(!css.includes('.fares-strip'), 'the cheapest-fares strip is gone (merged into Deals)');
+  assert.ok(css.includes('.pkg-actions button,.pkg-actions a{min-height:44px'), 'package actions are 44px touch targets');
 });
 
 // Expedia restyle (Nov 16, 2026 — "copy everything"): the design
@@ -699,7 +805,6 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   const deals = readFileSync(new URL('../components/DealsSection.tsx', import.meta.url), 'utf8');
   const data = readFileSync(new URL('../lib/data.ts', import.meta.url), 'utf8');
   const voices = readFileSync(new URL('../components/HomeSections.tsx', import.meta.url), 'utf8');
-  const strip = readFileSync(new URL('../components/FaresStrip.tsx', import.meta.url), 'utf8');
   const header = readFileSync(new URL('../components/SiteHeader.tsx', import.meta.url), 'utf8');
   // 1 — the landing shelf shows only when the URL carries a ?tab=.
   assert.ok(homeTabs.includes('homeTabIdFromQueryOrNull'), 'the null-returning tab parser exists');
@@ -714,10 +819,14 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(css.includes('.card .body .result-price{font-size:22px'), 'the body price is the 22px price-card');
   assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
   assert.ok(css.includes('.deals-grid{display:grid;grid-template-columns:repeat(3,1fr)'), 'deals are a 3-column grid');
-  // 3 — package cards hide the breakdown behind an expander.
-  assert.ok(pkgs.includes('<details className="pkg-details">'), 'the includes + tiers sit behind a details');
-  assert.ok(pkgs.includes("See what&apos;s included"), 'the expander is labeled');
-  assert.ok(css.includes('.pkg-details{'), 'the expander style exists');
+  // 3 — package cards show one price and one action (UX direction,
+  // Nov 19 2026 — P0-3): the includes breakdown + tiers moved to
+  // the package detail page; the expander is gone.
+  assert.ok(!pkgs.includes('<details className="pkg-details">'), 'no includes expander on the card');
+  assert.ok(!pkgs.includes("See what&apos;s included"), 'no expander label remains');
+  assert.ok(!css.includes('.pkg-details{'), 'the expander style is gone');
+  assert.ok(!css.includes('.pkg-tiers'), 'the tiers row style is gone');
+  assert.ok(pkgs.includes('>View trip<'), 'the single card action is View trip');
   // 4 — non-flight prices lead the card at 22px.
   assert.ok(css.includes('.result-price{font-size:22px'), 'result prices are 22px, not body size');
   // 5 — hotel cards are horizontal rows with a fixed price column.
@@ -736,9 +845,11 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(data.includes("image: weekendPhoto('Paris')"), 'the default trips have photos');
   assert.ok(data.includes("image: CITY_PHOTOS['New York']"), 'the New York trips use the real skyline');
   assert.ok(app.includes('l.image'), 'the weekend cards render the photo');
-  // 8 — Local Voices is photo cards linking to the guides.
+  // 8 — Local Voices is photo cards with one View trip action
+  // (UX direction, Nov 19 2026 — P0-3).
   assert.ok(voices.includes('voicePhoto'), 'each place resolves a photo');
-  assert.ok(voices.includes('Destination guide →'), 'the cards link to the destination guide');
+  assert.ok(voices.includes('>View trip<'), 'the cards carry one View trip action');
+  assert.ok(!voices.includes('Destination guide →'), 'no separate guide link — View trip is the one action');
   assert.ok(!voices.includes('<strong>To try</strong>'), 'the full guide text moved off the card');
   // 9 — My Trips collapses behind one details when empty.
   assert.ok(app.includes('myTripsEmpty'), 'the empty state is computed');
@@ -748,10 +859,10 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(!results.includes('results-honesty'), 'the standalone honesty paragraph is gone');
   assert.ok(results.includes('results-bar-note'), 'the honesty line lives in the results bar');
   assert.ok(!css.includes('.results-honesty'), 'the honesty style is gone');
-  // 11 — the fares strip no longer claims live fares are still coming.
-  assert.ok(strip.includes('Planning estimates, not live quotes'), 'the strip still says the chips are not live quotes');
-  assert.ok(strip.includes('Live fares from Ignav and LetsFG appear in flight results'), 'the strip names the live sources');
-  assert.ok(!strip.includes('live fares arrive as suppliers connect'), 'the strip never claims live fares are still coming');
+  // 11 — the fares strip is gone; its honesty copy lives in the
+  // Deals band now (UX direction, Nov 19 2026 — P0-7).
+  assert.ok(!existsSync(new URL('../components/FaresStrip.tsx', import.meta.url)), 'the fares strip component is deleted');
+  assert.ok(deals.includes('planning estimates until live suppliers connect'), 'the deals band still says the prices are estimates');
   // 12 — the header nav is text-only.
   assert.ok(!header.includes('<Icon name={t.icon}'), 'no category icon in the header nav');
 });
@@ -760,9 +871,12 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
   const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  // 2 — a search hides the browse sections; My Trips stays, and
-  // "Clear search" brings the browse sections back.
+  // 2 — a search hides the browse sections AND My Trips (UX
+  // direction, Nov 19 2026 — P0-2: results pages are results only),
+  // and "Clear search" brings the browse sections back.
   assert.ok(app.includes('{!search && ('), 'the browse sections hide while a search is active');
+  assert.equal((app.match(/\{!search && \(/g) || []).length, 2, 'browse sections and My Trips both gate on no search');
+  assert.ok(app.includes("{variant === 'home' && !search && ("), 'the trust strip hides on results pages too');
   assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
   assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
   assert.ok(results.includes('onClearSearch: () => void'), 'the clear callback is a declared prop');
@@ -811,7 +925,15 @@ test('audit round Nov 17: no two cards lead with the same photo', () => {
   const pkgs = readFileSync(new URL('../lib/packages.ts', import.meta.url), 'utf8');
   const voices = readFileSync(new URL('../components/HomeSections.tsx', import.meta.url), 'utf8');
   assert.ok(pkgs.includes('leadPhotoFor(entry.destination'), 'package photos use the shared rule');
-  assert.ok(voices.includes("if (place === 'Japan') return CITY_PHOTOS['Tokyo']"), 'the Japan voice uses Tokyo, not Kyoto');
+  // The voices are single destinations now (UX direction, Nov 19
+  // 2026 — P0-7): Central Europe and Japan were routes that already
+  // have a featured package card, so they no longer appear here.
+  // Barcelona and Tokyo use their own photos; Kyoto keeps its own.
+  assert.ok(voices.includes("LOCAL_VOICES_PLACES = ['Kyoto', 'Barcelona', 'Tokyo']"), 'the voices are three single destinations');
+  assert.ok(voices.includes("if (place === 'Barcelona') return CITY_PHOTOS['Barcelona']"), 'the Barcelona voice uses its own photo');
+  assert.ok(voices.includes("if (place === 'Tokyo') return CITY_PHOTOS['Tokyo']"), 'the Tokyo voice uses its own photo');
+  assert.ok(!voices.includes("if (place === 'Central Europe')"), 'Central Europe has no voice card — it has a featured package');
+  assert.ok(!voices.includes("if (place === 'Japan')"), 'Japan has no voice card — it has a featured package');
 });
 
 test('audit round Nov 17: one primary pill + one text link per card', () => {
@@ -831,47 +953,50 @@ test('audit round Nov 17: one primary pill + one text link per card', () => {
   // itself to the start.
   assert.ok(css.includes('.card .body .pill,.pkg-body .pill{align-self:flex-start}'), 'tag pills are auto-width in flex-column bodies');
   assert.ok(css.includes('.card-top{display:flex'), 'cards have a top row for tag + share');
-  // Package cards: one primary pill + one text link in the action
-  // row; share lives in the top row as a text link.
+  // Package cards: one price, one action — a single "View trip"
+  // link in the action row; share lives in the top row as a text link.
   assert.ok(pkgs.includes('className="card-top"'), 'package cards have the top row');
   assert.ok(pkgs.includes('buttonClassName="linklike"'), 'package share is a text link');
-  assert.ok(pkgs.includes('<button type="button" className="linklike" onClick={onView}>'), 'View package is a text link, not a second button');
-  assert.ok(!pkgs.includes('<button type="button" className="ghost" onClick={onView}>'), 'no ghost View package button remains');
-  // Destination cards: same shape — top row + primary + guide link.
+  assert.ok(pkgs.includes('>View trip<'), 'the single card action is View trip');
+  assert.ok(!pkgs.includes('View package'), 'no View package action remains');
+  assert.ok(!pkgs.includes('Save this search'), 'no Save action on package cards — the detail page carries it');
+  // Destination cards: same shape — top row + single View trip link.
   assert.ok(app.includes('className="card-top"'), 'destination cards have the top row');
   assert.ok(app.includes('buttonClassName="linklike"'), 'destination share is a text link');
+  assert.ok(app.includes('>View trip<'), 'destination cards carry one View trip action');
+  assert.ok(!app.includes('Search this destination'), 'no Search-prefill button on destination cards');
   // ShareMenu takes the trigger style from its caller.
   assert.ok(share.includes('buttonClassName'), 'ShareMenu accepts a trigger style');
   assert.ok(share.includes("buttonClassName = 'ghost'"), 'reels and plans keep the ghost share button');
 });
 
-test('audit round Nov 17: destination price below the photo, fares as a grid', () => {
+test('audit round Nov 17: destination price below the photo; the cheapest-fares strip is gone, merged into Deals (UX direction, Nov 19 2026 — P0-7)', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  const strip = readFileSync(new URL('../components/FaresStrip.tsx', import.meta.url), 'utf8');
   // Photos are 4:3 everywhere a card shows one — the 180px strips
   // cropped every photo the same way.
   assert.ok(css.includes('.card img{width:100%;aspect-ratio:4/3'), 'card photos are 4:3');
   assert.ok(css.includes('.photocarousel img{width:100%;aspect-ratio:4/3'), 'carousel photos are 4:3');
   assert.ok(css.includes('.card .img-fallback{aspect-ratio:4/3'), 'photo fallbacks are 4:3');
-  // Fares: a 4-column grid of compact cards with one loud price,
-  // short labels — the scroller clipped the last chip.
-  assert.ok(css.includes('.fares-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}'), 'the fares strip is a 4-column grid');
+  // The fares strip is gone: its cheapest trips live in the Deals
+  // band now, so no trip appears twice — no scroller, no chips.
+  assert.ok(!css.includes('.fares-strip'), 'no fares-strip style remains');
+  assert.ok(!css.includes('.fare-chip'), 'no fare-chip style remains');
   assert.ok(!css.includes('scroll-snap-type:x mandatory'), 'no horizontal scroller remains');
-  assert.ok(css.includes('.fare-chip-price{font-family:var(--font-body'), 'the chip price carries the loud price style');
-  assert.ok(css.includes('font-size:22px;font-weight:700'), 'the chip price is 22px/700');
-  // The honesty copy is pinned: planning estimates, live fares named.
-  assert.ok(strip.includes('Planning estimates, not live quotes'), 'the strip still says planning estimates');
-  assert.ok(strip.includes('Live fares from Ignav and LetsFG appear in flight results.'), 'the strip still names the live sources');
+  assert.ok(!existsSync(new URL('../components/FaresStrip.tsx', import.meta.url)), 'the FaresStrip component is deleted');
 });
 
-test('audit round Nov 17: live-fares loading is a styled state, not a bare line', () => {
+test('audit round Nov 17: live-fares loading is one styled state, not three lines (UX direction, Nov 19 2026 — P0-8)', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const results = readFileSync(new URL('../components/SearchResults.tsx', import.meta.url), 'utf8');
   assert.ok(css.includes('.results-loading{display:flex'), 'the loading state is a styled row');
   assert.ok(css.includes('.results-loading::after'), 'the loading state carries a shimmer bar');
-  assert.ok(results.includes('<p className="results-loading">Checking live fares…</p>'), 'the Duffel loading line is styled');
-  assert.ok(results.includes('<p className="results-loading">Checking live fares from Ignav…</p>'), 'the Ignav loading line is styled');
-  assert.ok(results.includes('<p className="results-loading">Checking live fares from LetsFG…</p>'), 'the LetsFG loading line is styled');
+  // One loading state: the per-source lines are gone; the results
+  // bar above carries the single "Checking live fares…" line while
+  // the first live data is still on its way.
+  assert.ok(!results.includes('Checking live fares from Ignav'), 'no per-source Ignav loading line');
+  assert.ok(!results.includes('Checking live fares from LetsFG'), 'no per-source LetsFG loading line');
+  assert.ok(!results.includes('<p className="results-loading">Checking live fares…</p>'), 'no per-source Duffel loading line');
+  assert.ok(results.includes("'Checking live fares…'"), 'one loading line remains, on the results bar');
   assert.ok(!results.includes("&& <p>Checking live fares"), 'no bare loading line remains');
 });
 

@@ -156,6 +156,13 @@ export function flightContextFor(
 export const DUFFEL_TEST_LABEL =
   'Duffel test fare — test mode, not a live bookable quote. Real bookable fares need Duffel live mode.';
 
+// The unmissable test-fare warning on every Duffel test-fare card
+// (UX direction, Nov 19 2026 — P0-4): a test fare must never be
+// mistaken for a real price. Unlike the small source tag, this line
+// never hides behind a filter — the same exemption as the Hotelbeds
+// sandbox labels.
+export const DUFFEL_TEST_FARE_WARNING = 'Test fare — not bookable, not a real price';
+
 // The label once the live key is in (DUFFEL_API_KEY = duffel_live_…):
 // a real-time price — but booking through FujinTrip still opens only
 // once checkout is built, so it never promises a booking today.

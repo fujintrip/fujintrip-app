@@ -14,6 +14,7 @@ import {
   PACKAGE_ESTIMATE_LABEL,
   allPackages,
   cheapestPackages,
+  dealsPackages,
   featuredPackages,
   packageFor,
   packagePrice,
@@ -77,26 +78,42 @@ test('featured packages are six, unique, and span the price range', () => {
   }
 });
 
-test('deals are the three cheapest by Best value per traveler, in order', () => {
-  const deals = cheapestPackages(3);
+test('deals are the three cheapest by Best value per traveler, in order — excluding the trips that already have a homepage band (UX direction, Nov 19 2026 — P0-7)', () => {
+  const deals = dealsPackages();
   assert.equal(deals.length, 3, 'three deals');
-  const sorted = [...allPackages()].sort(
-    (a, b) => a.best.perTraveler - b.best.perTraveler || a.destination.localeCompare(b.destination),
-  );
+  // The exclusions: the featured shelf, the hidden gems, 'Europe'.
+  const excluded = new Set([
+    ...featuredPackages().map((p) => p.destination),
+    'St. George',
+    'Tacoma',
+    'Hilo',
+    'Europe',
+  ]);
+  for (const d of deals) {
+    assert.ok(!excluded.has(d.destination), `${d.destination}: deals never repeat a banded trip`);
+  }
+  // And they are the cheapest of the REST, in order.
+  const rest = [...allPackages()]
+    .filter((p) => !excluded.has(p.destination))
+    .sort((a, b) => a.best.perTraveler - b.best.perTraveler || a.destination.localeCompare(b.destination));
   assert.deepEqual(
     deals.map((d) => d.id),
-    sorted.slice(0, 3).map((d) => d.id),
-    'deals are the three cheapest',
+    rest.slice(0, 3).map((d) => d.id),
+    'deals are the three cheapest of the rest',
   );
   assert.ok(deals[0].best.perTraveler <= deals[1].best.perTraveler, 'deals sorted ascending');
   assert.ok(deals[1].best.perTraveler <= deals[2].best.perTraveler, 'deals sorted ascending');
 });
 
-test('the cheapest-fares strip is sorted ascending by Best value per traveler', () => {
-  const strip = cheapestPackages(8);
-  assert.equal(strip.length, 8, 'eight chips');
-  for (let i = 1; i < strip.length; i++) {
-    assert.ok(strip[i - 1].best.perTraveler <= strip[i].best.perTraveler, `chip ${i} not cheaper than chip ${i - 1}`);
+test('cheapestPackages(n, exclude) filters before sorting, so the deals band never repeats a banded trip', () => {
+  const featured = featuredPackages().map((p) => p.destination);
+  const cheapest = cheapestPackages(8, featured);
+  assert.equal(cheapest.length, 8, 'eight trips');
+  for (const p of cheapest) {
+    assert.ok(!featured.includes(p.destination), `${p.destination}: excluded trips stay out`);
+  }
+  for (let i = 1; i < cheapest.length; i++) {
+    assert.ok(cheapest[i - 1].best.perTraveler <= cheapest[i].best.perTraveler, `trip ${i} not cheaper than trip ${i - 1}`);
   }
 });
 

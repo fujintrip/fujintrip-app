@@ -647,11 +647,18 @@ export const CABINS = ['Economy', 'Premium economy', 'Business', 'First'] as con
 // printed next to $2,609 of Business fares reads as a contradiction
 // (defect, Nov 15 2026). No cabin multiplier is invented here — the
 // figure stays the economy estimate and the label says so.
+// The qualifier also says the budget is NOT today's fares (UX
+// direction, Nov 19 2026 — P0-5): the planner budget, the cheapest
+// fare and the live fare must never read as three prices for one
+// trip, so the budget line names itself as a typical-prices
+// estimate, unrelated to today's live fares.
 export function flightBudgetCopy(cabin: string | undefined): { label: string; qualifier: string } {
   const economy = !cabin || cabin === 'Economy';
   return {
     label: economy ? 'Plan flight budget' : 'Plan flight budget (economy estimate)',
-    qualifier: economy ? 'planning estimate' : 'economy planning estimate',
+    qualifier: economy
+      ? 'planning estimate — based on typical prices, not today’s fares'
+      : 'economy planning estimate — based on typical prices, not today’s fares',
   };
 }
 

@@ -32,11 +32,10 @@ import SiteHeader from './SiteHeader';
 import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
 import PackagesSection from './PackagesSection';
-import FaresStrip from './FaresStrip';
 import DealsSection from './DealsSection';
-import { ContinueStrip, HowItWorksSection, LocalVoicesTeaser } from './HomeSections';
+import { ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
 import { Icon, type IconName } from './icons';
-import type { Package } from '../lib/packages';
+import { dealsPackages, featuredPackages } from '../lib/packages';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Seed handoff: the /chat page consumes this once on mount so the
@@ -332,21 +331,6 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
     if (q.dest) setPrefill({ destination: q.dest, nonce: Date.now() });
     setTimeout(() => document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
-  const prefillDestination = (name: string) => {
-    setPrefill({ destination: name, nonce: Date.now() });
-    document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  // Ready-made packages (restructure, Nov 15 2026): "View package"
-  // prefills the search widget with the route — the same flow as a
-  // destination card. "Save this search" saves the package as a
-  // request in My Trips — never a booking, never "Book now".
-  const viewPackage = (destination: string) => prefillDestination(destination);
-  const savePackage = (pkg: Package) =>
-    saveTrip(
-      `${pkg.destination} · Ready-made package · Best value · from $${pkg.best.perTraveler.toLocaleString()} per traveler`,
-      'Request saved',
-      pkg.destination
-    );
   const editSearch = () => {
     document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -464,6 +448,24 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
     transports: number | null;
     total: number | null;
   };
+  // Dedup (UX direction, Nov 19 2026 — P0-7): no destination
+  // appears in more than one homepage band. The featured packages,
+  // the deals, the hidden gems, 'Europe' and the Local Voices
+  // places each have a band of their own, so Popular destinations
+  // (built from this list) skips them all. The deals share the
+  // same exclusion list as DealsSection (lib/packages.ts
+  // dealsPackages), so the two bands can never drift apart.
+  const homeBandNames = useMemo(
+    () =>
+      new Set([
+        ...featuredPackages().map((p) => p.destination),
+        ...dealsPackages().map((p) => p.destination),
+        ...HIDDEN_GEMS.map((g) => g.name),
+        'Europe',
+        ...LOCAL_VOICES_PLACES,
+      ]),
+    []
+  );
   const libraryEntries = useMemo<LibraryEntry[]>(() => {
     const imageByName = new Map<string, string>([
       ...GLOBAL_DESTINATIONS.map((d) => [d.name, d.image] as const),
@@ -472,6 +474,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
     ]);
     const entries: LibraryEntry[] = [];
     for (const e of discovery) {
+      if (homeBandNames.has(e.destination)) continue;
       const stopPhotos = [...new Set(e.stops.map((s) => s.city).map((c) => imageByName.get(c)).filter((x): x is string => Boolean(x)))];
       const lead = leadPhotoFor(e.destination, e.stops.map((s) => s.city));
       entries.push({
@@ -487,6 +490,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
     }
     for (const d of GLOBAL_DESTINATIONS) {
       if (discovery.some((e) => e.destination === d.name)) continue;
+      if (homeBandNames.has(d.name)) continue;
       const info = cardInfo[d.name];
       entries.push({
         key: d.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
@@ -501,14 +505,15 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
       });
     }
     return entries;
-  }, [discovery, cardInfo]);
+  }, [discovery, cardInfo, homeBandNames]);
   // Direction v3 (spec section 1d): the template library is
   // "Popular destinations" now — 8 cards with a "Show more
   // destinations" expander. No filter pills, no pagination. The
   // price line is the Best value plan total per traveler (the total
   // in the entry is the 2-traveler total); a card with no planner
-  // total shows no price line, never a guessed one.
-  const visibleEntries = showAllDestinations ? libraryEntries : libraryEntries.slice(0, 8);
+  // total shows no price line, never a guessed one. (popularEntries
+  // / visibleEntries are defined after the shelf below, which they
+  // exclude — see P0-7.)
   // The category shelf's figures (interface round, Nov 16 2026 —
   // P1 #17): the top destinations with that category's Best value
   // figure for 2 travelers — the planner's own leg (flight, hotel,
@@ -553,6 +558,15 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
     }
     return out;
   }, [landingTab, libraryEntries]);
+  // Popular destinations, minus the shelf (UX direction, Nov 19
+  // 2026 — P0-7): the category shelf draws from the same list, so
+  // when it is visible its names are excluded here — a destination
+  // never appears in both the shelf and Popular.
+  const popularEntries =
+    landingTab && shelfEntries.length > 0
+      ? libraryEntries.filter((e) => !shelfEntries.some((s) => s.name === e.name))
+      : libraryEntries;
+  const visibleEntries = showAllDestinations ? popularEntries : popularEntries.slice(0, 8);
   // Trust strip (interface round, Nov 16 2026 — P0 #3): moved from
   // the bottom of the page to directly under the search results (or
   // under the hero when no search is active) — trust belongs where
@@ -804,8 +818,10 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
       )}
       {/* Trust strip (interface round, Nov 16 2026 — P0 #3): directly
           under the search results when a search is active, directly
-          under the hero otherwise. */}
-      {variant === 'home' && (
+          under the hero otherwise. On a results page (UX direction,
+          Nov 19 2026 — P0-2) it is hidden — results pages are
+          results only. */}
+      {variant === 'home' && !search && (
         <div className="wrap">{trustStrip('Why book with FujinTrip')}</div>
       )}
       {variant === 'home' && (
@@ -858,8 +874,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
                     <h3>{s.name}</h3>
                     <p className="price">from ${s.perTraveler.toLocaleString()} per traveler</p>
                     <p className="plan-muted">Best value · {s.legLabel} · planning estimate</p>
-                    <button className="primary" onClick={() => prefillDestination(s.name)}>Search this destination</button>{' '}
-                    <a href={`/destination/${encodeURIComponent(s.name)}`}>Destination guide →</a>
+                    <a className="primary" href={`/destination/${encodeURIComponent(s.name)}`}>View trip</a>
                   </div>
                 </article>
               ))}
@@ -868,15 +883,13 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
         )}
 
         {/* Homepage restructure (Nov 15, 2026): ready-made packages
-            first, then the cheapest fares and the deals — the search
-            results still render directly under the hero, above main. */}
-        <PackagesSection onViewPackage={viewPackage} onSavePackage={savePackage} />
-        <FaresStrip onPick={prefillDestination} />
-        <DealsSection onViewPackage={viewPackage} onSavePackage={savePackage} />
+            first, then the deals — the search results still render directly under the hero, above main. */}
+        <PackagesSection />
+        <DealsSection />
 
         <section id="destinations">
           <h2>Popular destinations</h2>
-          <p className="sub">Tap a destination to fill in the search above — prices are planning estimates from FujinTrip&apos;s planner, Best value per traveler.</p>
+          <p className="sub">Open a trip to see the plan — prices are planning estimates from FujinTrip&apos;s planner, Best value per traveler.</p>
           <div className="grid">
             {visibleEntries.map((e) => (
               <article className="card" key={e.key}>
@@ -900,16 +913,15 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
                   ) : (
                     <p className="plan-muted">No planning estimate for this one yet</p>
                   )}
-                  <button className="primary" onClick={() => prefillDestination(e.name)}>Search this destination</button>{' '}
-                  <a href={`/destination/${encodeURIComponent(e.name)}`}>Destination guide →</a>
+                  <a className="primary" href={`/destination/${encodeURIComponent(e.name)}`}>View trip</a>
                 </div>
               </article>
             ))}
           </div>
-          {libraryEntries.length > 8 && !showAllDestinations && (
+          {popularEntries.length > 8 && !showAllDestinations && (
             <p style={{ marginTop: 16 }}>
               <button type="button" className="ghost" onClick={() => setShowAllDestinations(true)}>
-                Show more destinations ({libraryEntries.length - 8} more)
+                Show more destinations ({popularEntries.length - 8} more)
               </button>
             </p>
           )}
@@ -929,7 +941,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
           </section>
         )}
 
-        <LocalVoicesTeaser onPick={prefillDestination} />
+        <LocalVoicesTeaser />
 
         <section>
           <h2>Weekend trips near you</h2>
@@ -963,8 +975,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
                     <summary>See the days</summary>
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
-                  <button className="primary" onClick={() => prefillDestination(d.name)}>Search this destination</button>{' '}
-                  <a href={`/destination/${encodeURIComponent(d.name)}`}>Destination guide →</a>
+                  <a className="primary" href={`/destination/${encodeURIComponent(d.name)}`}>View trip</a>
                 </div>
               </article>
             ))}
@@ -977,6 +988,10 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
         </>
         )}
 
+        {/* My Trips (UX direction, Nov 19 2026 — P0-2): on a results
+            page the whole section hides — results pages are results
+            only. It returns when the search is cleared. */}
+        {!search && (
         <section>
           <h2 style={{ marginTop: 28 }} id="mytrips">My Trips</h2>
           {myTripsEmpty ? (
@@ -988,6 +1003,7 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
             myTripsBody
           )}
         </section>
+        )}
 
         {/* Ad slot: above the footer, content area only. Dormant until AdSense is configured. */}
         <AdSlot slot={process.env.NEXT_PUBLIC_ADSENSE_SLOT_ABOVE_FOOTER ?? ''} />
@@ -1041,9 +1057,16 @@ export default function FujinApp({ variant, initialTab, initialLandingTab, initi
                 <li>
                   <a href="#mytrips">My Trips</a>
                 </li>
-                <li>
-                  <a href="/sign-in">Sign in</a>
-                </li>
+                {/* Sign in (UX direction, Nov 19 2026 — P0-6): the
+                    link only renders once Clerk is configured — a
+                    dead "Sign in" that lands on "isn't set up yet"
+                    is worse than no link. The plan-PDF gate in
+                    FujinChat stays as-is. */}
+                {account.configured && (
+                  <li>
+                    <a href="/sign-in">Sign in</a>
+                  </li>
+                )}
               </ul>
             </div>
           </div>

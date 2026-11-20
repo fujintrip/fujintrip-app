@@ -2,14 +2,12 @@
 // centerpiece — curated trips a traveler picks ready instead of
 // building a plan. Bento grid: the first card is the hero (spans
 // 2×2), the rest fill around it; on a phone every card stacks full
-// width. The total price is the largest type on the card, with the
-// breakdown behind a "See what's included" expander (review round,
-// Nov 17 2026 — gap 3: one loud price per card; research: prices are
-// the product, make them loud). Every price is the planner's own math (lib/packages.ts) —
-// planning estimate until a live supplier connects. Primary action
-// is "Save this search" (a saved request in My Trips); "View
-// package" prefills the search widget. Never "Book now" — checkout
-// is not built.
+// width. One price per card — Best value per traveler — and one
+// action, "View trip", which opens the package detail page where
+// the Cheapest / Best value / Premium tiers and the cost breakdown
+// live (UX direction, Nov 19 2026 — P0-3). Every price is the
+// planner's own math (lib/packages.ts) — planning estimate until a
+// live supplier connects. Never "Book now" — checkout is not built.
 'use client';
 import { featuredPackages, packagePrice, type LivePackageFare, type Package } from '../lib/packages';
 import { shareTextFor } from '../lib/share';
@@ -21,14 +19,10 @@ export function PackageCard({
   pkg,
   hero,
   liveFares,
-  onView,
-  onSave,
 }: {
   pkg: Package;
   hero?: boolean;
   liveFares?: LivePackageFare[] | null;
-  onView: () => void;
-  onSave: () => void;
 }) {
   const price = packagePrice(pkg, liveFares);
   return (
@@ -43,7 +37,7 @@ export function PackageCard({
       <div className="pkg-body">
         {/* Card top row (audit round, Nov 17, 2026): the tag pill and
             share sit together up top, so the action row below holds
-            exactly one primary pill + one text link. */}
+            exactly one primary action. */}
         <div className="card-top">
           <span className="pill">{pkg.tag}</span>
           {/* Social share-out (Nov 15, 2026): the link lands on the
@@ -68,37 +62,8 @@ export function PackageCard({
           {price.label}
           {price.source ? ` · ${price.source}` : ''}
         </p>
-        <details className="pkg-details">
-          <summary>See what&apos;s included</summary>
-          <ul className="pkg-includes" aria-label="What the price includes, per traveler, Best value">
-            <li>
-              <Icon name="plane" size={15} /> Flights ${pkg.includes.flight.toLocaleString()}
-            </li>
-            <li>
-              <Icon name="bed" size={15} /> Stays ${pkg.includes.hotel.toLocaleString()}
-            </li>
-            <li>
-              <Icon name="car" size={15} /> Car ${pkg.includes.car.toLocaleString()}
-            </li>
-            <li>
-              <Icon name="ticket" size={15} /> Activities ${pkg.includes.activities.toLocaleString()}
-            </li>
-          </ul>
-          <p className="pkg-tiers" aria-label="All three prices, per traveler">
-            {pkg.tiers.map((t) => (
-              <span key={t.name}>
-                {t.name} <strong>${t.perTraveler.toLocaleString()}</strong>
-              </span>
-            ))}
-          </p>
-        </details>
         <div className="pkg-actions">
-          <button type="button" className="primary" onClick={onSave}>
-            Save this search
-          </button>
-          <button type="button" className="linklike" onClick={onView}>
-            View package
-          </button>
+          <a className="primary" href={`/destination/${encodeURIComponent(pkg.destination)}`}>View trip</a>
         </div>
       </div>
     </article>
@@ -106,12 +71,8 @@ export function PackageCard({
 }
 
 export default function PackagesSection({
-  onViewPackage,
-  onSavePackage,
   liveFares,
 }: {
-  onViewPackage: (destination: string) => void;
-  onSavePackage: (pkg: Package) => void;
   // Live fares, when a supplier connects — always null today, so
   // every card shows the planning estimate (see lib/packages.ts).
   liveFares?: LivePackageFare[] | null;
@@ -127,14 +88,7 @@ export default function PackagesSection({
       </p>
       <div className="pkg-grid">
         {pkgs.map((pkg, i) => (
-          <PackageCard
-            key={pkg.id}
-            pkg={pkg}
-            hero={i === 0}
-            liveFares={liveFares}
-            onView={() => onViewPackage(pkg.destination)}
-            onSave={() => onSavePackage(pkg)}
-          />
+          <PackageCard key={pkg.id} pkg={pkg} hero={i === 0} liveFares={liveFares} />
         ))}
       </div>
     </section>

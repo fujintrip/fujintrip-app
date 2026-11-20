@@ -235,10 +235,7 @@ export default function DestinationPage() {
                         <h3>{d.destination}</h3>
                         {d.price !== null && <p className="price">from ${Math.round(d.price / 2).toLocaleString()} per traveler</p>}
                         <p className="plan-muted">Best value · 2 travelers · planning estimate</p>
-                        <a className="primary" href={`/?plan=${encodeURIComponent(d.destination)}`}>
-                          Search this destination
-                        </a>{' '}
-                        <a href={`/destination/${encodeURIComponent(d.destination)}`}>Destination guide →</a>
+                        <a className="primary" href={`/destination/${encodeURIComponent(d.destination)}`}>View trip</a>
                       </div>
                     </article>
                   ))}

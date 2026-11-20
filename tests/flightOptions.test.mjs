@@ -336,3 +336,60 @@ test('countFlightCards: facet counts count cards, not legs', () => {
   assert.equal(counts.prices[1000], 4, 'every card is under $1,000 per traveler');
   assert.equal(counts.prices[2000], 4, 'every card is under $2,000 per traveler');
 });
+
+// Test fares never headline cheapest (UX direction, Nov 19 2026 —
+// P0-4): when the Duffel options are test fares, they sort AFTER
+// every live fare in every sort mode, so a test fare can never be
+// the cheapest shown while a live fare exists. Test fares still
+// show (with the unmissable warning on the card) when they are the
+// only fares — the merge never drops them.
+test('merge with duffelTest: test fares sort after every live fare, in every sort mode', () => {
+  const args = { tripType: 'roundtrip', out, back, ignavItineraries: ignavTrips, duffelTest: true };
+  const cheapest = mergeFlightOptions({ ...args, sort: 'cheapest' });
+  assert.deepEqual(
+    cheapest.map((o) => o.total),
+    [788, 796, 1028, 432, 445, 470],
+    'cheapest: the live Ignav trips come first even though the test pairs are cheaper'
+  );
+  assert.equal(cheapest[0].kind, 'ignav', 'the cheapest shown is a live fare, never a test fare');
+  for (const sort of ['duration', 'departure', 'best']) {
+    const merged = mergeFlightOptions({ ...args, sort });
+    const kinds = merged.map((o) => o.kind);
+    assert.deepEqual(
+      kinds.slice(0, 3),
+      ['ignav', 'ignav', 'ignav'],
+      `${sort}: live trips first`
+    );
+    assert.deepEqual(
+      kinds.slice(3),
+      ['duffel-pair', 'duffel-pair', 'duffel-pair'],
+      `${sort}: test pairs last`
+    );
+  }
+});
+
+test('merge with duffelTest: one-way test legs sort after live one-way trips', () => {
+  const oneWayTrips = [itinerary(500, [offer('JetBlue', 0, 480, 400, 500)])];
+  const merged = mergeFlightOptions({
+    tripType: 'oneway',
+    out,
+    back: [],
+    ignavItineraries: oneWayTrips,
+    sort: 'cheapest',
+    duffelTest: true,
+  });
+  assert.deepEqual(
+    merged.map((o) => o.total),
+    [500, 216, 220, 230],
+    'the live one-way trip headlines; the cheaper test legs follow'
+  );
+});
+
+test('merge without duffelTest: live Duffel fares keep the plain price order', () => {
+  const merged = mergeFlightOptions({ tripType: 'roundtrip', out, back, ignavItineraries: ignavTrips, sort: 'cheapest' });
+  assert.deepEqual(
+    merged.map((o) => o.total),
+    [432, 445, 470, 788, 796, 1028],
+    'no test flag, no reorder — the cheapest fare headlines'
+  );
+});

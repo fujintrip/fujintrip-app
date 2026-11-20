@@ -121,18 +121,25 @@ export function HowItWorksSection() {
 }
 
 // Photo per place (review round, Nov 17 2026 — gap 8; audit round,
-// Nov 17 2026): from the verified pool — Prague for Central Europe
-// (its first stop; the route card now leads with Vienna), Tokyo for
-// Japan (Kyoto keeps its own card and voice), Kyoto's own photo for
-// Kyoto.
+// Nov 17 2026): from the verified pool — Barcelona and Tokyo from
+// CITY_PHOTOS, Kyoto's own photo from GLOBAL_DESTINATIONS. The
+// places are single destinations now (UX direction, Nov 19 2026 —
+// P0-7): Central Europe and Japan were routes that already have a
+// featured package card, so they no longer appear here.
 function voicePhoto(place: string): string | null {
-  if (place === 'Central Europe') return CITY_PHOTOS['Prague'] ?? null;
-  if (place === 'Japan') return CITY_PHOTOS['Tokyo'] ?? null;
+  if (place === 'Barcelona') return CITY_PHOTOS['Barcelona'] ?? null;
+  if (place === 'Tokyo') return CITY_PHOTOS['Tokyo'] ?? null;
   return GLOBAL_DESTINATIONS.find((d) => d.name === place)?.image ?? null;
 }
 
-export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) => void }) {
-  const places = ['Kyoto', 'Central Europe', 'Japan'];
+// The Local Voices places (UX direction, Nov 19 2026 — P0-7):
+// single destinations with no other homepage band — Kyoto,
+// Barcelona and Tokyo. FujinApp excludes these names from Popular
+// destinations, so no place appears twice.
+export const LOCAL_VOICES_PLACES = ['Kyoto', 'Barcelona', 'Tokyo'];
+
+export function LocalVoicesTeaser() {
+  const places = LOCAL_VOICES_PLACES;
   return (
     <section className="home-section" aria-label="Local voices">
       <div className="voices-teaser">
@@ -144,13 +151,13 @@ export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) =>
           <h2>What travelers say, from the places you go</h2>
           <p className="sub">
             Fujin AI brings back what locals and travelers say — dishes to try, places to eat, how to spend the days —
-            and it shows in your plan. Tap a place to fill in the search.
+            and it shows in your plan. Open a place to see the trip.
           </p>
           <p className="voices-chips">
             {places.map((p) => (
-              <button key={p} type="button" className="chip" onClick={() => onPick(p)}>
+              <a key={p} className="chip" href={`/destination/${encodeURIComponent(p)}`}>
                 {p}
-              </button>
+              </a>
             ))}
             <a href="/chat" className="ghost voices-link">
               See it in a plan <Icon name="arrowRight" size={15} />
@@ -183,10 +190,7 @@ export function LocalVoicesTeaser({ onPick }: { onPick: (destination: string) =>
                 ) : (
                   <p className="plan-muted">No researched local guide for {p} yet — the best time above is from our planner.</p>
                 )}
-                <a href={`/destination/${encodeURIComponent(p)}`}>Destination guide →</a>{' '}
-                <button className="primary" onClick={() => onPick(p)}>
-                  Search {p}
-                </button>
+                <a className="primary" href={`/destination/${encodeURIComponent(p)}`}>View trip</a>
               </div>
             </article>
           );

@@ -14,7 +14,7 @@
 
 import { buildPlan } from './planner';
 import { discoveryDestinations, type DiscoveryEntry } from './discovery';
-import { leadPhotoFor } from './data';
+import { HIDDEN_GEMS, leadPhotoFor } from './data';
 
 export type PackageTier = { name: 'Cheapest' | 'Best value' | 'Premium'; perTraveler: number };
 
@@ -94,13 +94,31 @@ export function featuredPackages(): Package[] {
 }
 
 // Cheapest first by Best value per traveler, ties broken by name so
-// the order is stable. The fares strip and the deals shelf both read
-// this — the cheapest trips, not a hand-picked "deal" that would need
-// a discount to be real.
-export function cheapestPackages(n: number): Package[] {
+// the order is stable. The deals shelf reads this — the cheapest
+// trips, not a hand-picked "deal" that would need a discount to be
+// real. `exclude` names destinations that already have a homepage
+// band of their own (the hidden gems, Europe, the featured shelf) —
+// the deals band is the cheapest of the REST, so no trip appears in
+// two bands (UX direction, Nov 19 2026 — P0-7).
+export function cheapestPackages(n: number, exclude: string[] = []): Package[] {
+  const excluded = new Set(exclude);
   return [...allPackages()]
+    .filter((p) => !excluded.has(p.destination))
     .sort((a, b) => a.best.perTraveler - b.best.perTraveler || a.destination.localeCompare(b.destination))
     .slice(0, Math.max(0, n));
+}
+
+// The deals band (UX direction, Nov 19 2026 — P0-7): the three
+// cheapest trips that have NO other homepage band. The exclusion
+// list is the single source of truth — DealsSection reads this
+// function, and FujinApp's Popular band excludes the same names,
+// so a destination can never appear in two bands by drift.
+export function dealsPackages(): Package[] {
+  return cheapestPackages(3, [
+    ...featuredPackages().map((p) => p.destination),
+    ...HIDDEN_GEMS.map((g) => g.name),
+    'Europe',
+  ]);
 }
 
 // --- Live-fare seam (no live source today) ---------------------------

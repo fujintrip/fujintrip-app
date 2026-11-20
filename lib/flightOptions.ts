@@ -75,6 +75,12 @@ export function mergeFlightOptions(args: {
   // and the merge is Duffel + Ignav exactly as before.
   letsfgItineraries?: LetsfgItinerary[];
   sort: RowSort;
+  // Duffel test fares (UX direction, Nov 19 2026 — P0-4): when the
+  // Duffel options are test fares, they sort AFTER every live fare
+  // in every sort mode, so a test fare can never be the cheapest
+  // shown while a live fare exists. Test fares still show (with the
+  // unmissable warning) when they are the only fares.
+  duffelTest?: boolean;
 }): FlightOption[] {
   const options: FlightOption[] = [];
   if (args.tripType === 'roundtrip') {
@@ -138,11 +144,16 @@ export function mergeFlightOptions(args: {
   const byTotal = (a: FlightOption, b: FlightOption) => a.total - b.total;
   const byDuration = (a: FlightOption, b: FlightOption) => a.durationMinutes - b.durationMinutes || byTotal(a, b);
   const byDeparture = (a: FlightOption, b: FlightOption) => a.departMinutes - b.departMinutes || byTotal(a, b);
-  if (args.sort === 'duration') return options.sort(byDuration);
-  if (args.sort === 'departure') return options.sort(byDeparture);
+  // Test fares sort last (P0-4): a Duffel option ranks behind every
+  // live option, then the requested sort orders within each rank.
+  const testRank = (o: FlightOption) => (args.duffelTest && (o.kind === 'duffel-pair' || o.kind === 'duffel-oneway') ? 1 : 0);
+  const byRankThen = (cmp: (a: FlightOption, b: FlightOption) => number) => (a: FlightOption, b: FlightOption) =>
+    testRank(a) - testRank(b) || cmp(a, b);
+  if (args.sort === 'duration') return options.sort(byRankThen(byDuration));
+  if (args.sort === 'departure') return options.sort(byRankThen(byDeparture));
   // 'cheapest' and 'best' both order live fares by trip total — the
   // planner's best-value order applies to estimate rows, not fares.
-  return options.sort((a, b) => byTotal(a, b) || byDuration(a, b) || byDeparture(a, b));
+  return options.sort(byRankThen((a, b) => byTotal(a, b) || byDuration(a, b) || byDeparture(a, b)));
 }
 
 // Facet counts for the merged card grid (audit round, Nov 17, 2026):
