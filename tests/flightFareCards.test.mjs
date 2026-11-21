@@ -304,12 +304,14 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   // one-way Ignav block's separate FareCard is gone, its itineraries
   // now render through the shared group. LetsFG adds a seventh: the
   // LetsfgItineraryGroup renders its legs through FareCard too, the
-  // same shared pattern as the Ignav group.
+  // same shared pattern as the Ignav group. Hacker Fares add two
+  // more (roadmap, Nov 21 2026 — F13): the hacker card renders one
+  // FareCard per leg, out and back, so the count is 9.
   const cardUses = (src.match(/<FareCard/g) ?? []).length;
   assert.equal(
     cardUses,
-    7,
-    'Duffel: one-way, multi-city, pair out, pair back; Ignav: itinerary-group legs, per-leg multi-city; LetsFG: itinerary-group legs'
+    9,
+    'Duffel: one-way, multi-city, pair out, pair back; Ignav: itinerary-group legs, per-leg multi-city; LetsFG: itinerary-group legs; Hacker: out leg, back leg'
   );
   assert.ok(src.includes('hidePrice'), 'Ignav itinerary groups hide the per-card price — the trip total shows once');
   assert.ok(!src.includes('>Book now<'), 'no rendered Book now button in the results');
@@ -358,11 +360,14 @@ test('audit round Nov 17: every flight card has one primary pill + one text link
   // offered booking, so the cheapest live fare could not be picked.
   // Every trip card now carries the same two actions: one primary
   // pill (Save this fare) + one text link (See booking options).
+  // The Ignav card's third action, Set price alert (roadmap,
+  // Nov 21 2026 — F5), is a ghost button — still one primary
+  // pill + one text link per card.
   for (const group of ['IgnavItineraryGroup', 'LetsfgItineraryGroup']) {
     assert.ok(src.includes(`function ${group}({`), `${group} exists`);
     assert.ok(src.includes('onSaveFare: (fareLabel: string) => void'), `${group} takes the save action`);
   }
-  assert.equal((src.match(/\{saved \? 'Saved ✓' : 'Save this fare'\}/g) || []).length, 4, 'Duffel pair + one-way + Ignav + LetsFG all offer Save this fare');
+  assert.equal((src.match(/\{saved \? 'Saved ✓' : 'Save this fare'\}/g) || []).length, 5, 'Duffel pair + one-way + Ignav + LetsFG + Hacker all offer Save this fare');
   assert.ok(src.includes('onSaveFare={onSaveFare}'), 'the merged grid passes Save to every group');
   // Ignav's booking lookup is the text link now, not a second
   // primary pill; LetsFG's link-out already was one.

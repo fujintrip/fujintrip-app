@@ -29,6 +29,7 @@ import PackagesSection, { TripOfTheWeekFeature } from './PackagesSection';
 import { ContinueBar, ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
 import { featuredPackages, tripOfTheWeek, type Package } from '../lib/packages';
 import { isSavedDetail, packageSavedKey, savedDetailLine, tripSavedKey, type SavedDetail } from '../lib/savedTrips';
+import { alertIsDrop, evaluatePriceAlert, isPriceAlert, priceAlertLine, PRICE_ALERTS_STORAGE_KEY, type PriceAlert } from '../lib/priceAlerts';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Seed handoff: the /chat page consumes this once on mount so the
@@ -133,6 +134,79 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       );
     } catch {}
   };
+  // Price alerts (roadmap, Nov 21 2026 — F5): the traveler sets an
+  // alert on a LIVE Ignav fare, and My Trips re-checks it when the
+  // traveler opens the account page — no background cron, no email,
+  // no account. A drop is measured against the fare price when the
+  // alert was created; 20% or more is flagged as a drop. Stored in
+  // localStorage, like the trips and the watches. This is a separate
+  // system from the older price watches above: those measure a
+  // trip's Duffel price-check total, while alerts watch one live
+  // Ignav fare — the two baselines must never be mixed.
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PRICE_ALERTS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) setAlerts(parsed.filter(isPriceAlert));
+      }
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem(PRICE_ALERTS_STORAGE_KEY, JSON.stringify(alerts)); } catch {} }, [alerts]);
+  const addAlert = (alert: PriceAlert) => {
+    setAlerts((all) => {
+      // One alert per trip — the existing one keeps its baseline.
+      if (all.some((x) => x.key === alert.key)) return all;
+      return [alert, ...all];
+    });
+  };
+  const removeAlert = (key: string) => setAlerts((all) => all.filter((x) => x.key !== key));
+  // One re-check of one alert: the same live Ignav search the fare
+  // came from, cheapest itinerary now against the baseline. A
+  // search with no live fare leaves the last known price in place
+  // and says the check found nothing.
+  const checkAlert = async (key: string) => {
+    const a = alerts.find((x) => x.key === key);
+    if (!a) return;
+    try {
+      const r = await fetch('/api/ignav-fares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tripType: a.tripType,
+          origin: a.from,
+          destination: a.to,
+          depart: a.depart,
+          ...(a.tripType === 'roundtrip' ? { return: a.return } : {}),
+          travelers: a.travelers,
+          cabin: a.cabin,
+        }),
+      });
+      const j = (await r.json()) as { live?: boolean; itineraries?: { price?: number }[] };
+      const prices = Array.isArray(j.itineraries)
+        ? j.itineraries.map((it) => it.price).filter((p): p is number => typeof p === 'number' && Number.isFinite(p) && p > 0)
+        : [];
+      const cheapest = prices.length ? Math.min(...prices) : null;
+      const now = new Date().toISOString();
+      setAlerts((all) => all.map((x) => (x.key === key ? evaluatePriceAlert(x, j.live ? cheapest : null, now) : x)));
+    } catch {
+      setAlerts((all) => all.map((x) => (x.key === key ? evaluatePriceAlert(x, null, new Date().toISOString()) : x)));
+    }
+  };
+  // Re-check the alerts when the traveler opens My Trips — once per
+  // mount, never in the background: the checks run only while the
+  // account page is open, and only for alerts the traveler set.
+  const alertsCheckedRef = useRef(false);
+  useEffect(() => {
+    if (variant !== 'account' || alertsCheckedRef.current || alerts.length === 0) return;
+    alertsCheckedRef.current = true;
+    for (const a of alerts) void checkAlert(a.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variant, alerts]);
+  // The keys already in My Trips — fare cards read this so "Alert
+  // set ✓" survives a reload, not just the click.
+  const alertKeys = useMemo(() => new Set(alerts.map((a) => a.key)), [alerts]);
   // Direction v3: the homepage no longer follows the chat trip — it
   // is a search-and-browse site now, and the comparison section that
   // read the persisted trip is gone. The setter stays: the chat
@@ -627,6 +701,33 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               )}
             </>
           )}
+          {/* Price alerts (roadmap, Nov 21 2026 — F5): live Ignav
+              fares only, set by the traveler on a fare card. The
+              re-check runs when My Trips opens — no background
+              checks, no emails. A drop of 20% or more against the
+              price when the alert was set is flagged. */}
+          <h2 style={{ marginTop: 24 }}>Price alerts</h2>
+          {alerts.length === 0 ? (
+            <p style={{ color: 'var(--muted)' }}>No price alerts yet. On a live Ignav fare, tap “Set price alert” and we’ll watch it for you here.</p>
+          ) : (
+            <>
+              <p className="plan-muted">We check each alert again when you open My Trips — no emails, no background checks. A drop of 20% or more against the price when you set the alert is flagged.</p>
+              <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
+                {alerts.map((a) => (
+                  <li key={a.key}>
+                    <span>
+                      {priceAlertLine(a)}
+                      {alertIsDrop(a) && (<><br /><strong>Price dropped 20% or more</strong></>)}
+                    </span>
+                    <span>
+                      <button type="button" className="ghost" onClick={() => void checkAlert(a.key)}>Check now</button>{' '}
+                      <button type="button" className="ghost" onClick={() => removeAlert(a.key)}>Delete</button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {/* Progressive disclosure (interface round, Nov 16 2026 —
               P1 #20): the preferences, emergency contact, embassy
               number and price watches sit behind <details> so the
@@ -805,6 +906,8 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             onSaveSearch={(label) => saveTrip(label, 'Request saved')}
             onSaveFare={saveFareDetail}
             savedKeys={savedKeys}
+            onSetAlert={addAlert}
+            alertKeys={alertKeys}
             onEditSearch={editSearch}
             onClearSearch={() => setSearch(null)}
           />

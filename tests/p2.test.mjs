@@ -9,6 +9,7 @@ import { buildPlan } from '../lib/planner.ts';
 import { assignPhotos, ALT_CITY_PHOTOS, CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from '../lib/data.ts';
 import { discoveryDestinations, priceFor } from '../lib/discovery.ts';
 import { contrastRatio } from '../lib/interface.ts';
+import { createPriceAlert } from '../lib/priceAlerts.ts';
 
 const root = new URL('..', import.meta.url).pathname;
 const css = readFileSync(join(root, 'app/globals.css'), 'utf8');
@@ -67,16 +68,20 @@ test('P2-1: PackagesSection renders the Trip-of-the-week hero with its preview',
   assert.ok(packagesSectionSrc.includes('photosById'), 'the section takes the one-photo assignment');
 });
 
-// --- P2-2: price tools — SKIPPED, deferred -----------------------------
+// --- P2-2: price tools — PARTLY BUILT, Nov 21 2026 -------------------
 // The review says "only on live fares, never on estimates". There are
 // no live fares a calendar or trend could be driven from: Ignav and
 // LetsFG are the only live flight sources and neither can drive a fare
 // calendar, Duffel fares are test-only, and every other price on the
-// site is a planning estimate. Building fare calendars, price-trend
-// lines or price alerts on estimates would present guesses as quotes,
-// so P2-2 is deferred — no code for it exists. These tests pin that:
-// if a price tool ever lands, it must land on live fares, and this
-// test must be updated deliberately, not by drift.
+// site is a planning estimate. Building fare calendars or price-trend
+// lines on estimates would present guesses as quotes, so those two
+// stay deferred — no code for them exists. Price alerts are the
+// exception: roadmap move 4 (F5, Nov 21 2026) built them on live
+// Ignav fares only — the traveler opts in on a live fare, the drop
+// is measured against the fare when the alert was set, and the
+// re-check runs only when My Trips opens. These tests pin both
+// halves: calendar and trend stay absent, alerts exist only on
+// live Ignav fares.
 
 function walkFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -90,13 +95,26 @@ function walkFiles(dir, out = []) {
   return out;
 }
 
-test('P2-2 (deferred): no fare-calendar / price-trend / price-alert code exists', () => {
-  const priceTool = /fare[-_ ]?calendar|price[-_ ]?trend|price[-_ ]?alert/i;
+test('P2-2 (deferred): no fare-calendar / price-trend code exists', () => {
+  const priceTool = /fare[-_ ]?calendar|price[-_ ]?trend/i;
   const files = [...walkFiles(join(root, 'components')), ...walkFiles(join(root, 'lib')), ...walkFiles(join(root, 'app'))];
   const offenders = files.filter((f) => priceTool.test(f));
   assert.deepEqual(offenders, [], `price-tool files must not exist while P2-2 is deferred: ${offenders.join(', ')}`);
-  assert.ok(!priceTool.test(searchResultsSrc), 'flight results render no fare calendar, price trend or price alert');
+  assert.ok(!priceTool.test(searchResultsSrc), 'flight results render no fare calendar or price trend');
   assert.ok(!searchResultsSrc.includes('trendLine'), 'flight results never compute a trend — a trend needs live-fare history, not estimates');
+});
+
+test('P2-2 (built Nov 21 2026 — F5): price alerts exist, on live Ignav fares only', () => {
+  // The alert module exists and the fare card offers it.
+  assert.ok(searchResultsSrc.includes('Set price alert'), 'the Ignav fare card offers Set price alert');
+  assert.ok(searchResultsSrc.includes('priceAlerts'), 'flight results wire the alert helpers');
+  assert.ok(fujinAppSrc.includes('Price alerts'), 'My Trips surfaces the alerts');
+  // And the creator still refuses anything that is not a live Ignav
+  // fare — the deferral’s "only on live fares" rule, kept.
+  const live = { source: 'Ignav', priceKind: 'live', tripType: 'roundtrip', from: 'New York', to: 'London', depart: '2026-12-10', ret: '2026-12-17', travelers: 2, cabin: 'economy', total: 1615, checkedAt: '2026-11-21T15:00:00.000Z' };
+  assert.ok(createPriceAlert(live), 'a live Ignav fare takes an alert');
+  assert.equal(createPriceAlert({ ...live, priceKind: 'test' }), null, 'a test fare never takes an alert');
+  assert.equal(createPriceAlert({ ...live, priceKind: 'estimate' }), null, 'an estimate never takes an alert');
 });
 
 test('P2-2 (deferred): the planner’s estimates are never a price-tool baseline', () => {

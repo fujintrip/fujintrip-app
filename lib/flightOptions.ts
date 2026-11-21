@@ -21,6 +21,7 @@ import type { DuffelFareOffer } from './duffel';
 import { canonicalAirlineName, perTravelerPrice, timeBucketFor } from './duffel';
 import type { IgnavItinerary } from './ignav';
 import { ignavItineraryStops } from './ignav';
+import type { HackerFareComparison } from './hackerFares';
 import { letsfgItineraryDuration, letsfgItineraryStops, type LetsfgItinerary } from './letsfg';
 import { LIVE_PRICE_BANDS, type LiveFilterOptions, type RowSort } from './searchPlaces';
 
@@ -57,6 +58,18 @@ export type FlightOption =
       durationMinutes: number;
       departMinutes: number;
       key: string;
+    }
+  | {
+      // Hacker Fare (roadmap, Nov 21 2026 — F13): two live Ignav
+      // one-way itineraries that together cost less than the
+      // cheapest Ignav round trip. A live option like any other —
+      // it ranks by its combined total and is never a test fare.
+      kind: 'hacker';
+      comparison: HackerFareComparison;
+      total: number;
+      durationMinutes: number;
+      departMinutes: number;
+      key: string;
     };
 
 // An Ignav trip's total duration — the sum of its legs, mirroring
@@ -74,6 +87,10 @@ export function mergeFlightOptions(args: {
   // LetsFG trips (Nov 16, 2026): optional — older callers pass none
   // and the merge is Duffel + Ignav exactly as before.
   letsfgItineraries?: LetsfgItinerary[];
+  // Hacker Fare comparison (roadmap, Nov 21 2026 — F13): the
+  // winning two-one-ways combo, already compared — the merge only
+  // places it. Absent, no hacker card exists.
+  hackerComparison?: HackerFareComparison | null;
   sort: RowSort;
   // Duffel test fares (UX direction, Nov 19 2026 — P0-4): when the
   // Duffel options are test fares, they sort AFTER every live fare
@@ -141,6 +158,22 @@ export function mergeFlightOptions(args: {
       key: `letsfg:${itinerary.letsfgId ?? `${itinerary.price}-${itinerary.legs[0]?.airline ?? ''}`}:${i}`,
     });
   }
+  // Hacker Fare (roadmap, Nov 21 2026 — F13): the two one-ways
+  // already won the comparison before they reach the merge — the
+  // merge only places the combo, by its combined total, among the
+  // other live fares. It is a live Ignav option, so the Duffel
+  // test-fare rank never touches it.
+  if (args.hackerComparison) {
+    const c = args.hackerComparison;
+    options.push({
+      kind: 'hacker',
+      comparison: c,
+      total: c.combinedTotal,
+      durationMinutes: ignavItineraryDuration(c.out) + ignavItineraryDuration(c.back),
+      departMinutes: c.out.legs[0]?.departMinutes ?? Infinity,
+      key: `hacker:${c.out.ignavId ?? c.out.price}:${c.back.ignavId ?? c.back.price}`,
+    });
+  }
   const byTotal = (a: FlightOption, b: FlightOption) => a.total - b.total;
   const byDuration = (a: FlightOption, b: FlightOption) => a.durationMinutes - b.durationMinutes || byTotal(a, b);
   const byDeparture = (a: FlightOption, b: FlightOption) => a.departMinutes - b.departMinutes || byTotal(a, b);
@@ -182,7 +215,9 @@ export function countFlightCards(options: FlightOption[], travelers: number): Li
           ? opt.offer.stops
           : opt.kind === 'ignav'
             ? ignavItineraryStops(opt.itinerary)
-            : letsfgItineraryStops(opt.itinerary);
+            : opt.kind === 'hacker'
+              ? ignavItineraryStops(opt.comparison.out)
+              : letsfgItineraryStops(opt.itinerary);
     counts.stops[stops] = (counts.stops[stops] ?? 0) + 1;
     // Airlines are canonical before the dedup (rendered-check fix,
     // Nov 21 2026): a pair flown by "ITA" out and "ITA Airways"
@@ -192,7 +227,9 @@ export function countFlightCards(options: FlightOption[], travelers: number): Li
         ? [...new Set([canonicalAirlineName(opt.out.airline), canonicalAirlineName(opt.back.airline)])]
         : opt.kind === 'duffel-oneway'
           ? [canonicalAirlineName(opt.offer.airline)]
-          : [...new Set(opt.itinerary.legs.map((l) => canonicalAirlineName(l.airline)))];
+          : opt.kind === 'hacker'
+            ? [...new Set([...opt.comparison.out.legs, ...opt.comparison.back.legs].map((l) => canonicalAirlineName(l.airline)))]
+            : [...new Set(opt.itinerary.legs.map((l) => canonicalAirlineName(l.airline)))];
     for (const a of airlines) counts.airlines[a] = (counts.airlines[a] ?? 0) + 1;
     const bucket = timeBucketFor(opt.departMinutes);
     if (bucket) counts.times[bucket] = (counts.times[bucket] ?? 0) + 1;

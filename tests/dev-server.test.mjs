@@ -1691,6 +1691,8 @@ test('account gate: the homepage, /chat and /account still work with no Clerk ke
   assert.ok(account.includes('Your travel preferences'), 'preferences live on the account page');
   assert.ok(account.includes('Emergency contact'), 'emergency contact lives on the account page');
   assert.ok(account.includes('Price watches'), 'price watches live on the account page');
+  assert.ok(account.includes('Price alerts'), 'price alerts live on the account page (roadmap, Nov 21 2026 — F5)');
+  assert.ok(account.includes('No price alerts yet'), 'the alerts section renders its honest empty state server-side');
   assert.ok(account.includes('href="/account"'), 'the header My Trips link points at the account page');
 });
 

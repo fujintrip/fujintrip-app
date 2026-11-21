@@ -83,6 +83,11 @@ import {
   ignavSourceTag,
   sortIgnavItineraries,
 } from '../lib/ignav';
+// Hacker Fares (roadmap, Nov 21 2026 — F13) + price alerts
+// (roadmap, Nov 21 2026 — F5): both live-Ignav-only, both pure
+// logic in lib — the panel only wires them in.
+import { compareHackerFare, hackerFareLabel, hackerFareSavingsLine, type HackerFareComparison } from '../lib/hackerFares';
+import { createPriceAlert, priceAlertKey, type PriceAlert } from '../lib/priceAlerts';
 import type { LetsfgFaresResponse, LetsfgItinerary } from '../lib/letsfg';
 import {
   cheapestLetsfgItinerary,
@@ -412,6 +417,8 @@ function IgnavItineraryGroup({
   sourceLabel,
   onSaveFare,
   alreadySaved,
+  onSetAlert,
+  alertSet,
 }: {
   itinerary: IgnavItinerary;
   travelers: number;
@@ -431,8 +438,16 @@ function IgnavItineraryGroup({
   // Trips, so the card renders "Saved ✓" on load, not just after
   // the click.
   alreadySaved?: boolean;
+  // Price alert (roadmap, Nov 21 2026 — F5): live Ignav fares only.
+  // The button exists only where the parent passes onSetAlert — the
+  // parent builds the alert from this live fare, and refuses
+  // anything that is not live Ignav. Duffel, LetsFG and estimate
+  // cards never get one.
+  onSetAlert?: () => void;
+  alertSet?: boolean;
 }) {
   const [saved, setSaved] = useState(alreadySaved ?? false);
+  const [alerted, setAlerted] = useState(alertSet ?? false);
   // Same trip-card shape as the Duffel cards (Nov 17, 2026): one
   // price block, one action.
   return (
@@ -460,7 +475,97 @@ function IgnavItineraryGroup({
         >
           {saved ? 'Saved ✓' : 'Save this fare'}
         </button>
+        {onSetAlert && (
+          <button
+            type="button"
+            className="ghost"
+            disabled={alerted || alertSet}
+            onClick={() => {
+              onSetAlert();
+              setAlerted(true);
+            }}
+          >
+            {alerted || alertSet ? 'Alert set ✓' : 'Set price alert'}
+          </button>
+        )}
         <IgnavBookingLinks key={itinerary.ignavId ?? itinerary.price} context={ignavBookingContext(itinerary)} travelers={travelers} />
+      </div>
+    </div>
+  );
+}
+
+// One Hacker Fare as a card (roadmap, Nov 21 2026 — F13): two live
+// Ignav one-way itineraries that together beat the cheapest Ignav
+// round trip. The combined total is the one headline price; the
+// saving names the round trip it was compared with; each leg keeps
+// its own source + checked time. No alert button here — an alert
+// watches one live fare, and this card is two.
+function HackerFareCard({
+  comparison,
+  travelers,
+  cabin,
+  sourceLabel,
+  outSourceLabel,
+  backSourceLabel,
+  onSaveFare,
+  alreadySaved,
+}: {
+  comparison: HackerFareComparison;
+  travelers: number;
+  cabin: string;
+  // The source line hides while a filter is active, like every
+  // per-fare source tag (Nov 16, 2026, user decision); the saving
+  // line never hides — it is the price story, not a source tag.
+  sourceLabel?: string;
+  outSourceLabel?: string;
+  backSourceLabel?: string;
+  onSaveFare: (fareLabel: string) => void;
+  alreadySaved?: boolean;
+}) {
+  const [saved, setSaved] = useState(alreadySaved ?? false);
+  const c = comparison;
+  const outAirline = c.out.legs[0]?.airline ?? 'Ignav';
+  const backAirline = c.back.legs[0]?.airline ?? 'Ignav';
+  return (
+    <div className="ignav-itinerary">
+      <TripPriceHeader total={c.combinedTotal} prefix="Trip total from" />
+      {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
+      <p className="plan-muted">
+        <strong>{hackerFareSavingsLine(c)}</strong> — two separate one-way tickets for the same trip.
+      </p>
+      <div>
+        <h6 className="ignav-leg-label">Outbound — one-way</h6>
+        {outSourceLabel && <p className="fare-card-source">{outSourceLabel}</p>}
+        <ul className="fare-list">
+          {c.out.legs.map((leg, i) => (
+            <FareCard key={`${leg.airline}-${leg.price}-${i}`} offer={leg} travelers={travelers} cabin={cabin} hidePrice />
+          ))}
+        </ul>
+      </div>
+      <div>
+        <h6 className="ignav-leg-label">Return — one-way</h6>
+        {backSourceLabel && <p className="fare-card-source">{backSourceLabel}</p>}
+        <ul className="fare-list">
+          {c.back.legs.map((leg, i) => (
+            <FareCard key={`${leg.airline}-${leg.price}-${i}`} offer={leg} travelers={travelers} cabin={cabin} hidePrice />
+          ))}
+        </ul>
+      </div>
+      <FlightPriceBreakdown total={c.combinedTotal} travelers={travelers} />
+      <div className="flight-option-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={saved}
+          onClick={() => {
+            onSaveFare(`${outAirline} + ${backAirline} · $${c.combinedTotal.toLocaleString()}`);
+            setSaved(true);
+          }}
+        >
+          {saved ? 'Saved ✓' : 'Save this fare'}
+        </button>
+        <IgnavBookingLinks key={c.out.ignavId ?? c.out.price} context={ignavBookingContext(c.out)} travelers={travelers} />
+        <IgnavBookingLinks key={c.back.ignavId ?? c.back.price} context={ignavBookingContext(c.back)} travelers={travelers} />
       </div>
     </div>
   );
@@ -895,6 +1000,8 @@ function FlightResults({
   onSave,
   onSaveFare,
   savedKeys,
+  onSetAlert,
+  alertKeys,
   onClearLiveFilters,
   onClearPrice,
   onClearSort,
@@ -923,6 +1030,11 @@ function FlightResults({
   // the label-only save is kept (the old behavior).
   onSaveFare?: (label: string, detail: SavedDetail) => void;
   savedKeys?: Set<string>;
+  // Price alerts (roadmap, Nov 21 2026 — F5): a live Ignav fare
+  // can carry an alert to My Trips. Absent, no alert button is
+  // offered — nothing breaks for callers that do not pass it.
+  onSetAlert?: (alert: PriceAlert) => void;
+  alertKeys?: Set<string>;
   onClearLiveFilters: () => void;
   onClearPrice: () => void;
   onClearSort: () => void;
@@ -970,6 +1082,14 @@ function FlightResults({
     status: 'idle',
     data: null,
   });
+  // Hacker Fares (roadmap, Nov 21 2026 — F13): the two one-way
+  // Ignav searches behind a round-trip search, so the panel can
+  // compare the cheapest round trip against two one-ways. Round
+  // trip only — one-way and multi-city searches never fire them.
+  const [hackerOneWays, setHackerOneWays] = useState<{ out: IgnavFaresResponse | null; back: IgnavFaresResponse | null }>({
+    out: null,
+    back: null,
+  });
   const fetchedKeyRef = useRef('');
   const tripType = query.tripType ?? 'roundtrip';
   const queryLegs = useMemo(() => flightLegsFromSearch(query), [query]);
@@ -984,6 +1104,7 @@ function FlightResults({
     // Multi-city never calls LetsFG (no multi-city endpoint), so its
     // state stays idle instead of loading forever.
     setLetsfg(tripType === 'multicity' ? { status: 'idle', data: null } : { status: 'loading', data: null });
+    setHackerOneWays({ out: null, back: null });
     onLiveOptions(null);
     let cancelled = false;
     // Ignav fires in parallel with the Duffel price-check — one
@@ -1029,6 +1150,33 @@ function FlightResults({
     ignavPromise.then((ig) => {
       if (!cancelled) setIgnav({ status: 'done', data: ig });
     });
+    // Hacker Fares (roadmap, Nov 21 2026 — F13): a round-trip search
+    // also runs the two one-way Ignav searches in parallel, so the
+    // cheapest round trip can be compared against two one-ways. Two
+    // extra Ignav requests per round-trip search (the route's
+    // server cache reuses a repeat search for 10 minutes); the
+    // comparison only exists when all three searches return live
+    // fares, and a missing leg is an honest absence, never a card.
+    if (tripType === 'roundtrip') {
+      const fetchOneWay = async (origin: string, destination: string, depart: string): Promise<IgnavFaresResponse | null> => {
+        try {
+          const r = await fetch('/api/ignav-fares', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tripType: 'oneway', origin, destination, travelers: query.travelers, depart, cabin: ctx.cabin }),
+          });
+          return (await r.json()) as IgnavFaresResponse;
+        } catch {
+          return null;
+        }
+      };
+      fetchOneWay(ctx.origin, ctx.destination, ctx.depart).then((o) => {
+        if (!cancelled) setHackerOneWays((s) => ({ ...s, out: o }));
+      });
+      fetchOneWay(ctx.destination, ctx.origin, ctx.return).then((b) => {
+        if (!cancelled) setHackerOneWays((s) => ({ ...s, back: b }));
+      });
+    }
     // LetsFG fires in parallel with Duffel and Ignav — one request
     // per search, never per keystroke. The route starts an async
     // LetsFG search and polls server-side, so this one fetch waits
@@ -1209,6 +1357,39 @@ function FlightResults({
   }, [fares.data, ignav.data, letsfg.data, stopsFilter, airlinesFilter, timesFilter, maxPrice, sort, query.travelers]);
   const { out, back, legLists, ignavFiltered, ignavItineraries, ignavLegLists, letsfgFiltered, letsfgItineraries } = visibleLive;
 
+  // Hacker Fare comparison (roadmap, Nov 21 2026 — F13): the
+  // cheapest live Ignav round trip against the cheapest live Ignav
+  // one-way in each direction. Computed from the UNFILTERED Ignav
+  // data — the comparison is about the cheapest fares Ignav
+  // returned, not the cheapest the traveler happens to be looking
+  // at. The merge only shows the combo when both one-way legs
+  // survive the active filters (the same stops/airline/time/price
+  // rules as every other card), so a filtered-out leg never shows
+  // a hacker card.
+  const hackerComparison = useMemo(() => {
+    if (tripType !== 'roundtrip' || !ignav.data || !hackerOneWays.out || !hackerOneWays.back) return null;
+    const cheapest = (list: IgnavItinerary[]) => {
+      if (!list.length) return null;
+      const price = cheapestIgnavItinerary(list);
+      return list.find((it) => it.price === price) ?? null;
+    };
+    return compareHackerFare({
+      roundTrip: cheapest(ignav.data.itineraries),
+      outOneWay: cheapest(hackerOneWays.out.itineraries),
+      backOneWay: cheapest(hackerOneWays.back.itineraries),
+      roundTripCheckedAt: ignav.data.observedAt,
+      outCheckedAt: hackerOneWays.out.observedAt,
+      backCheckedAt: hackerOneWays.back.observedAt,
+    });
+  }, [tripType, ignav.data, hackerOneWays]);
+  const hackerForMerge = useMemo(() => {
+    if (!hackerComparison) return null;
+    const passesLeg = (it: IgnavItinerary) => ignavItineraryMatches(it, stopsFilter, airlinesFilter, timesFilter);
+    if (!passesLeg(hackerComparison.out) || !passesLeg(hackerComparison.back)) return null;
+    if (maxPrice !== null && perTravelerPrice(hackerComparison.combinedTotal, query.travelers) > maxPrice) return null;
+    return hackerComparison;
+  }, [hackerComparison, stopsFilter, airlinesFilter, timesFilter, maxPrice, query.travelers]);
+
   // The merged card grid (Nov 16, 2026): one list, sources
   // interleaved by the active sort — Duffel pairs + Ignav trips +
   // LetsFG trips. Multi-city has no merged view; its legs stay
@@ -1221,10 +1402,11 @@ function FlightResults({
       back: visibleLive.back,
       ignavItineraries: visibleLive.ignavItineraries,
       letsfgItineraries: visibleLive.letsfgItineraries,
+      hackerComparison: hackerForMerge,
       sort,
       duffelTest,
     });
-  }, [tripType, visibleLive, sort, duffelTest]);
+  }, [tripType, visibleLive, sort, duffelTest, hackerForMerge]);
 
   // The filter options + counts (Nov 16, 2026): the options and the
   // facet counts come from the full live result, while shownCount /
@@ -1272,6 +1454,7 @@ function FlightResults({
       back: fares.data?.back ?? [],
       ignavItineraries: (ignav.data?.itineraries ?? []).slice(0, IGNAV_MAX_ITINERARIES),
       letsfgItineraries: (letsfg.data?.itineraries ?? []).slice(0, LETSFG_MAX_ITINERARIES),
+      hackerComparison: hackerForMerge,
       sort,
       duffelTest,
     }).length;
@@ -1361,6 +1544,39 @@ function FlightResults({
   };
   const isFareSaved = (source: string, total: number, airline: string, ret?: string) =>
     savedKeys?.has(fareKey(source, total, airline, ret)) ?? false;
+  // Price alert (roadmap, Nov 21 2026 — F5): one alert per trip —
+  // the key is the route + dates + party + cabin, not the fare, so
+  // setting an alert on a second fare for the same trip keeps the
+  // first baseline (a drop is measured against the price the
+  // traveler first saw). The creator refuses anything that is not
+  // a live Ignav fare, so this helper can only ever hand My Trips
+  // a live Ignav alert — an estimate or test fare has no button.
+  const alertKey = priceAlertKey({
+    from: ctx.origin,
+    to: destCity,
+    depart: departIso,
+    ret: tripType === 'oneway' ? '' : returnIso,
+    travelers: query.travelers,
+    cabin: ctx.cabin,
+  });
+  const isAlertSet = alertKeys?.has(alertKey) ?? false;
+  const setAlertFor = (itinerary: IgnavItinerary) => {
+    if (!onSetAlert) return;
+    const alert = createPriceAlert({
+      source: 'Ignav',
+      priceKind: 'live',
+      tripType: tripType === 'oneway' ? 'oneway' : 'roundtrip',
+      from: ctx.origin,
+      to: destCity,
+      depart: departIso,
+      ret: tripType === 'oneway' ? '' : returnIso,
+      travelers: query.travelers,
+      cabin: ctx.cabin,
+      total: itinerary.price,
+      checkedAt: ignav.data?.observedAt ?? new Date().toISOString(),
+    });
+    if (alert) onSetAlert(alert);
+  };
   // The plan flight budget is a round-trip figure — for one-way and
   // multi-city it would quote a budget that does not apply, so the
   // line (and the budget inside noFareMessage) stays round-trip only.
@@ -1474,6 +1690,34 @@ function FlightResults({
                       </li>
                     );
                   }
+                  if (opt.kind === 'hacker') {
+                    return (
+                      <li key={opt.key} className="flight-option-card">
+                        <HackerFareCard
+                          comparison={opt.comparison}
+                          travelers={query.travelers}
+                          cabin={query.cabin}
+                          sourceLabel={hideSourceTags ? undefined : hackerFareLabel()}
+                          outSourceLabel={hideSourceTags ? undefined : ignavSourceTag(opt.comparison.outCheckedAt)}
+                          backSourceLabel={hideSourceTags ? undefined : ignavSourceTag(opt.comparison.backCheckedAt)}
+                          onSaveFare={(label) =>
+                            saveFare(
+                              'Ignav',
+                              opt.comparison.combinedTotal,
+                              false,
+                              label,
+                              `${opt.comparison.out.legs[0]?.airline ?? 'Ignav'} + ${opt.comparison.back.legs[0]?.airline ?? 'Ignav'}`
+                            )
+                          }
+                          alreadySaved={isFareSaved(
+                            'Ignav',
+                            opt.comparison.combinedTotal,
+                            `${opt.comparison.out.legs[0]?.airline ?? 'Ignav'} + ${opt.comparison.back.legs[0]?.airline ?? 'Ignav'}`
+                          )}
+                        />
+                      </li>
+                    );
+                  }
                   return (
                     <li key={opt.key} className="flight-option-card">
                       <IgnavItineraryGroup
@@ -1486,6 +1730,8 @@ function FlightResults({
                           saveFare('Ignav', opt.itinerary.price, false, label, opt.itinerary.legs[0]?.airline ?? 'Ignav')
                         }
                         alreadySaved={isFareSaved('Ignav', opt.itinerary.price, opt.itinerary.legs[0]?.airline ?? 'Ignav')}
+                        onSetAlert={onSetAlert ? () => setAlertFor(opt.itinerary) : undefined}
+                        alertSet={isAlertSet}
                       />
                     </li>
                   );
@@ -2889,6 +3135,8 @@ export default function SearchResults({
   onSaveSearch,
   onSaveFare,
   savedKeys,
+  onSetAlert,
+  alertKeys,
   onEditSearch,
   onClearSearch,
 }: {
@@ -2901,6 +3149,11 @@ export default function SearchResults({
   // behavior) — nothing breaks for callers that do not pass it.
   onSaveFare?: (label: string, detail: SavedDetail) => void;
   savedKeys?: Set<string>;
+  // Price alerts (roadmap, Nov 21 2026 — F5): a live Ignav fare
+  // can carry an alert to My Trips. Absent, no alert button is
+  // offered — nothing breaks for callers that do not pass it.
+  onSetAlert?: (alert: PriceAlert) => void;
+  alertKeys?: Set<string>;
   onEditSearch: () => void;
   onClearSearch: () => void;
 }) {
@@ -3454,6 +3707,8 @@ export default function SearchResults({
               onSave={onSaveSearch}
               onSaveFare={onSaveFare}
               savedKeys={savedKeys}
+              onSetAlert={onSetAlert}
+              alertKeys={alertKeys}
               onClearLiveFilters={() => {
                 setStopsFilter([]);
                 setAirlinesFilter([]);
