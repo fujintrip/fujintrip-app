@@ -98,10 +98,51 @@ export function airlineInitials(name: string): string {
   return (letters || '?').toUpperCase();
 }
 
-// Duffel's test mode flies a fictional carrier, "Duffel Airways"
-// (its own docs call it proof of test mode) — it has no real logo,
-// so the card shows the initials tile, never a logo fetched for a
-// code that belongs to some other airline.
+// Canonical airline display name (rendered-check fix, Nov 21
+// 2026): the same carrier arrives under different names from
+// different suppliers — Ignav sends a code ("ITA") or an all-caps
+// name ("TAP AIR PORTUGAL", "TAP Air Portugal") where Duffel sends
+// the proper name ("ITA Airways", "Tap Air Portugal") — and the
+// airline facet listed both, with split counts. The facet
+// normalizes every name to one display form, and the filter
+// matches on the same form, so each airline appears once. The
+// canonical form keeps a carrier's brand acronym in caps
+// ("TAP Air Portugal", "ITA Airways"). Only the observed variants
+// are mapped by hand; anything else is case-normalized, never
+// guessed: a name that is already mixed-case passes through
+// unchanged, and a 2–3 letter all-caps word is an airline code
+// (SAS, KLM) and stays as it is.
+const AIRLINE_CODE_NAMES: Record<string, string> = {
+  ITA: 'ITA Airways',
+  TAP: 'TAP Air Portugal',
+};
+// Generic words that title-case inside a name ("TAP AIR PORTUGAL"
+// → "TAP Air Portugal", "BRITISH AIRWAYS" → "British Airways").
+const AIRLINE_TITLE_WORDS: Record<string, string> = {
+  AIR: 'Air',
+};
+// Words that stay capitalized inside an otherwise title-cased name
+// — the carrier's own brand acronym ("ITA Airways", "TAP Air
+// Portugal", not "Ita Airways" or "Tap Air Portugal"). Matched
+// case-insensitively, so "Tap Air Portugal" and "TAP AIR
+// PORTUGAL" canonicalize to the same name.
+const AIRLINE_KEEP_CAPS = new Set(['ITA', 'TAP']);
+export function canonicalAirlineName(name: string): string {
+  const raw = (name ?? '').trim();
+  if (!raw) return raw;
+  const upper = raw.toUpperCase();
+  if (AIRLINE_CODE_NAMES[upper]) return AIRLINE_CODE_NAMES[upper];
+  const words = raw.split(/\s+/);
+  const normalized = words.map((w) => {
+    const up = w.toUpperCase();
+    if (AIRLINE_KEEP_CAPS.has(up)) return up;
+    const title = AIRLINE_TITLE_WORDS[up];
+    if (title && up === w) return title;
+    if (/^[A-Z]{4,}$/.test(w)) return w.charAt(0) + w.slice(1).toLowerCase();
+    return w;
+  });
+  return normalized.join(' ');
+}
 export function isTestCarrier(name: string): boolean {
   return /duffel/i.test(name ?? '');
 }
@@ -147,6 +188,21 @@ export function layoversFor(offer: DuffelFareOffer): Layover[] {
 export function perTravelerPrice(total: number, travelers: number): number {
   if (!Number.isFinite(total) || travelers < 1) return total;
   return Math.round(total / travelers);
+}
+
+// The per-traveler + fee breakdown line (rendered-check fix, Nov 21
+// 2026): every flight card shows its breakdown — the per-traveler
+// figure always, even for one traveler (a 1-traveler card used to
+// render no line at all, and a 1-traveler Duffel card showed only
+// the fee), plus the service fee where one applies (Duffel/Stripe
+// checkout only — Ignav/LetsFG never carry a FujinTrip fee, so
+// their line is the per-traveler figure alone). The fee is never
+// hidden and never folded into the total.
+export function flightBreakdownParts(total: number, travelers: number, fee?: number): string[] {
+  const n = Math.max(1, travelers);
+  const parts = [`$${perTravelerPrice(total, n).toLocaleString()} per traveler · ${n} traveler${n > 1 ? 's' : ''}`];
+  if (fee !== undefined) parts.push(`+ $${fee.toLocaleString()} service fee per flight order`);
+  return parts;
 };
 
 // Departure-time buckets for the flights filter (Nov 15, 2026):

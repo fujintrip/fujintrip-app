@@ -18,7 +18,7 @@
 // or departure sorts last, price breaking the tie — nothing is
 // dropped for lacking a time.
 import type { DuffelFareOffer } from './duffel';
-import { perTravelerPrice, timeBucketFor } from './duffel';
+import { canonicalAirlineName, perTravelerPrice, timeBucketFor } from './duffel';
 import type { IgnavItinerary } from './ignav';
 import { ignavItineraryStops } from './ignav';
 import { letsfgItineraryDuration, letsfgItineraryStops, type LetsfgItinerary } from './letsfg';
@@ -184,12 +184,15 @@ export function countFlightCards(options: FlightOption[], travelers: number): Li
             ? ignavItineraryStops(opt.itinerary)
             : letsfgItineraryStops(opt.itinerary);
     counts.stops[stops] = (counts.stops[stops] ?? 0) + 1;
+    // Airlines are canonical before the dedup (rendered-check fix,
+    // Nov 21 2026): a pair flown by "ITA" out and "ITA Airways"
+    // back is one carrier, so it counts once, not twice.
     const airlines =
       opt.kind === 'duffel-pair'
-        ? [...new Set([opt.out.airline, opt.back.airline])]
+        ? [...new Set([canonicalAirlineName(opt.out.airline), canonicalAirlineName(opt.back.airline)])]
         : opt.kind === 'duffel-oneway'
-          ? [opt.offer.airline]
-          : [...new Set(opt.itinerary.legs.map((l) => l.airline))];
+          ? [canonicalAirlineName(opt.offer.airline)]
+          : [...new Set(opt.itinerary.legs.map((l) => canonicalAirlineName(l.airline)))];
     for (const a of airlines) counts.airlines[a] = (counts.airlines[a] ?? 0) + 1;
     const bucket = timeBucketFor(opt.departMinutes);
     if (bucket) counts.times[bucket] = (counts.times[bucket] ?? 0) + 1;

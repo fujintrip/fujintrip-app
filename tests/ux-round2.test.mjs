@@ -22,6 +22,7 @@ const packagesSectionSrc = readFileSync(join(root, 'components/PackagesSection.t
 const searchWidgetSrc = readFileSync(join(root, 'components/SearchWidget.tsx'), 'utf8');
 const searchResultsSrc = readFileSync(join(root, 'components/SearchResults.tsx'), 'utf8');
 const homeSectionsSrc = readFileSync(join(root, 'components/HomeSections.tsx'), 'utf8');
+const duffelSrc = readFileSync(join(root, 'lib/duffel.ts'), 'utf8');
 
 // --- P0-1: photographic hero --------------------------------------------
 
@@ -199,10 +200,14 @@ test('round 2 P0-7: the headline carries one dollar amount; the per-traveler fig
   assert.ok(searchResultsSrc.includes('<FlightPriceBreakdown total={offer.price} travelers={travelers} fee={fee} />'), 'Duffel one-ways break down per-traveler + fee');
   assert.ok(searchResultsSrc.includes('<FlightPriceBreakdown total={itinerary.price} travelers={travelers} />'), 'Ignav and LetsFG groups break down per-traveler');
   // The fee is never hidden and never removed: the exact tiered-fee
-  // expressions still feed the breakdown.
+  // expressions still feed the breakdown, and the fee line itself
+  // lives in the shared flightBreakdownParts helper (rendered-check
+  // fix, Nov 21 2026) that every card renders through.
   assert.ok(searchResultsSrc.includes('const fee = serviceFee(total);'), 'the pair fee is still computed from the tiered rule');
   assert.ok(searchResultsSrc.includes('const fee = serviceFee(offer.price);'), 'the one-way fee is still computed from the tiered rule');
-  assert.ok(searchResultsSrc.includes('`+ $${fee.toLocaleString()} service fee per flight order`'), 'the fee still reads separately on the card');
+  assert.ok(searchResultsSrc.includes('flightBreakdownParts(total, travelers, fee)'), 'the pair breakdown carries the fee');
+  assert.ok(searchResultsSrc.includes('flightBreakdownParts(offer.price, travelers)'), 'standalone fare cards break down per-traveler too');
+  assert.ok(duffelSrc.includes('`+ $${fee.toLocaleString()} service fee per flight order`'), 'the fee still reads separately on the card');
   assert.ok(searchResultsSrc.includes('className="fare-card-breakdown"'), 'standalone fare cards break down per-traveler below the price');
   assert.ok(css.includes('.flight-option-breakdown{color:var(--muted);font-size:13px;margin:0 0 12px}'), 'the group breakdown line is styled');
   assert.ok(css.includes('.fare-card-breakdown{color:var(--muted);font-size:13px;margin:8px 0 0}'), 'the fare-card breakdown line is styled');

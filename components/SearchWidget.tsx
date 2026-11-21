@@ -214,8 +214,11 @@ export default function SearchWidget({
   // A destination card prefills the widget (spec §1d) — the shared
   // destination takes the card's destination; the traveler searches
   // from there. The nonce changes per click so the same card can be
-  // picked twice.
-  prefill: { destination: string; nonce: number } | null;
+  // picked twice. A full-query prefill ("Edit search", rendered-
+  // check fix Nov 21 2026) carries the whole current search, so
+  // the widget reopens showing the values the results were built
+  // from, not the stale values from the first load.
+  prefill: { destination: string; nonce: number; query?: SearchQuery } | null;
   onSubmit: (q: SearchQuery) => void;
 }) {
   const router = useRouter();
@@ -309,24 +312,11 @@ export default function SearchWidget({
     setToday(todayIsoLocal());
   }, []);
 
-  const prefillNonce = prefill?.nonce ?? 0;
-  useEffect(() => {
-    if (!prefill) return;
-    setPlace(prefill.destination);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillNonce]);
-
-  // A deep link followed while already on the page (or Back) changes
-  // initialSearch without remounting the widget — the form re-syncs
-  // to the link so "Edit search" shows the values the results were
-  // built from, not the stale values from the first load. Typing
-  // never changes initialSearch, so typing is never clobbered; the
-  // widget's own submit writes the same values back, so its
-  // router.replace is a no-op here.
-  const initialSearchKey = initialSearch ? searchQueryToParams(initialSearch) : '';
-  useEffect(() => {
-    if (!initialSearch) return;
-    const v = formValuesFromQuery(initialSearch);
+  // Apply a whole query to the form fields (rendered-check fix,
+  // Nov 21 2026 — "Edit search" restores the search the results
+  // were built from): the same setters the deep-link re-sync uses,
+  // so both paths write the same values.
+  const applyFormValues = (v: ReturnType<typeof formValuesFromQuery>, q: SearchQuery | null | undefined) => {
     setPlace(v.place);
     setFrom(v.from);
     setDepart(v.depart);
@@ -341,13 +331,37 @@ export default function SearchWidget({
     setDropoff(v.dropoff);
     setMonth(v.month);
     setTripType(v.tripType);
-    setLegs(padLegs(v.legs, initialSearch));
+    setLegs(padLegs(v.legs, q));
     setStayTier(v.stayTier);
     setCarTier(v.carTier);
     setTourTier(v.tourTier);
     setCruiseTier(v.cruiseTier);
     setBusTier(v.busTier);
     setTaxiTier(v.taxiTier);
+  };
+
+  const prefillNonce = prefill?.nonce ?? 0;
+  useEffect(() => {
+    if (!prefill) return;
+    // A full-query prefill ("Edit search") restores every field;
+    // a destination-only prefill (a destination card) sets the
+    // destination, as before.
+    if (prefill.query) applyFormValues(formValuesFromQuery(prefill.query), prefill.query);
+    else setPlace(prefill.destination);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillNonce]);
+
+  // A deep link followed while already on the page (or Back) changes
+  // initialSearch without remounting the widget — the form re-syncs
+  // to the link so "Edit search" shows the values the results were
+  // built from, not the stale values from the first load. Typing
+  // never changes initialSearch, so typing is never clobbered; the
+  // widget's own submit writes the same values back, so its
+  // router.replace is a no-op here.
+  const initialSearchKey = initialSearch ? searchQueryToParams(initialSearch) : '';
+  useEffect(() => {
+    if (!initialSearch) return;
+    applyFormValues(formValuesFromQuery(initialSearch), initialSearch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
 

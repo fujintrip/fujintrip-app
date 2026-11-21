@@ -38,6 +38,7 @@
 // and never presents one as bookable on FujinTrip.
 import {
   cabinClassFor,
+  canonicalAirlineName,
   formatMinutes,
   formatTime12,
   timeBucketFor,
@@ -427,7 +428,9 @@ export function letsfgItineraryMatches(
   timesFilter: string[] = []
 ): boolean {
   if (stopsFilter.length && !stopsFilter.includes(letsfgItineraryStops(it))) return false;
-  if (airlinesFilter.length && !it.legs.every((l) => airlinesFilter.includes(l.airline))) return false;
+  // The airline filter compares canonical names (rendered-check
+  // fix, Nov 21 2026) — see ignavItineraryMatches.
+  if (airlinesFilter.length && !it.legs.every((l) => airlinesFilter.includes(canonicalAirlineName(l.airline)))) return false;
   if (timesFilter.length) {
     const bucket = timeBucketFor(it.legs[0]?.departMinutes);
     if (!bucket || !timesFilter.includes(bucket)) return false;

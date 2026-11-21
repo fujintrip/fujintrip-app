@@ -12,7 +12,7 @@ import { buildTripCard, cardComparison, CITY_INFO, suggestedStart, type TripCard
 import { buildMapRail } from '../lib/mapRail';
 import { categoryCounts, filterByCategory, type PackageFilter, type TripCategory } from '../lib/tripCategories';
 import { bundleFromLegs, bundleTotal, bundleLine, bundleLockedUntil, bundleKey } from '../lib/bundle';
-import { appendObservation, duffelFareNote, duffelFareQualifier, duffelFareShort, duffelFaresPlural, parseLiveFares, trendLine, type LiveFares, type TrendObservation } from '../lib/duffel';
+import { appendObservation, CITY_IATA, duffelFareNote, duffelFareQualifier, duffelFareShort, duffelFaresPlural, parseLiveFares, trendLine, type LiveFares, type TrendObservation } from '../lib/duffel';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { TonightResult } from '../lib/food';
 import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInfo } from '../lib/visa';
@@ -27,6 +27,7 @@ import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival'
 import { auditTrip, checkConnection, departureDayFlags, feasibilitySummary } from '../lib/feasibility';
 import { checkInKeyFor, checkInMissed, parseCheckIn, type CheckIn } from '../lib/emergency';
 import Checklist from '../components/Checklist';
+import PlaceField from '../components/PlaceField';
 import PlanPdfPayment from '../components/PlanPdfPayment';
 import { guideFor } from '../lib/localGuides';
 import { gateDecision } from '../lib/auth';
@@ -2277,7 +2278,10 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                 <strong style={{ fontSize: 13 }}>Check my flight</strong>
                 <div className="row" style={{ marginTop: 8 }}>
                   <input value={flightNo} onChange={(e) => setFlightNo(e.target.value)} placeholder="Flight number, e.g. UAL123" aria-label="Flight number" style={{ textTransform: 'uppercase' }} />
-                  <input type="date" value={flightDate} onChange={(e) => setFlightDate(e.target.value)} aria-label="Departure date" />
+                  {/* minWidth (rendered-check fix, Nov 21 2026): the
+                      global input flex rule squeezed this date field
+                      until its year hid behind the picker icon. */}
+                  <input type="date" value={flightDate} onChange={(e) => setFlightDate(e.target.value)} aria-label="Departure date" style={{ minWidth: 180 }} />
                   <button className="ghost" onClick={checkFlight} disabled={!flightNo.trim() || !flightDate || flightStatus === 'loading'}>
                     {flightStatus === 'loading' ? 'Checking…' : 'Check status'}
                   </button>
@@ -3277,7 +3281,13 @@ export function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) 
     onSave(label);
     if (tab === 'Flights') {
       try {
-        const r = await fetch('/api/duffel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: from || 'JFK', destination: to || 'LHR', date, travelers: 2 }) });
+        // The PlaceField value is a city name ("New York"), and
+        // /api/duffel takes a 3-letter code — resolve through the
+        // same CITY_IATA map the search pipeline uses, falling back
+        // to the typed text (a bare "JFK" passes through, as
+        // before). Sending the city name un-resolved would arrive
+        // as "NEW" after the route's slice(0, 3).
+        const r = await fetch('/api/duffel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ origin: (CITY_IATA[from] ?? from) || 'JFK', destination: (CITY_IATA[to] ?? to) || 'LHR', date, travelers: 2 }) });
         const j = await r.json();
         setResult(`${j.label} — from $${j.offers?.[0]?.price ?? '—'} ${j.offers?.[0] ? `(${j.mode === 'live' ? 'live fare' : j.live ? 'test fare' : 'estimate'})` : ''} Saved to My Trips.`);
       } catch { setResult('Saved to My Trips as a request.'); }
@@ -3288,9 +3298,22 @@ export function SearchForm({ tab, onSave }: { tab: Tab; onSave: (label: string) 
   return (
     <div>
       <div className="row" style={{ flexWrap: 'wrap' }}>
-        <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="From" aria-label="From" />
-        <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="To / destination" aria-label="Destination" />
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+        {/* PlaceField (rendered-check fix, Nov 21 2026): the app's
+            standard is a place field with suggestions everywhere a
+            place is typed — the pill bar has it, this form had a
+            plain input with no dropdown. Each field sits in a
+            positioned wrapper so the absolute dropdown anchors to
+            it (the .row has no positioned ancestor). */}
+        <div className="chat-place-wrap">
+          <PlaceField id="chat-from" label="From" value={from} onChange={setFrom} placeholder="From" />
+        </div>
+        <div className="chat-place-wrap">
+          <PlaceField id="chat-to" label="Destination" value={to} onChange={setTo} placeholder="To / destination" />
+        </div>
+        {/* minWidth (rendered-check fix, Nov 21 2026): the global
+            input flex rule squeezed this date field until its year
+            hid behind the calendar-picker icon ("12/10/202"). */}
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" style={{ minWidth: 180 }} />
         <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Travelers"><option>1 traveler</option><option>2 travelers</option><option>3 travelers</option><option>4 travelers</option><option>Family (5+)</option></select>
         <button className="primary" onClick={submit}>Search {tab}</button>
       </div>

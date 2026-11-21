@@ -71,7 +71,7 @@ import {
 } from '../lib/searchPlaces';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { DuffelFareOffer } from '../lib/duffel';
-import { formatMinutes, layoversFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor, CITY_IATA } from '../lib/duffel';
+import { canonicalAirlineName, flightBreakdownParts, formatMinutes, layoversFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor, CITY_IATA } from '../lib/duffel';
 import type { IgnavBookingLink, IgnavFaresResponse, IgnavItinerary, IgnavLegOffer } from '../lib/ignav';
 import {
   cheapestIgnavItinerary,
@@ -225,7 +225,6 @@ function FareCard({
     .filter((s) => s)
     .join(' · ');
   const singleFlight = segs.length === 1 ? segs[0].flightNumber : undefined;
-  const perPerson = travelers > 1 ? perTravelerPrice(offer.price, travelers) : null;
   return (
     <li className="fare-card">
       <div className="fare-card-main">
@@ -265,10 +264,13 @@ function FareCard({
           the per-traveler figure sits below the price, not under it
           in the same block — one price per card. Only when this
           card carries its own price (hidePrice cards are legs of a
-          group, whose breakdown lives on the group). */}
-      {!hidePrice && perPerson !== null && (
+          group, whose breakdown lives on the group). The line
+          always renders for a priced card, even for one traveler —
+          a 1-traveler card with no line read as a missing price
+          (rendered-check fix, Nov 21 2026). */}
+      {!hidePrice && (
         <p className="fare-card-breakdown">
-          ${perPerson.toLocaleString()} per traveler · {travelers} travelers
+          {flightBreakdownParts(offer.price, travelers).join(' · ')}
         </p>
       )}
       {offer.bags && (
@@ -565,16 +567,12 @@ function TripPriceHeader({ total, prefix }: { total: number; prefix: string }) {
 // fee live here — after the legs, before the actions, still on
 // every card, still shown separately, never folded into the total
 // and never hidden. The fee is a separate charge at checkout; the
-// headline is the fare total alone. Returns null for a single
-// traveler with no fee (nothing to break down).
+// headline is the fare total alone. The line always renders — even
+// for one traveler, where the per-traveler figure equals the total
+// (a missing line read as a missing price; rendered-check fix,
+// Nov 21 2026).
 function FlightPriceBreakdown({ total, travelers, fee }: { total: number; travelers: number; fee?: number }) {
-  const perPerson = travelers > 1 ? perTravelerPrice(total, travelers) : null;
-  const parts = [
-    perPerson !== null ? `$${perPerson.toLocaleString()} per traveler · ${travelers} travelers` : null,
-    fee !== undefined ? `+ $${fee.toLocaleString()} service fee per flight order` : null,
-  ].filter((x): x is string => x !== null);
-  if (parts.length === 0) return null;
-  return <p className="flight-option-breakdown">{parts.join(' · ')}</p>;
+  return <p className="flight-option-breakdown">{flightBreakdownParts(total, travelers, fee).join(' · ')}</p>;
 }
 
 // Checkout link for a Duffel offer (Stripe test mode, Nov 20 2026):
@@ -620,8 +618,10 @@ function duffelCheckoutHref(args: {
 // price; a per-leg price would read as a one-way fare next to
 // round-trip totals), and two actions: "Save this fare" stores the
 // chosen option in My Trips, and "Continue to checkout" (Stripe
-// test mode, Nov 20, 2026) opens /checkout for the pair — test
-// fares only, never a live booking.
+// test mode, Nov 20, 2026) opens /checkout for the pair — for a
+// LIVE fare only. A test fare is not bookable, so a test-fare card
+// offers Save only, never a checkout link (rendered-check fix,
+// Nov 21 2026).
 function DuffelPairCard({
   out,
   back,
@@ -651,7 +651,8 @@ function DuffelPairCard({
   // behind a filter, unlike the small source tag.
   testFare?: boolean;
   // /checkout link for the pair ('' when either offer has no id or
-  // a city has no IATA code — then no checkout link renders).
+  // a city has no IATA code — then no checkout link renders; and
+  // never rendered for a test fare — see below).
   checkoutHref?: string;
 }) {
   const total = out.price + back.price;
@@ -683,7 +684,7 @@ function DuffelPairCard({
         >
           {saved ? 'Saved ✓' : 'Save this fare'}
         </button>
-        {checkoutHref && (
+        {checkoutHref && !testFare && (
           <a className="ghost" href={checkoutHref}>
             Continue to checkout
           </a>
@@ -698,7 +699,9 @@ function DuffelPairCard({
 // total on top, source tag, one leg with its price hidden, one
 // action), never a bare fare card with the price on the leg.
 // "Continue to checkout" (Stripe test mode, Nov 20, 2026) opens
-// /checkout for the offer — test fares only, never a live booking.
+// /checkout for the offer — for a LIVE fare only; a test-fare card
+// offers Save only, never a checkout link (rendered-check fix,
+// Nov 21 2026).
 function DuffelOneWayCard({
   offer,
   travelers,
@@ -722,7 +725,8 @@ function DuffelOneWayCard({
   // behind a filter, unlike the small source tag.
   testFare?: boolean;
   // /checkout link for the offer ('' when the offer has no id or a
-  // city has no IATA code — then no checkout link renders).
+  // city has no IATA code — then no checkout link renders; and
+  // never rendered for a test fare — see below).
   checkoutHref?: string;
 }) {
   const fee = serviceFee(offer.price);
@@ -748,7 +752,7 @@ function DuffelOneWayCard({
         >
           {saved ? 'Saved ✓' : 'Save this fare'}
         </button>
-        {checkoutHref && (
+        {checkoutHref && !testFare && (
           <a className="ghost" href={checkoutHref}>
             Continue to checkout
           </a>
@@ -1156,7 +1160,9 @@ function FlightResults({
     };
     const passesOffer = (o: DuffelFareOffer) =>
       (stopsFilter.length === 0 || stopsFilter.includes(o.stops)) &&
-      (airlinesFilter.length === 0 || airlinesFilter.includes(o.airline)) &&
+      // Canonical airline match (rendered-check fix, Nov 21 2026):
+      // the facet holds "ITA Airways", the offer may say "ITA".
+      (airlinesFilter.length === 0 || airlinesFilter.includes(canonicalAirlineName(o.airline))) &&
       passesTime(o) &&
       passesPrice(o.price);
     // The sidebar sort re-orders the live fares too — cheapest,
@@ -1498,10 +1504,10 @@ function FlightResults({
               )
             )}
             {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
-              <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
+              <p className="plan-muted">{`Showing the ${IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.`}</p>
             )}
             {letsfgFiltered.length > LETSFG_MAX_ITINERARIES && (
-              <p className="plan-muted">Showing the {LETSFG_MAX_ITINERARIES} cheapest live trips from LetsFG.</p>
+              <p className="plan-muted">{`Showing the ${LETSFG_MAX_ITINERARIES} cheapest live trips from LetsFG.`}</p>
             )}
             <p>
               <button type="button" className="primary" onClick={() => onSave(searchRequestLabel(query))}>
@@ -1621,7 +1627,7 @@ function FlightResults({
                   </p>
                 )}
                 {ignavFiltered.length > IGNAV_MAX_ITINERARIES && (
-                  <p className="plan-muted">Showing the {IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.</p>
+                  <p className="plan-muted">{`Showing the ${IGNAV_MAX_ITINERARIES} cheapest live trips from Ignav.`}</p>
                 )}
               </>
             )}

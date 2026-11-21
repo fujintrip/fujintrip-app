@@ -158,6 +158,14 @@ button:disabled{opacity:.4;cursor:not-allowed}
   *,*::before,*::after{animation:none !important;transition:none !important;scroll-behavior:auto !important}
 }
 .row{display:flex;gap:8px;flex-wrap:wrap}
+/* The chat form's place fields (rendered-check fix, Nov 21 2026):
+   each PlaceField sits in a positioned wrapper so its absolute
+   dropdown anchors to the field, not to the page — the .row has
+   no positioned ancestor. The wrapper flexes like the plain
+   inputs it replaced (flex:1, min-width 160px) and the input
+   fills it, so the row's widths do not change. */
+.chat-place-wrap{position:relative;flex:1 1 160px;min-width:160px}
+.chat-place-wrap input{width:100%}
 input,select,button{font-family:inherit;font-size:15px}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 img{max-width:100%}

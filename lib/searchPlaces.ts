@@ -12,7 +12,7 @@ import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES, buildPlan } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
-import { cabinClassFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
+import { cabinClassFor, canonicalAirlineName, perTravelerPrice, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
 
 let placeCache: string[] | null = null;
 
@@ -791,11 +791,18 @@ export function searchQueryFromParams(
 ): SearchQuery | null {
   const tab = homeTabIdFromQuery(params.tab ?? null);
   const q = emptySearchQuery(tab);
-  q.from = cleanPlace(params.from);
-  q.to = cleanPlace(params.to);
+  // Deep-link aliases (rendered-check fix, Nov 21 2026): a shared
+  // link may name the ends/dates the way the checkout URLs do
+  // (origin/destination/date/returnDate) instead of the widget's
+  // own from/to/depart/return. The widget's names win when both
+  // are present; the aliases only fill what is missing, so an
+  // origin-only link still runs the search instead of landing on
+  // an empty form.
+  q.from = cleanPlace(params.from ?? params.origin);
+  q.to = cleanPlace(params.to ?? params.destination);
   q.dest = cleanPlace(params.dest);
-  q.depart = cleanDate(params.depart);
-  q.ret = cleanDate(params.return);
+  q.depart = cleanDate(params.depart ?? params.date);
+  q.ret = cleanDate(params.return ?? params.returnDate);
   if (q.depart && q.depart < todayIso) q.depart = '';
   if (q.ret && q.ret < todayIso) q.ret = '';
   if (q.depart && q.ret && q.ret < q.depart) q.ret = '';
@@ -1166,14 +1173,16 @@ export function liveFilterOptions(args: {
   const optionStops = new Set<number>();
   const optionTimes = new Set<string>();
   for (const o of args.allOffers) {
-    optionAirlines.add(o.airline);
+    // Airline facets are canonical (rendered-check fix, Nov 21
+    // 2026): "ITA" and "ITA Airways" are one facet, not two.
+    optionAirlines.add(canonicalAirlineName(o.airline));
     optionStops.add(o.stops);
     const b = timeBucketFor(o.departMinutes);
     if (b) optionTimes.add(b);
   }
   for (const it of args.allItineraries) {
     for (const l of it.legs) {
-      optionAirlines.add(l.airline);
+      optionAirlines.add(canonicalAirlineName(l.airline));
     }
     optionStops.add(it.legs[0]?.stops ?? 0);
     const b = timeBucketFor(it.legs[0]?.departMinutes);
@@ -1191,10 +1200,10 @@ export function liveFilterOptions(args: {
     }
   };
   for (const o of args.allOffers) {
-    countFare([o.stops], [o.airline], timeBucketFor(o.departMinutes), o.price);
+    countFare([o.stops], [canonicalAirlineName(o.airline)], timeBucketFor(o.departMinutes), o.price);
   }
   for (const it of args.allItineraries) {
-    const airlines = [...new Set(it.legs.map((l) => l.airline))];
+    const airlines = [...new Set(it.legs.map((l) => canonicalAirlineName(l.airline)))];
     countFare(
       [it.legs[0]?.stops ?? 0],
       airlines.length === 1 ? airlines : [],

@@ -282,7 +282,11 @@ test('FareCard: logo, timeline, stops with layovers, details toggle, price — i
   assert.ok(src.includes('aria-expanded={open}'), 'the toggle announces its state');
   assert.ok(src.includes('fare-card-segments'), 'the expanded details list the segments');
   assert.ok(src.includes('Layover in {layovers[i].airport}'), 'each layover names its airport');
-  assert.ok(src.includes('perTravelerPrice(offer.price, travelers)'), 'the card shows the per-traveler price');
+  // The per-traveler figure comes from the shared breakdown
+  // helper (rendered-check fix, Nov 21 2026 — the helper renders
+  // the line even for one traveler, where the old perPerson
+  // variable returned null and the card showed no line at all).
+  assert.ok(src.includes('flightBreakdownParts(offer.price, travelers)'), 'the card shows the per-traveler price');
   assert.ok(src.includes('offer.bags &&'), 'baggage shows only when Duffel provides it');
   assert.ok(src.includes('{s.aircraft &&'), 'aircraft shows only when Duffel provides it');
   assert.ok(src.includes('{singleFlight &&'), 'the flight number shows on a single-segment card');

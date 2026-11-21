@@ -306,7 +306,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
     setSearch(initialSearch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
-  const [prefill, setPrefill] = useState<{ destination: string; nonce: number } | null>(null);
+  const [prefill, setPrefill] = useState<{ destination: string; nonce: number; query?: SearchQuery } | null>(null);
   // My Trips progressive disclosure (interface round, Nov 16 2026 —
   // P1 #20): the trips list shows the first 5 until the traveler
   // asks for the rest, so the section stops dominating the page.
@@ -334,8 +334,23 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
     if (q.dest) setPrefill({ destination: q.dest, nonce: Date.now() });
     setTimeout(() => document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
+  // "Edit search" (rendered-check fix, Nov 21 2026): scrolling to
+  // the widget was not enough — the widget kept whatever the
+  // traveler last typed, which can drift from the search the
+  // results were built from (a resumed search, a deep link
+  // followed mid-session), and its tab could show another
+  // category's form. So Edit restores the CURRENT search into
+  // the widget (full query, not just the destination), switches
+  // the widget to the search's tab, scrolls to it, and focuses
+  // the first field so the form is visibly open for editing.
   const editSearch = () => {
+    if (!search) return;
+    setWidgetTab(search.tab);
+    setPrefill({ destination: search.dest || search.to || '', nonce: Date.now(), query: search });
     document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>('#search-widget input')?.focus({ preventScroll: true });
+    }, 350);
   };
 
   const seedChat = (name: string, sourceTips?: Record<string, string>, cities?: string[]) => {

@@ -28,6 +28,7 @@
 // FujinTrip, and no commission is claimed.
 import {
   cabinClassFor,
+  canonicalAirlineName,
   formatMinutes,
   formatTime12,
   timeBucketFor,
@@ -481,7 +482,10 @@ export function ignavItineraryMatches(
   timesFilter: string[] = []
 ): boolean {
   if (stopsFilter.length && !stopsFilter.includes(ignavItineraryStops(it))) return false;
-  if (airlinesFilter.length && !it.legs.every((l) => airlinesFilter.includes(l.airline))) return false;
+  // The airline filter compares canonical names (rendered-check
+  // fix, Nov 21 2026): a filter for "ITA Airways" matches a leg
+  // Ignav calls "ITA".
+  if (airlinesFilter.length && !it.legs.every((l) => airlinesFilter.includes(canonicalAirlineName(l.airline)))) return false;
   if (timesFilter.length) {
     const bucket = timeBucketFor(it.legs[0]?.departMinutes);
     if (!bucket || !timesFilter.includes(bucket)) return false;
