@@ -1220,3 +1220,20 @@ button.continue-card:hover{border-color:var(--ink)}
   .voices-teaser{flex-direction:column;padding:20px}
   .trust-strip{grid-template-columns:1fr;gap:12px}
 }
+
+/* Checkout (Nov 20, 2026 — Stripe test mode): white, simple, to the
+   point. Navy primaries, same card language as the rest of the site. */
+.checkout-wrap{max-width:720px;margin:32px auto 64px}
+.checkout-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.checkout-fields label{display:flex;flex-direction:column;gap:4px;font-size:14px;font-weight:600}
+.checkout-fields input,.checkout-fields select{font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.price-rows{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+.price-rows>div{display:flex;justify-content:space-between;gap:16px;font-size:15px}
+.price-rows dt{color:var(--muted)}
+.price-rows dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.price-rows .price-total{border-top:1px solid var(--line);padding-top:10px;font-size:17px}
+.price-rows .price-total dt{color:var(--ink);font-weight:700}
+@media(max-width:640px){
+  .checkout-fields{grid-template-columns:1fr}
+  .checkout-wrap{margin:20px auto 48px}
+}

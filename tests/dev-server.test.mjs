@@ -1827,3 +1827,77 @@ test('packages API: GET /api/packages serves the 21 trips as JSON with labeled e
   const none = await (await fetch(`${BASE}/api/packages?destination=Nowhere`)).json();
   assert.deepEqual(none.packages, []);
 });
+
+test('stripe checkout: GET /api/checkout reports no real key in dev — placeholder never counts as configured', async () => {
+  // The dev server has no Stripe keys at all, so the status must be
+  // honest: not configured, test mode off, nothing bookable.
+  const r = await fetch(`${BASE}/api/checkout`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.stripeConfigured, false);
+  assert.equal(j.stripeMode, 'not_configured');
+  assert.equal(j.stripePublishableConfigured, false);
+});
+
+test('stripe checkout: POST pay without a key returns stripe_not_configured, never a client secret', async () => {
+  const r = await fetch(`${BASE}/api/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'pay',
+      offerId: 'off_test123',
+      passengers: [{ given_name: 'Test', family_name: 'Traveler', born_on: '1990-01-01', gender: 'f', email: 'test@example.com' }],
+    }),
+  });
+  assert.equal(r.status, 503);
+  const j = await r.json();
+  assert.equal(j.error, 'stripe_not_configured');
+  assert.equal(j.clientSecret, undefined);
+});
+
+test('stripe checkout: $1 plan PDF without a key returns stripe_not_configured, never a client secret', async () => {
+  const r = await fetch(`${BASE}/api/plan-download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ destination: 'Paris', travelers: 2, booked: false }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.decision, 'pay_1');
+  assert.equal(j.priceCents, 100);
+  assert.equal(j.stripe, 'not_configured');
+  assert.equal(j.stripeMode, 'not_configured');
+  assert.equal(j.paymentIntentClientSecret, undefined);
+});
+
+test('stripe checkout: $1 plan PDF is free when booked, no payment involved', async () => {
+  const r = await fetch(`${BASE}/api/plan-download`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ destination: 'Paris', travelers: 2, booked: true }),
+  });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.equal(j.decision, 'free');
+  assert.equal(j.priceCents, 0);
+});
+
+test('stripe checkout: webhook without a secret rejects unsigned payloads', async () => {
+  const r = await fetch(`${BASE}/api/stripe-webhook`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'payment_intent.succeeded', data: { object: { id: 'pi_test' } } }),
+  });
+  assert.equal(r.status, 400);
+  const j = await r.json();
+  assert.equal(j.error, 'webhook_secret_not_configured');
+});
+
+test('stripe checkout: /checkout renders (200) with and without an offer', async () => {
+  for (const path of ['/checkout', '/checkout?offerId=off_test123&origin=JFK&destination=LHR&date=2026-12-10&returnDate=2026-12-17&travelers=2&fare=434&currency=USD&airline=Test%20Air']) {
+    const r = await fetch(`${BASE}${path}`);
+    assert.equal(r.status, 200, `${path} returns 200`);
+    const html = await r.text();
+    assert.ok(html.includes('Checkout'), `${path} renders the checkout heading`);
+  }
+});

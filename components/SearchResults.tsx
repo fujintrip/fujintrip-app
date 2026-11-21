@@ -70,7 +70,7 @@ import {
 } from '../lib/searchPlaces';
 import type { CompetitorFares } from '../lib/travelpayouts';
 import type { DuffelFareOffer } from '../lib/duffel';
-import { formatMinutes, layoversFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor } from '../lib/duffel';
+import { formatMinutes, layoversFor, perTravelerPrice, TIME_BUCKETS, timeBucketFor, CITY_IATA } from '../lib/duffel';
 import type { IgnavBookingLink, IgnavFaresResponse, IgnavItinerary, IgnavLegOffer } from '../lib/ignav';
 import {
   cheapestIgnavItinerary,
@@ -557,15 +557,51 @@ function TripPriceHeader({
   );
 }
 
+// Checkout link for a Duffel offer (Stripe test mode, Nov 20 2026):
+// only when the offer carries a Duffel id AND both cities resolve to
+// IATA codes. Otherwise '' — the card shows no checkout link and
+// never claims a booking it cannot open. The fare is passed along
+// for display only; the checkout API re-prices from the offer.
+function duffelCheckoutHref(args: {
+  offerId?: string;
+  returnOfferId?: string;
+  originCity: string;
+  destCity: string;
+  departDate: string;
+  returnDate: string;
+  travelers: number;
+  fare: number;
+  currency: string;
+  airline: string;
+}): string {
+  const origin = CITY_IATA[args.originCity];
+  const dest = CITY_IATA[args.destCity];
+  if (!args.offerId || !origin || !dest) return '';
+  const q = new URLSearchParams({
+    offerId: args.offerId,
+    ...(args.returnOfferId ? { returnOfferId: args.returnOfferId } : {}),
+    origin,
+    destination: dest,
+    date: args.departDate,
+    ...(args.returnDate ? { returnDate: args.returnDate } : {}),
+    travelers: String(args.travelers),
+    fare: String(args.fare),
+    currency: args.currency,
+    airline: args.airline,
+  });
+  return `/checkout?${q.toString()}`;
+}
+
 // One Duffel round-trip as a single card (Nov 16, 2026; one format
 // for every trip card, Nov 17, 2026): the merged grid's Duffel
 // option — an outbound + return leg pair, the trip total once on
 // top (party total, exact — not "from"), the small source tag, then
 // the two legs with their prices hidden (the pair total is the
 // price; a per-leg price would read as a one-way fare next to
-// round-trip totals), and one action: "Save this fare" stores the
-// chosen option in My Trips. Duffel has no checkout yet, so the
-// card never claims a booking.
+// round-trip totals), and two actions: "Save this fare" stores the
+// chosen option in My Trips, and "Continue to checkout" (Stripe
+// test mode, Nov 20, 2026) opens /checkout for the pair — test
+// fares only, never a live booking.
 function DuffelPairCard({
   out,
   back,
@@ -576,6 +612,7 @@ function DuffelPairCard({
   returnDate,
   onSaveFare,
   testFare = false,
+  checkoutHref = '',
 }: {
   out: DuffelFareOffer;
   back: DuffelFareOffer;
@@ -589,6 +626,9 @@ function DuffelPairCard({
   // warning renders on the card itself, always — it never hides
   // behind a filter, unlike the small source tag.
   testFare?: boolean;
+  // /checkout link for the pair ('' when either offer has no id or
+  // a city has no IATA code — then no checkout link renders).
+  checkoutHref?: string;
 }) {
   const total = out.price + back.price;
   const fee = serviceFee(total);
@@ -618,6 +658,11 @@ function DuffelPairCard({
         >
           {saved ? 'Saved ✓' : 'Save this fare'}
         </button>
+        {checkoutHref && (
+          <a className="ghost" href={checkoutHref}>
+            Continue to checkout
+          </a>
+        )}
       </div>
     </li>
   );
@@ -627,6 +672,8 @@ function DuffelPairCard({
 // grid's one-way option — the same trip-card shape as a pair (trip
 // total on top, source tag, one leg with its price hidden, one
 // action), never a bare fare card with the price on the leg.
+// "Continue to checkout" (Stripe test mode, Nov 20, 2026) opens
+// /checkout for the offer — test fares only, never a live booking.
 function DuffelOneWayCard({
   offer,
   travelers,
@@ -634,6 +681,7 @@ function DuffelOneWayCard({
   sourceLabel,
   onSaveFare,
   testFare = false,
+  checkoutHref = '',
 }: {
   offer: DuffelFareOffer;
   travelers: number;
@@ -644,6 +692,9 @@ function DuffelOneWayCard({
   // warning renders on the card itself, always — it never hides
   // behind a filter, unlike the small source tag.
   testFare?: boolean;
+  // /checkout link for the offer ('' when the offer has no id or a
+  // city has no IATA code — then no checkout link renders).
+  checkoutHref?: string;
 }) {
   const fee = serviceFee(offer.price);
   const [saved, setSaved] = useState(false);
@@ -667,6 +718,11 @@ function DuffelOneWayCard({
         >
           {saved ? 'Saved ✓' : 'Save this fare'}
         </button>
+        {checkoutHref && (
+          <a className="ghost" href={checkoutHref}>
+            Continue to checkout
+          </a>
+        )}
       </div>
     </li>
   );
@@ -1186,6 +1242,18 @@ function FlightResults({
                         returnDate={fares.data?.returnDate ?? returnIso}
                         onSaveFare={onSaveFare}
                         testFare={duffelTest}
+                        checkoutHref={duffelCheckoutHref({
+                          offerId: opt.out.offerId,
+                          returnOfferId: opt.back.offerId,
+                          originCity: ctx.origin,
+                          destCity,
+                          departDate: fares.data?.departDate ?? departIso,
+                          returnDate: fares.data?.returnDate ?? returnIso,
+                          travelers: query.travelers,
+                          fare: opt.out.price + opt.back.price,
+                          currency: opt.out.currency,
+                          airline: opt.out.airline,
+                        })}
                       />
                     );
                   }
@@ -1199,6 +1267,17 @@ function FlightResults({
                         sourceLabel={duffelTagShown}
                         onSaveFare={onSaveFare}
                         testFare={duffelTest}
+                        checkoutHref={duffelCheckoutHref({
+                          offerId: opt.offer.offerId,
+                          originCity: ctx.origin,
+                          destCity,
+                          departDate: fares.data?.departDate ?? departIso,
+                          returnDate: '',
+                          travelers: query.travelers,
+                          fare: opt.offer.price,
+                          currency: opt.offer.currency,
+                          airline: opt.offer.airline,
+                        })}
                       />
                     );
                   }

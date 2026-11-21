@@ -41,6 +41,10 @@ export type DuffelFareOffer = {
   // logo comes from this code, never from a guessed URL or a
   // hardcoded per-airline map. Undefined when Duffel gives no code.
   carrierCode?: string;
+  // The Duffel offer id (off_…) — carried so a fare card can link
+  // to /checkout for that exact offer. Undefined when Duffel gives
+  // no id; a card without one never links to checkout.
+  offerId?: string;
   // The offer's own segments, in order — the rich fare card renders
   // flight numbers, airports, aircraft and layovers from these, never
   // from invented data. Undefined for offers parsed before segments
@@ -288,6 +292,7 @@ function okOptionalOfferFields(o: unknown): boolean {
     if (r[k] !== undefined && (typeof r[k] !== 'number' || !Number.isFinite(r[k]))) return false;
   }
   if (r.carrierCode !== undefined && typeof r.carrierCode !== 'string') return false;
+  if (r.offerId !== undefined && typeof r.offerId !== 'string') return false;
   if (r.segments !== undefined) {
     if (!Array.isArray(r.segments)) return false;
     for (const s of r.segments as unknown[]) {
@@ -444,6 +449,7 @@ export function parseDuffelOffers(data: { offers?: DuffelOffer[] } | undefined |
         currency: o.total_currency || 'USD',
         stops: Math.max(0, segments.length - 1),
         duration: parseIsoDuration(slice.duration),
+        ...(o.id ? { offerId: o.id } : {}),
         ...(bags ? { bags } : {}),
         ...(departTime ? { departTime } : {}),
         ...(arriveTime ? { arriveTime } : {}),

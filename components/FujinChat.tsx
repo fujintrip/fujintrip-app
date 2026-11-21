@@ -26,6 +26,7 @@ import { parseDepartureTime, parseHHMM, parseLandingTime } from '../lib/arrival'
 import { auditTrip, checkConnection, departureDayFlags, feasibilitySummary } from '../lib/feasibility';
 import { checkInKeyFor, checkInMissed, parseCheckIn, type CheckIn } from '../lib/emergency';
 import Checklist from '../components/Checklist';
+import PlanPdfPayment from '../components/PlanPdfPayment';
 import { guideFor } from '../lib/localGuides';
 import { gateDecision } from '../lib/auth';
 import { AccountButton, SavePdfGateNotice, useAccount } from '../components/AccountGate';
@@ -532,6 +533,10 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   // PDF download state: the $1 rule is decided by the server route.
   const [pdfNotice, setPdfNotice] = useState('');
   const [pdfPay, setPdfPay] = useState(false);
+  // The $1 PDF PaymentIntent (Stripe test mode, Nov 20, 2026): set
+  // when /api/plan-download returns a clientSecret for the $1 case.
+  const [pdfClientSecret, setPdfClientSecret] = useState('');
+  const [pdfPaymentIntentId, setPdfPaymentIntentId] = useState('');
   // Free-account gate (Clerk, Nov 14 2026): saving / downloading a
   // plan needs a free account. The chat itself is never gated — this
   // state only decides whether tapping "Save as PDF" shows the sign-in
@@ -1022,9 +1027,11 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
   // Save as PDF — the $1 rule (firm, Nov 10, 2026): downloading the PDF
   // costs $1 when the traveler has NOT booked with FujinTrip; it is FREE
   // when they booked with us. The server route (/api/plan-download)
-  // decides; Stripe is not connected yet, so the $1 path explains that
-  // instead of pretending a payment happened. Nothing is charged and the
-  // plan stays saved either way.
+  // decides; in Stripe test mode (Nov 20, 2026) the $1 case returns a
+  // PaymentIntent confirmed on this page via Elements. Without a
+  // Stripe key the $1 path explains that instead of pretending a
+  // payment happened. Nothing is charged and the plan stays saved
+  // either way.
   const planBooked = plan ? bookedDestinations.includes(plan.destination) : false;
   const requestPdf = async () => {
     if (!plan) return;
@@ -1039,6 +1046,8 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
       return;
     }
     setPdfPay(false);
+    setPdfClientSecret('');
+    setPdfPaymentIntentId('');
     setPdfNotice('Checking your download…');
     try {
       const r = await fetch('/api/plan-download', {
@@ -1051,8 +1060,18 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
         setPdfNotice('Your guide is free — you booked with us. Your PDF is opening now.');
         window.print();
       } else if (r.ok && j.decision === 'pay_1') {
-        // Future: when Stripe is wired the route returns a checkoutUrl and
-        // we send the traveler there. Today it is not configured.
+        // Stripe test mode (Nov 20, 2026): the route returns a $1
+        // PaymentIntent — the traveler confirms it on this page via
+        // Elements, then the payment is verified before the PDF
+        // opens. Without a Stripe key there is no clientSecret and
+        // the checkout honestly says so; nothing is charged.
+        if (typeof j.paymentIntentClientSecret === 'string' && j.paymentIntentClientSecret) {
+          setPdfClientSecret(j.paymentIntentClientSecret);
+          setPdfPaymentIntentId(typeof j.paymentIntentId === 'string' ? j.paymentIntentId : '');
+          setPdfNotice('$1 to download the full plan — free if you book with us. Pay $1 below (test mode).');
+          setPdfPay(true);
+          return;
+        }
         if (typeof j.checkoutUrl === 'string' && j.checkoutUrl) { window.location.href = j.checkoutUrl; return; }
         setPdfNotice('$1 to download the full plan — free if you book with us. The $1 checkout isn’t connected yet: Stripe setup is needed before anyone can pay. Your plan stays saved here — nothing was charged and no PDF was downloaded.');
         setPdfPay(true);
@@ -1061,6 +1080,32 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
       }
     } catch {
       setPdfNotice('Couldn’t reach the server to check the download — your plan is still saved; try again in a moment.');
+    }
+  };
+  // After the traveler confirms the $1 in Elements, the server
+  // verifies the payment (succeeded + $1 + USD + this destination)
+  // before the PDF opens — the client never decides on its own.
+  const confirmPdfPayment = async (paymentIntentId: string) => {
+    if (!plan) return;
+    setPdfNotice('Verifying your $1 payment…');
+    try {
+      const r = await fetch('/api/plan-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destination: plan.destination, travelers: plan.travelers, booked: false, paymentIntentId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.decision === 'paid') {
+        setPdfClientSecret('');
+        setPdfPaymentIntentId('');
+        setPdfPay(false);
+        setPdfNotice('$1 received — your PDF is opening now. Thank you.');
+        window.print();
+      } else {
+        setPdfNotice('The $1 payment was not confirmed for this plan — no PDF was downloaded. Try again, or book the plan and the PDF is free.');
+      }
+    } catch {
+      setPdfNotice('Couldn’t verify the payment right now — your plan is still saved; try again in a moment.');
     }
   };
   // Start a new trip: clears the plan and the saved trip, so the next
@@ -3086,10 +3131,18 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
             <div className="no-print" style={{ fontSize: 13, color: '#111', marginTop: 8 }}>
               <p style={{ margin: '4px 0' }}>{pdfNotice}</p>
               {pdfPay && (
-                <p style={{ margin: '4px 0' }}>
-                  <button className="ghost" onClick={bookPlan}>Book this plan with FujinTrip</button>{' '}
-                  <button className="ghost" onClick={() => { setPdfNotice(''); setPdfPay(false); }}>Dismiss</button>
-                </p>
+                pdfClientSecret ? (
+                  <PlanPdfPayment
+                    clientSecret={pdfClientSecret}
+                    onPaid={(intentId) => confirmPdfPayment(intentId || pdfPaymentIntentId)}
+                    onCancel={() => { setPdfNotice(''); setPdfPay(false); setPdfClientSecret(''); setPdfPaymentIntentId(''); }}
+                  />
+                ) : (
+                  <p style={{ margin: '4px 0' }}>
+                    <button className="ghost" onClick={bookPlan}>Book this plan with FujinTrip</button>{' '}
+                    <button className="ghost" onClick={() => { setPdfNotice(''); setPdfPay(false); }}>Dismiss</button>
+                  </p>
+                )
               )}
             </div>
           )}

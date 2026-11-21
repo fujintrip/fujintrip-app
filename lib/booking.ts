@@ -13,6 +13,7 @@
 // - No secrets are ever logged or returned to the browser.
 
 import { serviceFee } from './planner';
+import { isStripeConfigured } from './stripe';
 
 // ---------------------------------------------------------------------------
 // Supplier registry
@@ -722,7 +723,10 @@ export async function createFlightOrder(opts: {
   if (mode === 'live') {
     const missing: string[] = [];
     if (process.env.DUFFEL_LIVE_BOOKING_ENABLED !== 'true') missing.push('Set DUFFEL_LIVE_BOOKING_ENABLED=true after Duffel live certification.');
-    if (!process.env.STRIPE_SECRET_KEY) missing.push('Connect Stripe (STRIPE_SECRET_KEY) — live Duffel bookings pay via Link by Stripe.');
+    // A placeholder key does not count as Stripe (isStripeConfigured
+    // requires a real sk_test_/sk_live_ shape) — a live booking needs
+    // a real key, not the placeholder in DigitalOcean.
+    if (!isStripeConfigured()) missing.push('Connect Stripe (STRIPE_SECRET_KEY) — live Duffel bookings pay via Link by Stripe.');
     return {
       booked: false, testBooking: false,
       label: 'Live flight booking is not enabled yet — no booking was created and nothing was charged.',
