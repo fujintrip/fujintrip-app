@@ -64,16 +64,22 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
-test('homepage: white hero + search widget with 7 tabs, destinations, trust strip, exactly one Plan with AI pill, no results before a search', async () => {
+test('homepage: photo hero + search widget with 7 tabs, destinations, hero trust line, exactly one Plan with AI pill, no results before a search (UX direction round 2, Nov 21 2026 — P0-1/P0-4)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // White hero with the one question — no background photo, no
-  // rotator, no dots (Nov 15, 2026: the photo background is gone).
+  // Photographic hero (UX direction round 2, Nov 21 2026 — P0-1):
+  // this week's trip photo full-bleed behind the one question —
+  // no rotator, no dots. This week the trip is Thailand, so the
+  // photo is Wat Arun from the verified pool.
   assert.ok(html.includes('Where to?'), 'hero asks Where to?');
   assert.ok(!html.includes('hero-rotator'), 'no hero rotator');
   assert.ok(!html.includes('hero-dots'), 'no hero dot indicators');
-  assert.ok(!html.includes('hero-booking-photo'), 'no hero photo container');
+  assert.ok(html.includes('hero-photo'), 'the hero carries the photo class');
+  assert.ok(html.includes('background-image:url('), 'the hero photo is a background image');
+  assert.ok(html.includes('Templo_Wat_Arun'), 'the hero photo is this week’s trip (Thailand, Wat Arun)');
+  assert.ok(html.includes('Named for Fujin'), 'the hero eyebrow renders');
+  assert.ok(html.includes('One trip, one price, one plan'), 'the hero sub renders');
   // The search widget: 7 category tabs switch the SEARCH FORM.
   assert.equal((html.match(/role="tab"/g) || []).length, 7, '7 widget tabs');
   for (const label of ['Stays', 'Flights', 'Car rental', 'Attractions', 'Cruises', 'Buses', 'Taxis']) {
@@ -91,13 +97,15 @@ test('homepage: white hero + search widget with 7 tabs, destinations, trust stri
   // Exactly ONE AI entry point on the site — the header pill.
   assert.equal((html.match(/Plan with AI/g) || []).length, 1, 'exactly one Plan with AI pill');
   assert.equal((html.match(/Build full plan with AI/g) || []).length, 0, 'no big AI button under the hero');
-  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 0, 'no Ask Fujin AI link');
+  assert.equal((html.match(/Ask Fujin AI/g) || []).length, 1, 'one quiet Ask Fujin AI text link in the hero');
+  assert.ok(html.includes('hero-ai-link'), 'the AI link sits in the hero');
   assert.equal((html.match(/Book now/g) || []).length, 0, 'no Book now anywhere');
   assert.ok(html.includes('href="/chat"'), 'the AI pill leads to /chat');
-  // Trust strip (spec 1c): three honest lines, no invented numbers.
-  assert.ok(html.includes('All-in prices — the price you see is the price you pay'), 'trust: all-in prices');
-  assert.ok(html.includes('No hidden fees — our flight service fee is shown separately at checkout'), 'trust: no hidden fees');
-  assert.ok(html.includes('Compare prices from different sources'), 'trust: compare prices');
+  // Trust line (UX direction round 2, Nov 21 2026 — P0-4): one
+  // line inside the hero, not a standalone strip — three honest
+  // claims, no invented numbers.
+  assert.ok(html.includes('All-in prices · No hidden fees · Compare prices from different sources'), 'the hero trust line renders');
+  assert.ok(!html.includes('trust-strip'), 'no standalone trust strip');
   // Browse sections below the hero — six bands (P1-1): the category
   // tiles and the weekend band are cut; the hidden gems live inside
   // Destinations now, and the stories live in the merged Community
@@ -105,10 +113,11 @@ test('homepage: white hero + search widget with 7 tabs, destinations, trust stri
   assert.ok(html.includes('Popular destinations'), 'Popular destinations renders');
   assert.ok(!html.includes('What do you need for your trip?'), 'no category tiles band');
   assert.ok(!html.includes('Weekend trips near you'), 'no weekend band until location works');
-  assert.ok(html.includes('Featured hidden gems'), 'hidden gems render inside Destinations');
+  assert.ok(html.includes('Hidden gems'), 'hidden gems render inside Destinations as a labelled row');
+  assert.ok(html.includes('Three US places worth the detour'), 'the gems row is labeled');
   assert.ok(html.includes("Travelers' stories"), 'community stories render in the merged band');
   assert.ok(html.includes('Local voices'), 'local voices render in the merged band');
-  assert.ok(html.includes('Show more destinations'), 'the destinations expander renders');
+  assert.ok(!html.includes('Show more destinations'), 'no destinations expander — six cards, no more');
   assert.ok(html.includes('per traveler'), 'destination cards carry a per-traveler price line');
   // NO results before a search — the results shell renders only after
   // the widget submits (direction v3: results-on-load is gone). The
@@ -128,14 +137,20 @@ test('homepage: white hero + search widget with 7 tabs, destinations, trust stri
   assert.ok(html.includes('My Trips'), 'My Trips stays on the homepage');
 });
 
-test('homepage hero is white: no background photo, no rotation, headline + sub + widget render', async () => {
+test('homepage hero is a photo: this week’s trip behind the search, headline + sub + widget render (UX direction round 2, Nov 21 2026 — P0-1)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The hero is the theme surface itself — no photo markup anywhere
-  // in the hero section, and no rotation machinery in the HTML.
+  // The hero is this week's trip photo with the search sitting on
+  // it — no rotation machinery in the HTML, and the scrim keeps the
+  // white text readable.
   assert.ok(html.includes('hero-booking'), 'hero section renders');
+  assert.ok(html.includes('hero-photo'), 'the hero carries the photo class');
+  assert.ok(html.includes('background-image:url('), 'the hero photo is a background image');
+  assert.ok(html.includes('Templo_Wat_Arun'), 'the hero photo is this week’s trip (Thailand, Wat Arun)');
   assert.ok(html.includes('Where to?'), 'hero headline renders');
-  assert.ok(html.includes('Flights, stays, cars, tours and more'), 'hero sub renders');
+  assert.ok(html.includes('One trip, one price, one plan'), 'hero sub renders');
+  assert.ok(html.includes('Not sure yet?'), 'the quiet AI text link renders');
+  assert.ok(html.includes('All-in prices · No hidden fees'), 'the hero trust line renders');
   assert.ok(!html.includes('hero-rotator'), 'no rotator in the hero');
   assert.ok(!html.includes('hero-slide'), 'no rotator slides');
   assert.ok(!html.includes('hero-dots'), 'no dot indicators');
@@ -167,8 +182,8 @@ test('search widget is server-rendered: the homepage SSR text carries the widget
   }
   assert.ok(html.includes('aria-label="Search flights"'), 'the search button renders server-side with its label');
   assert.ok(html.includes('Round-trip'), 'the trip-type control renders server-side');
-  // And the widget comes before the trust strip, not after it.
-  assert.ok(html.indexOf('sw-bar') < html.indexOf('All-in prices — the price you see is the price you pay'), 'the widget precedes the trust strip');
+  // And the widget comes before the hero trust line, not after it.
+  assert.ok(html.indexOf('sw-bar') < html.indexOf('All-in prices · No hidden fees'), 'the widget precedes the hero trust line');
 });
 
 test('footer pages: /about, /faq and /contact are real pages, and the footer links to them (defect, Nov 15 2026)', async () => {
@@ -269,15 +284,22 @@ test('package cards name the trip, not planner math (UX direction, Nov 19 2026 �
   assert.ok(!pkgHtml.includes('Stay $'), 'no per-leg dollar breakdown on the card');
 });
 
-test('trip of the week: the homepage hero package is labeled and carries a 3-day preview (UX direction, Nov 19 2026 — P2-1)', async () => {
+test('trip of the week: the feature row is labeled and carries a 3-day preview with different copy per day (UX direction round 2, Nov 21 2026 — P0-4/P0-6a)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  const pkgHtml = html.slice(html.indexOf('Ready-made packages'), html.indexOf('Popular destinations'));
-  assert.ok(pkgHtml.includes('Trip of the week'), 'the hero package is labeled Trip of the week');
-  assert.ok(pkgHtml.includes('Day 1'), 'the hero card previews day 1 of the real plan');
-  assert.ok(pkgHtml.includes('Day 3'), 'the hero card previews day 3 of the real plan');
+  // The Trip of the week is a feature row in its own band, ahead of
+  // Ready-made trips — not a hero card inside the packages grid.
+  const weekHtml = html.slice(html.indexOf('Trip of the week'), html.indexOf('Ready-made packages'));
+  assert.ok(weekHtml.includes('Trip of the week'), 'the week’s trip is labeled Trip of the week');
+  assert.ok(weekHtml.includes('Day 1'), 'the feature row previews day 1 of the real plan');
+  assert.ok(weekHtml.includes('Day 3'), 'the feature row previews day 3 of the real plan');
+  // Days 1–3 each read differently (round 2, P0-6a): the old plan
+  // data wrote one generic morning line for every day.
+  const mornings = [...weekHtml.matchAll(/Day \d — [^<]+<\/strong>\s*<span>([^<]+)<\/span>/g)].map((m) => m[1]);
+  assert.equal(mornings.length, 3, 'three preview days render');
+  assert.equal(new Set(mornings).size, 3, 'the three preview days have different morning copy');
   // One price, one "View trip" — the preview adds no second action.
-  assert.ok(pkgHtml.includes('View trip'), 'the hero card still has its one View trip action');
+  assert.ok(weekHtml.includes('View trip'), 'the feature row still has its one View trip action');
 });
 
 test('reels feed: only real, moderated posts with media — nothing invented (UX direction, Nov 19 2026 — P2-3)', async () => {
@@ -1072,11 +1094,11 @@ test('community: /community renders the hub, the honest notes, and links back; t
   const homeHtml = await home.text();
   assert.ok(homeHtml.includes('href="/community"'), 'homepage links to the Community');
   assert.ok(homeHtml.includes('Visit the Community'), 'stories section points at the Community');
-  // Share-out renders on every shareable card: 6 package cards
-  // (the deals band is gone — P1-1) + 8 destination cards + 3
-  // hidden gems.
+  // Share-out renders on every shareable card: the Trip-of-the-week
+  // feature row + 6 ready-made package cards (round 2, Nov 21 2026
+  // — P0-4) + 6 destination cards + 3 hidden gems.
   const shareButtons = (homeHtml.match(/>Share<\/button>/g) ?? []).length;
-  assert.equal(shareButtons, 17, 'one Share button per package and destination card');
+  assert.equal(shareButtons, 16, 'one Share button per package and destination card');
   assert.ok(homeHtml.includes('href="/community"'), 'header links to the Community');
 
   const reelsPage = await fetch(`${BASE}/reels`);
@@ -1228,21 +1250,23 @@ test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exi
   assert.ok(css.includes('.sos-missed'), 'stylesheet has the missed check-in banner');
 });
 
-test('popular destinations (direction v3): 8 cards + expander, per-traveler price lines, no filter pills, no pagination (UX direction, Nov 19 2026 — P0-7)', async () => {
+test('popular destinations (direction v3): 6 cards, no expander, per-traveler price lines, no filter pills, no pagination (UX direction round 2, Nov 21 2026 — P0-4)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // Eight cards on load; the rest wait behind the expander — 15
-  // total now, not 26: the featured packages, the hidden gems,
+  // Six cards, no expander (round 2, P0-4): the first six deduped
+  // discovery entries — the featured packages, the hidden gems,
   // Europe and the Local Voices places each have a band of their own
-  // and are excluded from Popular. The 3 former deals destinations
-  // live here now that the deals band is gone (P1-1) — India leads
-  // the visible eight.
-  assert.ok(html.includes('Show more destinations (7 more)'), 'the expander counts the remaining 7');
-  // The first 8 are the first deduped discovery entries, so the
-  // standalone destinations (Maldives, Paris) are not on it.
-  assert.ok(!html.includes('>Maldives<'), 'Maldives waits behind the expander');
-  assert.ok(!html.includes('>Paris<'), 'Paris waits behind the expander');
+  // and are excluded from Popular.
+  assert.ok(!html.includes('Show more destinations'), 'no expander — six cards, no more');
+  for (const name of ['Portugal', 'Egypt', 'Italy', 'France', 'Spain', 'Southeast Asia']) {
+    assert.ok(html.includes(`>${name}<`), `${name} is one of the six`);
+  }
+  // The next entries (Turkey, India) and the standalone destinations
+  // (Maldives, Paris) are not in the six.
+  assert.ok(!html.includes('>Turkey<'), 'Turkey is not in the six');
+  assert.ok(!html.includes('>Maldives<'), 'Maldives is not in the six');
+  assert.ok(!html.includes('>Paris<'), 'Paris is not in the six');
   assert.ok(html.includes('>Portugal<'), 'Portugal leads the deduped list');
   // Central Europe has its own band (featured package) — it must
   // not appear in the Popular section at all.
@@ -1691,7 +1715,11 @@ test('mobile: the served stylesheet carries the phone rules', async () => {
   assert.ok(css.includes('Mobile layout (Nov 15'), 'the mobile block is in the served stylesheet');
   assert.ok(css.includes('input,select,textarea{font-size:16px}'), '16px form fields at phone width');
   assert.ok(css.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
-  assert.ok(css.includes('.results-bar{top:65px}'), 'the results bar clears the phone header');
+  // The results bar is static now (UX direction round 2, Nov 21
+  // 2026 — P0-5): no sticky top to clear the header with, on any
+  // width — the overlap it caused is gone with the stickiness.
+  assert.ok(!css.includes('.results-bar{top:65px}'), 'no phone sticky-top remains on the static results bar');
+  assert.ok(!css.includes('.results-bar{top:61px}'), 'no desktop sticky-top remains either');
   // P1-7 audit: the bar's 15px rule beat the generic 16px rule, so
   // tapping a search field zoomed iOS — the bar fields are pinned
   // to 16px at phone width now.
@@ -1699,22 +1727,23 @@ test('mobile: the served stylesheet carries the phone rules', async () => {
   assert.ok(css.includes('.mytrips li{flex-wrap:wrap}'), 'My Trips rows wrap on the account page at phone width');
 });
 
-test('homepage restructure: six bands in order — hero, trust, packages, destinations, how it works, community (UX direction, Nov 19 2026 — P1-1)', async () => {
+test('homepage restructure: six bands in order — hero, trip of the week, ready-made, destinations, how it works, community (UX direction round 2, Nov 21 2026 — P0-4)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The order is the P1 cut: the trust strip sits directly under the
-  // hero (under the results when a search is active), then the
-  // ready-made trips, the Destinations band (Popular + hidden gems),
-  // Plan/Book/Follow, and the merged Community band (voices, then
-  // stories). The tiles, the deals, the weekend band and the homepage
-  // My Trips section are all gone.
+  // The order is the round-2 section plan (Nov 21 2026 — P0-4):
+  // hero (with the trust line inside it), Trip of the week,
+  // Ready-made trips, the Destinations band (Popular + hidden gems
+  // as a labelled row), Plan/Book/Follow, and the merged Community
+  // band (voices, then stories). The tiles, the deals, the weekend
+  // band and the homepage My Trips section are all gone.
   const order = [
     'Where to?',
-    'All-in prices — the price you see is the price you pay',
+    'All-in prices · No hidden fees',
+    'Trip of the week',
     'Ready-made packages',
     'Popular destinations',
-    'Featured hidden gems',
+    'Hidden gems',
     'Plan, book, follow',
     'What travelers say, from the places you go',
     "Travelers' stories",

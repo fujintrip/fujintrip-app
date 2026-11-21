@@ -283,32 +283,33 @@ test('flightContextFromSearch: the picked cabin travels through, in Duffel vocab
   assert.equal(junk.cabin, 'economy', 'a junk cabin falls back to economy');
 });
 
-test('results heading clears the sticky bar (defect, Nov 14 2026)', () => {
+test('results heading clears the sticky header (defect, Nov 14 2026)', () => {
   // After a search submits, the page scrolls to #results — without
   // scroll-margin the "Flights" heading slides underneath the sticky
-  // header + sticky results bar. The rule lives in globals.css; the
-  // value must clear 61px of header + ~50px of bar + margin.
+  // header. The results bar is static now (UX direction round 2,
+  // Nov 21 2026 — P0-5), so the margin clears the 61px header +
+  // margin only — 76px, desktop and phone alike.
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const m = css.match(/#results\{scroll-margin-top:(\d+)px\}/);
   assert.ok(m, '#results has a scroll-margin-top rule');
-  assert.ok(Number(m[1]) >= 120, `scroll-margin-top clears header + bar, got ${m[1]}px`);
+  assert.equal(Number(m[1]), 76, `scroll-margin-top clears the header, got ${m[1]}px`);
 });
 
-test('results map stays below the sticky bar (defect, Nov 14 2026)', () => {
+test('results map stays below the sticky header (defect, Nov 14 2026)', () => {
   // While scrolling with the results map open, Leaflet map layers
   // rendered OVER the sticky search-summary bar: Leaflet panes sit at
   // z-index 200–1000, the bar at 40. The fix is stacking only — the
   // map container (.discover-map) is its own stacking context at
   // z-index 0, so every map layer (Leaflet panes and MapLibre
-  // markers alike) paints below the sticky results bar (40) and the
-  // sticky site header (60). The map itself is untouched.
+  // markers alike) paints below the sticky site header (60). The
+  // results bar is static now (UX direction round 2, Nov 21 2026 —
+  // P0-5), so it needs no z-index at all. The map itself is untouched.
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const m = css.match(/\.discover-map\{[^}]*z-index:\s*(\d+)/);
   assert.ok(m, '.discover-map has a z-index rule');
   assert.equal(Number(m[1]), 0, 'the map container sits at z-index 0');
   assert.ok(/\.discover-map\{[^}]*position:\s*relative/.test(css), '.discover-map is positioned (so z-index applies)');
-  const bar = css.match(/\.results-bar\{[^}]*z-index:\s*(\d+)/);
-  assert.ok(bar && Number(bar[1]) > Number(m[1]), 'the sticky results bar paints above the map container');
+  assert.ok(!/\.results-bar\{[^}]*z-index/.test(css), 'the static results bar carries no z-index');
   const header = css.match(/\.site-header\{[^}]*z-index:\s*(\d+)/);
   assert.ok(header && Number(header[1]) > Number(m[1]), 'the sticky site header paints above the map container');
 });
@@ -387,11 +388,12 @@ test('mobile: the hero is tight on a phone (defect, Nov 15 2026)', () => {
   assert.ok(pads[pads.length - 1] <= 36, `phone hero top padding is tight, got ${pads[pads.length - 1]}px`);
 });
 
-test('mobile: the sticky results bar clears the taller phone header', () => {
+test('mobile: the results bar is static, so it never overlaps the header (UX direction round 2, Nov 21 2026 — P0-5)', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  assert.ok(/\.results-bar\{position:sticky;top:61px/.test(css), 'desktop results bar clears the 60px header');
-  assert.ok(css.includes('.results-bar{top:65px}'), 'results bar clears the 64px phone header (44px hamburger)');
-  assert.ok(css.includes('.results-bar{top:61px}'), 'results bar clears the 60px header at ≤640px');
+  assert.ok(!/\.results-bar\{[^}]*position:sticky/.test(css), 'the results bar is not sticky on desktop');
+  assert.ok(!css.includes('.results-bar{top:65px}'), 'no phone sticky-top remains');
+  assert.ok(!css.includes('.results-bar{top:61px}'), 'no desktop sticky-top remains');
+  assert.ok(css.includes('#results{scroll-margin-top:76px}'), 'the scroll target clears the sticky header');
 });
 
 test('mobile: phone rules — no zoom, no horizontal scroll, wrapping bar, fitting header', () => {
@@ -401,7 +403,7 @@ test('mobile: phone rules — no zoom, no horizontal scroll, wrapping bar, fitti
   assert.ok(mobile.includes('input,select,textarea{font-size:16px}'), '16px form fields at ≤640px — iOS never zooms on focus');
   assert.ok(mobile.includes('body{overflow-x:clip}'), 'no horizontal scroll on a phone');
   assert.ok(mobile.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
-  assert.ok(mobile.includes('#results{scroll-margin-top:170px}'), 'the scroll target clears the wrapped results bar');
+  assert.ok(mobile.includes('#results{scroll-margin-top:76px}'), 'the scroll target clears the sticky header (the bar is static now)');
   assert.ok(mobile.includes('.site-theme{padding:10px 12px}'), 'the header fits a 360px phone');
   assert.ok(mobile.includes('.chatmap-s0 .hero-input{flex-wrap:wrap}'), 'the S0 input stacks on a narrow phone');
 });
@@ -644,7 +646,9 @@ test('restructure: the new section styles exist in the CSS', () => {
     '.eyebrow',
     '.pkg-grid',
     '.pkg-card',
-    '.pkg-card--hero',
+    '.feature-row',
+    '.feature-photo',
+    '.feature-body',
     '.pkg-photo',
     '.pkg-body',
     '.pkg-price',
@@ -663,13 +667,13 @@ test('restructure: the card price is the largest type on the card', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const price = css.match(/\.pkg-price\{[^}]*font-size:(\d+)px/);
   assert.ok(price, '.pkg-price has a font-size');
-  // Audit round (Nov 17, 2026 — gap 9): the 30px display price is
-  // gone; the package price is the Expedia price-card, 22/700 —
-  // still the largest type on the card, ahead of the 18px title.
-  assert.equal(Number(price[1]), 22, `card price ${price[1]}px is the 22px Expedia price-card`);
+  // UX direction round 2 (Nov 21, 2026 — P0-2): the type scale
+  // grows — the package price is 24/700 in the display face, still
+  // the largest type on the card, ahead of the 20px title.
+  assert.equal(Number(price[1]), 24, `card price ${price[1]}px is the 24px price-card`);
   const bodyH3 = css.match(/\.pkg-body h3\{[^}]*font-size:(\d+)px/);
   assert.ok(bodyH3 && Number(price[1]) > Number(bodyH3[1]), 'price larger than the card title');
-  assert.equal(Number(bodyH3[1]), 18, 'card titles are 18px (Expedia title-md)');
+  assert.equal(Number(bodyH3[1]), 20, 'card titles are 20px (round-2 scale)');
 });
 
 test('restructure: icons are Lucide, one pack, one stroke — no emoji, no hand-rolled svg', () => {
@@ -700,18 +704,18 @@ test('restructure: the header nav and the widget tabs share one icon key per cat
   assert.ok(widget.includes('<Icon name={t.icon} size={16} />'), 'widget tabs render the shared key');
 });
 
-test('restructure: fonts are Inter + DM Sans — DM Sans display, Inter body, no Bricolage', () => {
+test('restructure: fonts are Inter + Plus Jakarta Sans — Jakarta display, Inter body, no Bricolage (UX direction round 2, Nov 21 2026 — P0-2)', () => {
   const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8');
-  assert.ok(layout.includes('DM_Sans'), 'display font is DM Sans');
+  assert.ok(layout.includes('Plus_Jakarta_Sans'), 'display font is Plus Jakarta Sans');
+  assert.ok(!layout.includes('DM_Sans'), 'DM Sans is dropped — it spoke in the same voice as Inter');
   assert.ok(layout.includes('Inter'), 'body font is Inter');
   assert.ok(!layout.includes('Bricolage_Grotesque'), 'Bricolage Grotesque is dropped');
-  assert.ok(!layout.includes('JetBrains_Mono'), 'no JetBrains Mono — prices use Inter tabular-nums');
-  assert.ok(!layout.includes('Plus_Jakarta_Sans'), 'no display-font swap to Plus Jakarta Sans');
+  assert.ok(!layout.includes('JetBrains_Mono'), 'no JetBrains Mono — prices use the display face with tabular-nums');
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  assert.ok(!css.includes('Plus Jakarta Sans'), 'no Plus Jakarta Sans fallback in the CSS');
+  assert.ok(css.includes('Plus Jakarta Sans'), 'Plus Jakarta Sans is the display fallback in the CSS');
   assert.ok(!css.includes('Bricolage'), 'no Bricolage fallback in the CSS');
   assert.ok(!css.includes('JetBrains'), 'no JetBrains fallback in the CSS');
-  assert.ok(css.includes("--font-display:'DM Sans'"), 'the display token is DM Sans');
+  assert.ok(css.includes("--font-display:'Plus Jakarta Sans'"), 'the display token is Plus Jakarta Sans');
   assert.ok(css.includes("--font-body:'Inter'"), 'the body token is Inter');
   assert.ok(!css.includes('--font-mono'), 'no mono font token');
 });
@@ -731,8 +735,9 @@ test('restructure: micro-interactions animate transform only, 150–300ms', () =
 test('restructure: the new grids stack to one column at 390px', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const mobile = css.slice(css.indexOf('@media (max-width:640px){', css.indexOf('/* Homepage restructure')));
-  assert.ok(mobile.includes('.pkg-grid{grid-template-columns:1fr}'), 'the package grid collapses to one column');
-  assert.ok(mobile.includes('.pkg-card--hero{grid-column:auto}'), 'the hero card stops spanning on a phone');
+  assert.ok(mobile.includes('.pkg-card{grid-column:span 12}'), 'package cards stack to one column');
+  assert.ok(mobile.includes('.grid>.card{grid-column:span 12}'), 'destination cards stack to one column');
+  assert.ok(mobile.includes('.step{grid-column:span 12}'), 'how-it-works steps stack to one column');
   assert.ok(!css.includes('.fares-strip'), 'the cheapest-fares strip is gone');
   assert.ok(css.includes('.pkg-actions button,.pkg-actions a{min-height:44px'), 'package actions are 44px touch targets');
 });
@@ -740,8 +745,9 @@ test('restructure: the new grids stack to one column at 390px', () => {
 // Expedia restyle (Nov 16, 2026 — "copy everything"): the design
 // language is Expedia's — a wide 1200px container with 24px gutters,
 // one radius scale (8px fields, 12px bars, 16px cards), barely-there
-// resting shadows, and 20px gaps between cards. Visual layer only:
-// no layout, copy, or behavior changes. Brand, fonts, and the white
+// resting shadows, and one 24px gap token between cards (UX
+// direction round 2, Nov 21 2026 — P0-3). Visual layer only: no
+// layout, copy, or behavior changes. Brand, fonts, and the white
 // hero are FujinTrip's own.
 test('expedia restyle: wide container, one radius scale, airy grids', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
@@ -765,10 +771,11 @@ test('expedia restyle: wide container, one radius scale, airy grids', () => {
   assert.ok(css.includes('.results-count-row{display:flex'), 'the flight count row sits above the list');
   assert.ok(!css.includes('.stay-filter-bar'), 'the stays filter bar is gone — its filters live in the sidebar');
   for (const grid of ['.result-cards', '.pkg-grid', '.flight-card-grid']) {
-    assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:20px`).test(css), `${grid} breathes at a 20px gap`);
+    assert.ok(new RegExp(`\\${grid}\\{[^}]*gap:var\\(--gap\\)`).test(css), `${grid} breathes at the 24px gap token`);
   }
+  assert.ok(css.includes('--gap:24px'), 'one 24px gap token drives every grid');
   assert.ok(css.includes('footer{border-top:1px solid var(--line);padding:48px 0 32px;color:var(--muted);font-size:13px;background:var(--surface)}'), 'the footer is a surface-1 band with tightened bottom padding');
-  assert.ok(css.includes("--font-display:'DM Sans'"), 'the display face is still DM Sans, not Expedia’s');
+  assert.ok(css.includes("--font-display:'Plus Jakarta Sans'"), 'the display face is Plus Jakarta Sans, not Expedia’s');
   assert.ok(css.includes("--font-body:'Inter'"), 'the body face is still Inter');
 });
 
@@ -823,7 +830,7 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(!app.includes('dest-overlay'), 'the name + from-price no longer overlay the photo');
   assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the white body, below the photo');
   assert.ok(!css.includes('.dest-overlay'), 'the overlay style is gone');
-  assert.ok(css.includes('.card .body .result-price{font-size:22px'), 'the body price is the 22px price-card');
+  assert.ok(css.includes('.card .body .result-price{font-family:var(--font-display);font-size:24px'), 'the body price is the 24px price-card');
   assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
   assert.ok(!existsSync(new URL('../components/DealsSection.tsx', import.meta.url)), 'the deals component is deleted with the band');
   assert.ok(!css.includes('.deals-grid'), 'no deals-grid style remains');
@@ -835,8 +842,8 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(!css.includes('.pkg-details{'), 'the expander style is gone');
   assert.ok(!css.includes('.pkg-tiers'), 'the tiers row style is gone');
   assert.ok(pkgs.includes('>View trip<'), 'the single card action is View trip');
-  // 4 — non-flight prices lead the card at 22px.
-  assert.ok(css.includes('.result-price{font-size:22px'), 'result prices are 22px, not body size');
+  // 4 — non-flight prices lead the card at 24px.
+  assert.ok(css.includes('.result-price{font-family:var(--font-display);font-size:24px'), 'result prices are 24px, not body size');
   // 5 — hotel cards are horizontal rows with a fixed price column.
   assert.ok(results.includes('result-card--wide'), 'Hotelbeds cards use the wide variant');
   assert.ok(results.includes('result-wide-side'), 'the price + action sit in the side column');
@@ -893,7 +900,7 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   // and "Clear search" brings the browse sections back.
   assert.ok(app.includes('{!search && ('), 'the browse sections hide while a search is active');
   assert.equal((app.match(/\{!search && \(/g) || []).length, 1, 'the browse sections gate once — My Trips lives on /account, not behind the search gate');
-  assert.ok(app.includes("{variant === 'home' && !search && ("), 'the trust strip hides on results pages too');
+  assert.ok(app.includes("{variant === 'home' && !search && ("), 'the continue bar hides on results pages too');
   assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
   assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
   assert.ok(results.includes('onClearSearch: () => void'), 'the clear callback is a declared prop');
@@ -920,7 +927,7 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   assert.ok(results.includes("Saved ✓"), 'the save action confirms inline');
   assert.ok(!results.includes('fare-total'), 'no highlighted cheapest banner below the flight list');
   assert.ok(!results.includes('priceNote'), 'no per-card fee note remains');
-  assert.ok(css.includes('.flight-option-price strong{font-size:22px'), 'trip totals are 22px like Expedia prices');
+  assert.ok(css.includes('.flight-option-price strong{font-family:var(--font-display);font-size:24px'), 'trip totals are 24px in the display face');
 });
 
 test('audit round Nov 17: no two cards lead with the same photo', () => {
@@ -959,13 +966,15 @@ test('audit round Nov 17: one primary pill + one text link per card', () => {
   const pkgs = readFileSync(new URL('../components/PackagesSection.tsx', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../components/FujinApp.tsx', import.meta.url), 'utf8');
   const share = readFileSync(new URL('../components/ShareMenu.tsx', import.meta.url), 'utf8');
-  // Type scale 24/18/16/14: section heads 24, card titles 18/600,
-  // card body 16, captions 13–14.
-  assert.ok(css.includes('section h2{font-size:24px'), 'section heads are 24px');
-  assert.ok(css.includes('.card .body h3{font-size:18px;font-weight:600;margin:0 0 4px}'), 'card titles are 18px/600');
-  assert.ok(css.includes('.pkg-body h3{margin:10px 0 2px;font-size:18px;font-weight:600}'), 'package titles are 18px/600');
+  // Type scale (UX direction round 2, Nov 21 2026 — P0-2):
+  // homepage section heads 32, card titles 20/600, card body 16,
+  // prices 24 in the display face. (Detail-section h2s stay 24px —
+  // see the section rule below.)
+  assert.ok(css.includes('.home-section h2{margin:0 0 6px;font-size:32px'), 'homepage section heads are 32px');
+  assert.ok(css.includes('.card .body h3{font-size:20px;font-weight:600;margin:0 0 4px}'), 'card titles are 20px/600');
+  assert.ok(css.includes('.pkg-body h3{margin:10px 0 2px;font-size:20px;font-weight:600}'), 'package titles are 20px/600');
   assert.ok(css.includes('.card .body p{font-size:16px'), 'card body text is 16px');
-  assert.ok(css.includes('.pkg-price{font-family:var(--font-display);font-size:22px;font-weight:700'), 'package prices are the 22px price-card');
+  assert.ok(css.includes('.pkg-price{font-family:var(--font-display);font-size:24px;font-weight:700'), 'package prices are the 24px price-card');
   // Pills are auto-width, never a full-width peach bar: a
   // flex-column body stretches its children, so the pill pins
   // itself to the start.
@@ -1031,8 +1040,10 @@ test('audit round Nov 17: the footer is one 4-column grid, no link farm, no repe
   assert.ok(!app.includes('/?tab=${t.id}&plan='), 'no destination × category link farm remains');
   assert.ok(css.includes('.footer-hub{display:flex;flex-wrap:wrap'), 'the hub is one row of links');
   assert.ok(!css.includes('.footer-hub-dest ul'), 'the hub list style is gone');
-  // The trust strip appears once, under the results — never again
-  // in the footer.
-  assert.equal((app.match(/trustStrip\(/g) || []).length, 1, 'the trust strip renders exactly once');
-  assert.ok(!app.includes("trustStrip('Why book with FujinTrip — footer')"), 'no repeated trust strip in the footer');
+  // The trust strip is gone (UX direction round 2, Nov 21 2026 —
+  // P0-4): the trust line lives once, inside the hero — never in
+  // the footer, never as a standalone strip.
+  assert.ok(!app.includes('trustStrip('), 'no trust strip renders anywhere');
+  assert.ok(!app.includes('trust-strip'), 'no trust strip class remains');
+  assert.equal((app.match(/hero-trust/g) || []).length, 1, 'the hero trust line renders exactly once');
 });

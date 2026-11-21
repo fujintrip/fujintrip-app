@@ -16,7 +16,7 @@
  * never forecasts weather or prices; it states the typical season.
  */
 
-import { MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from './planner';
+import { MONTH_NAMES, ROUTE_STOPS, countryRouteKeyForCity, routeKeyForDestination } from './planner';
 import { typicalTemp } from './tripCard';
 
 export type Season = 'peak' | 'shoulder' | 'low';
@@ -87,9 +87,14 @@ function tempRange(cities: string[], month: number): { low: number | null; high:
 export function bestTimeFor(destination: string): BestTime {
   const routeKey = routeKeyForDestination(destination);
   // A destination with no route (Bali) falls back to its own seasons
-  // entry, then to the temperate default.
+  // entry, then to its city's country route (Kyoto and Tokyo → Japan,
+  // Barcelona → Spain — UX direction, Nov 21 2026, round 2, P0-6c:
+  // single cities used to land on the temperate default and all read
+  // "May — mild weather, before the summer crowds"), then to the
+  // temperate default.
   const destKey = destination.toLowerCase();
-  const key = SEASONS[routeKey] ? routeKey : SEASONS[destKey] ? destKey : routeKey;
+  const cityKey = countryRouteKeyForCity(destination);
+  const key = SEASONS[routeKey] ? routeKey : SEASONS[destKey] ? destKey : SEASONS[cityKey] ? cityKey : routeKey;
   const s = SEASONS[key] ?? DEFAULT_SEASON;
   const stops = ROUTE_STOPS[routeKey] ?? [];
   const cities = stops.length ? stops.map((st) => st.city) : [destination];

@@ -82,6 +82,25 @@ export const CITY_PHOTOS: Record<string, string> = {
   Tokyo: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Tokyo_SkyTree.jpg/960px-Tokyo_SkyTree.jpg',
   Vienna: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Wien.Sch%C3%B6nbrunn26.jpg/960px-Wien.Sch%C3%B6nbrunn26.jpg',
   Hanoi: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4d/Hanoi_-_Turtle_Tower_%28Th%C3%A1p_R%C3%B9a%29%2C_Ho%C3%A0n_Ki%E1%BA%BFm_Lake.jpg/960px-Hanoi_-_Turtle_Tower_%28Th%C3%A1p_R%C3%B9a%29%2C_Ho%C3%A0n_Ki%E1%BA%BFm_Lake.jpg',
+  // UX direction round 2 (Nov 21, 2026 — P0-6b): Madrid, Plaza Mayor
+  // (File:Plaza Mayor de Madrid - 01.jpg) — verified Nov 21 (HTTP 200,
+  // image/jpeg, 960×720, ~184KB). The Spain route's third stop, so the
+  // Spain card can show Madrid once Barcelona's Sagrada Familia is
+  // claimed by the Barcelona voices card.
+  Madrid: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Plaza_Mayor_de_Madrid_-_01.jpg/960px-Plaza_Mayor_de_Madrid_-_01.jpg',
+};
+
+// A second photo for a city whose first photo is claimed by another
+// card (UX direction round 2, Nov 21 2026 — P0-6b): the Tokyo voices
+// card showed a blank grey tile because the Japan package claims the
+// Skytree — Tokyo's only photo — first. Shibuya Scramble Crossing
+// (File:Tokyo Shibuya Scramble Crossing 2018-10-09.jpg), verified
+// Nov 21 (HTTP 200, image/jpeg, 960×640, ~203KB), gives the voices
+// card its own Tokyo photo instead of the fallback. One photo per
+// destination still holds: the two Tokyo photos are different URLs
+// on different cards.
+export const ALT_CITY_PHOTOS: Record<string, string> = {
+  Tokyo: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c5/Tokyo_Shibuya_Scramble_Crossing_2018-10-09.jpg/960px-Tokyo_Shibuya_Scramble_Crossing_2018-10-09.jpg',
 };
 
 // Audit round Nov 17, 2026: routes that share a first stop with
@@ -151,11 +170,16 @@ export function assignPhotos(cards: PhotoCardInput[]): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const card of cards) {
     const stopCities = card.stopCities ?? [];
+    // The second photo for a city (ALT_CITY_PHOTOS) is a candidate
+    // after the lead photo and the stop photos — a card whose first
+    // photo was claimed elsewhere gets its own second photo instead
+    // of the fallback tile.
     const candidates = [...new Set(
       [
         leadPhotoFor(card.destination, stopCities),
         card.ownPhoto ?? null,
         ...stopCities.map((c) => CITY_PHOTOS[c] ?? null),
+        ALT_CITY_PHOTOS[card.destination] ?? null,
       ].filter((x): x is string => Boolean(x)),
     )];
     const photos = candidates.filter((p) => !claimed.has(p));

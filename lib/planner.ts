@@ -4,7 +4,14 @@ export type Plan = { destination: string; travelers: number; options: PlanOption
 
 const BASE: Record<string, number> = {
   Kyoto: 1950,
-  Bali: 1250,
+  // Bali was $1,250 — the same per-traveler total as the 9-night
+  // Thailand route — for a 2-night single-place trip (UX direction,
+  // Nov 21 2026 — round 2, P1-3). Two different trips must not show
+  // the same total: corrected to $950, in line with the other short
+  // trips (Tacoma $920, St. George $780) and below the 9-night
+  // Thailand route. A planning-estimate table correction, not a live
+  // price.
+  Bali: 950,
   Santorini: 2100,
   'St. George': 780,
   Tacoma: 920,
@@ -145,15 +152,62 @@ export function buildPlan(destination: string, travelers: number, days = 3, part
     { name: 'Premium', total: per(1.64) - flightSaving(0.6), flight: perFlight(0.6), hotel: per(0.62), car: per(0.14), activities: per(0.28), note: 'Top stays, direct flights, private guides.' },
   ].map(fixLegs);
   const dayTitles = ['Arrive & settle in', 'The big day', 'Slow morning, local flavour'];
-  const planDays: DayPlan[] = Array.from({ length: days }, (_, i) => ({
-    day: i + 1,
-    title: dayTitles[i] ?? `Explore ${destination}`,
-    morning: `Easy start in ${destination} — a local café, then the main sight before the crowds.`,
-    afternoon: `Guided walk or activity, with time to wander and a rest at your stay.`,
-    evening: `Dinner at a well-reviewed local spot, then a quiet evening walk.`,
-    transport: i === 0 ? 'Airport transfer included in the plan' : 'Local bus / rental car — cheapest option shown first.',
-    stay: 'Stay picked for location and reviews, not just price.',
-  }));
+  // Day copy (UX direction, Nov 21 2026 — round 2, P0-6a): every day
+  // reads differently. buildPlan used to write ONE generic morning /
+  // afternoon / evening line for every day, so the Trip-of-the-week
+  // preview showed Days 1–3 with the same text. Each day now names
+  // its own stop city — from the night distribution, so a route's
+  // days follow the route — and its own beat: arrive, the big day,
+  // slow down, then explore. A single place names the place itself.
+  // Nothing here names a specific attraction: the copy stays generic,
+  // only the city and the day's beat change.
+  const nightPlan = distributeNights(routeKeyForDestination(destination), days);
+  const cityForDay = (dayIndex: number): string => {
+    let remaining = dayIndex;
+    for (const s of nightPlan) {
+      if (remaining < s.nights) return s.city;
+      remaining -= s.nights;
+    }
+    return nightPlan.length ? nightPlan[nightPlan.length - 1].city : destination;
+  };
+  const planDays: DayPlan[] = Array.from({ length: days }, (_, i) => {
+    const city = cityForDay(i);
+    const beat =
+      i === 0
+        ? {
+            morning: `Arrive in ${city} — settle in at your stay, then a first walk around the neighborhood.`,
+            afternoon: `A gentle first look at ${city}: the main square and a local café.`,
+            evening: `Dinner at a well-reviewed local spot in ${city}, then an early night.`,
+          }
+        : i === 1
+          ? {
+              morning: `The main sight of ${city} before the crowds, then a local café.`,
+              afternoon: `Guided walk or activity in ${city}, with time to wander.`,
+              evening: `Dinner at a well-reviewed local spot in ${city}, then a quiet evening walk.`,
+            }
+          : i === 2
+            ? {
+                morning: `Slow morning in ${city} — a market or a local breakfast, no rush.`,
+                afternoon: `A quieter corner of ${city} — a park, a museum, or a local workshop.`,
+                evening: `Dinner at a well-reviewed local spot in ${city}, then a quiet evening walk.`,
+              }
+            : {
+                // Day 4 onward rotates through four beats and names
+                // the day number, so a 9- or 14-night plan never
+                // repeats a day's copy — the same defect the preview
+                // showed, one day later.
+                morning: `Day ${i + 1} in ${city}: ${['the sights you have not seen yet, at your own pace', 'a neighborhood you have not walked yet', 'slow down — revisit a favorite, or find a new café', 'the trip’s own rhythm by now'][(i - 3) % 4]}.`,
+                afternoon: ['More of ' + city + ': a guided walk, a museum, or time to wander.', 'A local experience in ' + city + ' — a class, a market, or a viewpoint.', 'Free time in ' + city + ': shop, rest, or take a short day trip.', 'The last corners of ' + city + ' on your list, at your own pace.'][(i - 3) % 4],
+                evening: ['Dinner somewhere new in ' + city + ', then a quiet evening walk.', 'Dinner at a place the locals queue for in ' + city + '.', 'A relaxed dinner in ' + city + ', then an early night.', 'Dinner somewhere new in ' + city + ', then a quiet evening walk.'][(i - 3) % 4],
+              };
+    return {
+      day: i + 1,
+      title: dayTitles[i] ?? `Explore ${destination}`,
+      ...beat,
+      transport: i === 0 ? 'Airport transfer included in the plan' : 'Local bus / rental car — cheapest option shown first.',
+      stay: 'Stay picked for location and reviews, not just price.',
+    };
+  });
   return {
     destination, travelers, options, days: planDays,
     tips: ['Book the flight + hotel together — that’s where most of the saving comes from.', 'Travel midweek when you can; weekend flights cost more for the same seat.', 'Check the hotel’s own website before booking — sometimes it’s cheaper, and we link it.'],
@@ -367,6 +421,7 @@ const CITY_TO_COUNTRY: Record<string, { country: string; display: string }> = {
   rome: { country: 'italy', display: 'Rome' },
   london: { country: 'uk', display: 'London' },
   tokyo: { country: 'japan', display: 'Tokyo' },
+  kyoto: { country: 'japan', display: 'Kyoto' },
   bangkok: { country: 'thailand', display: 'Bangkok' },
   cairo: { country: 'egypt', display: 'Cairo' },
   barcelona: { country: 'spain', display: 'Barcelona' },
@@ -895,6 +950,16 @@ export function routeKeyForDestination(destination: string): string {
     ([, v]) => v.display.toLowerCase() === lower
   );
   return match ? match[0] : '';
+}
+
+// The route key for a well-known city's country ('Kyoto' → 'japan',
+// 'Barcelona' → 'spain') — the best-time panel's fallback when a
+// single destination has no route of its own (UX direction, Nov 21
+// 2026 — round 2, P0-6c): Kyoto, Tokyo and Barcelona all showed the
+// temperate default's "May — mild weather, before the summer crowds"
+// instead of their own season.
+export function countryRouteKeyForCity(city: string): string {
+  return CITY_TO_COUNTRY[city.toLowerCase()]?.country ?? '';
 }
 
 // Month names, for the guided flow and the trip card's suggested dates.

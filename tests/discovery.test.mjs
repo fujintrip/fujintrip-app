@@ -43,7 +43,7 @@ test('every pin price is the planner Best value total for 2 travelers, exactly',
   }
   // Per-route bases, approved by the user Nov 12, 2026 (as drafted):
   // 2-traveler Best value totals range $2,300–$4,400. The base-price
-  // places differ (Bali $2,500, St. George $1,560, Tacoma $1,840,
+  // places differ (Bali $1,900, St. George $1,560, Tacoma $1,840,
   // Hilo $2,900).
   const expectedRoutePrices = {
     Europe: 4400,
@@ -67,7 +67,9 @@ test('every pin price is the planner Best value total for 2 travelers, exactly',
   for (const [route, price] of Object.entries(expectedRoutePrices)) {
     assert.equal(discoveryEntry(route)?.price, price, `${route} bubble is $${price.toLocaleString()}`);
   }
-  assert.equal(discoveryEntry('Bali')?.price, 2500);
+  // Bali $950/traveler (corrected Nov 21, 2026 — UX direction round 2,
+  // P1-3: $1,250 duplicated the 9-night Thailand route's total).
+  assert.equal(discoveryEntry('Bali')?.price, 1900);
   assert.equal(discoveryEntry('St. George')?.price, 1560);
   assert.equal(discoveryEntry('Tacoma')?.price, 1840);
   assert.equal(discoveryEntry('Hilo')?.price, 2900);
@@ -133,5 +135,5 @@ test('a destination the planner has no price for gets no price, not a guess', ()
 test('price label reads like the destination cards', () => {
   const ce = discoveryEntry('Central Europe');
   assert.equal(discoveryPriceLabel(ce), 'from $3,600 total');
-  assert.equal(discoveryPriceLabel(discoveryEntry('Bali')), 'from $2,500 total');
+  assert.equal(discoveryPriceLabel(discoveryEntry('Bali')), 'from $1,900 total');
 });

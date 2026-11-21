@@ -25,10 +25,9 @@ import { sharePathFor, shareTextFor } from '../lib/share';
 import SiteHeader from './SiteHeader';
 import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
-import PackagesSection from './PackagesSection';
-import { ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
-import { Icon } from './icons';
-import { featuredPackages } from '../lib/packages';
+import PackagesSection, { TripOfTheWeekFeature } from './PackagesSection';
+import { ContinueBar, ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
+import { featuredPackages, tripOfTheWeek } from '../lib/packages';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Seed handoff: the /chat page consumes this once on mount so the
@@ -39,12 +38,14 @@ import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from '
 const CHAT_SEED_KEY = 'fujintrip-chat-seed';
 const PENDING_MESSAGE_KEY = 'fujintrip-pending-message';
 
-// UX direction, Nov 19 2026 — P1-1: the homepage is six bands
-// (header, hero + search, ready-made trips, Plan/Book/Follow,
-// Destinations, community, footer). The category tiles and the
-// per-category landing shelf are cut — the header nav and the
-// widget tabs are the category entry points, and a ?tab= link
-// switches the widget tab, nothing more.
+// UX direction, Nov 19 2026 — P1-1, section plan rebuilt Nov 21
+// (round 2, P0-4): the homepage is six bands (header, hero + search,
+// Trip of the week, Ready-made trips, Destinations with the hidden
+// gems folded in as a labelled row, Plan/Book/Follow, Community only
+// when non-empty, footer). The category tiles and the per-category
+// landing shelf are cut — the header nav and the widget tabs are the
+// category entry points, and a ?tab= link switches the widget tab,
+// nothing more.
 export default function FujinApp({ variant, initialTab, initialSearch }: { variant: 'home' | 'chat' | 'account'; initialTab?: HomeTabId; initialSearch?: SearchQuery | null }) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const router = useRouter();
@@ -239,7 +240,6 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialSearchKey]);
   const [prefill, setPrefill] = useState<{ destination: string; nonce: number } | null>(null);
-  const [showAllDestinations, setShowAllDestinations] = useState(false);
   // My Trips progressive disclosure (interface round, Nov 16 2026 —
   // P1 #20): the trips list shows the first 5 until the traveler
   // asks for the rest, so the section stops dominating the page.
@@ -358,9 +358,9 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // gradient), tag pill, one title line, the route line when there is
   // more than one stop, one counts line (stays · transports · from $X
   // total · Best value · 2 travelers · planning estimate). Direction
-  // v3 (spec section 1d): the library is "Popular destinations" now
-  // — 8 cards with a "Show more destinations" expander, no filter
-  // pills, no pagination. A card shows the tag, the name, and the
+  // v3 (spec section 1d), rebuilt Nov 21 (UX direction round 2,
+  // P0-4): the library is "Popular destinations" now — 6 cards, no
+  // expander, no filter pills, no pagination. A card shows the tag, the name, and the
   // Best value total per traveler; a count that does not exist in the
   // data is omitted from the line, never guessed.
   type LibraryEntry = {
@@ -453,9 +453,10 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
     }
     return entries;
   }, [discovery, cardInfo, homeBandNames, homepagePhotos]);
-  // Direction v3 (spec section 1d): the template library is
-  // "Popular destinations" now — 8 cards with a "Show more
-  // destinations" expander. No filter pills, no pagination. The
+  // Direction v3 (spec section 1d), rebuilt Nov 21 (UX direction
+  // round 2, P0-4): "Popular destinations" is six cards, no
+  // expander — the first six of the library, with the hidden gems
+  // folded in below as a labelled row in the same section. The
   // price line is the Best value plan total per traveler (the total
   // in the entry is the 2-traveler total); a card with no planner
   // total shows no price line, never a guessed one.
@@ -466,19 +467,15 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // two bands. The category shelf is gone (P1-1) — a ?tab= link
   // switches the widget tab, nothing more.
   const popularEntries = libraryEntries;
-  const visibleEntries = showAllDestinations ? popularEntries : popularEntries.slice(0, 8);
-  // Trust strip (interface round, Nov 16 2026 — P0 #3): moved from
-  // the bottom of the page to directly under the search results (or
-  // under the hero when no search is active) — trust belongs where
-  // the traveler decides. It appears once, there — never again in
-  // the footer (audit round, Nov 17, 2026 — gap 13).
-  const trustStrip = (label: string) => (
-    <div className="trust-strip" aria-label={label}>
-      <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>All-in prices — the price you see is the price you pay</span>
-      <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>No hidden fees — our flight service fee is shown separately at checkout</span>
-      <span className="trust-item"><span className="trust-icon" aria-hidden="true"><Icon name="check" size={18} /></span>Compare prices from different sources</span>
-    </div>
-  );
+  const visibleEntries = popularEntries.slice(0, 6);
+  // The hero photo (UX direction round 2, Nov 21 2026 — P0-1):
+  // this week's trip's own lead photo, from the already-verified
+  // pool (the one-photo-per-destination assignment above, falling
+  // back to the package's own photo). The same photo fronts the
+  // Trip-of-the-week feature row — one destination in view, twice,
+  // on purpose. No photo → the white hero below.
+  const weekTrip = tripOfTheWeek();
+  const heroPhoto = homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? weekTrip.photo;
   // The reels composer panel — opened from the trip-card strip, the
   // feed, or a booked trip in My Trips. It lives in both variants:
   // on /chat under the app, on the homepage at the top of the page.
@@ -679,11 +676,19 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           myTripsHref="/account"
         />
       )}
+      {/* Photographic hero (UX direction round 2, Nov 21 2026 —
+          P0-1): full-bleed photo of this week's trip (Thailand, Wat
+          Arun this week) with the pill search sitting on it — one
+          question, one line, and AI as a quiet text link, not a
+          button. The scrim keeps the white text readable in both
+          themes; the trust line lives inside the hero now, not as a
+          standalone strip. No photo → the white hero. */}
       {variant === 'home' && (
-        <section className="hero-booking">
+        <section className={`hero-booking${heroPhoto ? ' hero-photo' : ''}`} style={heroPhoto ? { backgroundImage: `url(${heroPhoto})` } : undefined}>
           <div className="wrap hero-booking-inner">
+            <p className="hero-booking-eyebrow">Named for Fujin, Japan’s wind god — ride the wind, pay less.</p>
             <h1>Where to?</h1>
-            <p className="hero-booking-sub">Named for Fujin, Japan’s wind god — ride the wind, pay less. Flights, stays, cars, tours and more, compared in one place.</p>
+            <p className="hero-booking-sub">One trip, one price, one plan — flights, stay, car and activities included. All-in, no hidden fees.</p>
             <SearchWidget
               tab={widgetTab}
               onTabChange={changeTab}
@@ -691,19 +696,24 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               prefill={prefill}
               onSubmit={handleSearchSubmit}
             />
+            <p className="hero-ai-link">
+              Not sure yet? <a href="/chat">Ask Fujin AI →</a>
+            </p>
+            <p className="hero-trust">All-in prices · No hidden fees · Compare prices from different sources</p>
           </div>
         </section>
       )}
-      {variant === 'home' && (
-        <div className="wrap">
-          <ContinueStrip
-            trips={trips}
-            watches={watches}
-            lastSearch={lastSearch}
-            onResumeSearch={resumeSearch}
-            onGoToTrips={() => router.push('/account')}
-          />
-        </div>
+      {/* Continue where you left off (UX direction round 2, Nov 21
+          2026 — P0-4): one thin line under the hero, never a band.
+          The full strip lives on /account. Hidden while a search is
+          active — a results page is results only. */}
+      {variant === 'home' && !search && (
+        <ContinueBar
+          trips={trips}
+          watches={watches}
+          lastSearch={lastSearch}
+          onResumeSearch={resumeSearch}
+        />
       )}
       {variant === 'home' && search && (
         <div className="wrap">
@@ -716,29 +726,26 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           />
         </div>
       )}
-      {/* Trust strip (interface round, Nov 16 2026 — P0 #3): directly
-          under the search results when a search is active, directly
-          under the hero otherwise. On a results page (UX direction,
-          Nov 19 2026 — P0-2) it is hidden — results pages are
-          results only. */}
-      {variant === 'home' && !search && (
-        <div className="wrap">{trustStrip('Why book with FujinTrip')}</div>
-      )}
       {variant === 'home' && (
       <main className="wrap">
-        {/* UX direction, Nov 19 2026 — P1-1: six bands (header,
-            hero + search, ready-made trips, Plan/Book/Follow,
-            Destinations, community, footer). A search turns this
-            into a results-only page — the browse sections hide while
+        {/* UX direction, Nov 19 2026 — P1-1, section plan rebuilt
+            Nov 21 (round 2, P0-4): Hero → Trip of the week →
+            Ready-made trips → Destinations (hidden gems as a
+            labelled row) → Plan, Book, Follow → Community only when
+            non-empty → footer. A search turns this into a
+            results-only page — the browse sections hide while
             results are showing, so a flight search is not buried
             under the whole homepage. "Clear search" in the results
             bar brings the browse sections back. My Trips lives on
             /account now, not on the homepage. */}
         {!search && (
         <>
+        <TripOfTheWeekFeature photo={homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? null} />
+
         <PackagesSection photosById={homepagePhotos} />
 
-        <section id="destinations">
+        <section id="destinations" className="home-section">
+          <p className="eyebrow">Where to go</p>
           <h2>Popular destinations</h2>
           <p className="sub">Open a trip to see the plan — Best value per traveler.</p>
           <div className="grid">
@@ -769,17 +776,16 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               </article>
             ))}
           </div>
-          {popularEntries.length > 8 && !showAllDestinations && (
-            <p style={{ marginTop: 16 }}>
-              <button type="button" className="ghost" onClick={() => setShowAllDestinations(true)}>
-                Show more destinations ({popularEntries.length - 8} more)
-              </button>
-            </p>
-          )}
-          <h3 style={{ marginTop: 28 }}>Featured hidden gems</h3>
-          <p className="sub">Three US places worth the detour — explored properly, with a full plan, not just a photo.</p>
-          <div className="grid">
-            {HIDDEN_GEMS.map((d) => {
+          {/* Hidden gems, folded into the Destinations band (UX
+              direction round 2, Nov 21 2026 — P0-4): a labelled row
+              in the same section, same card, same grid — not its
+              own band. */}
+          <div className="gems-row">
+            <p className="eyebrow">Hidden gems</p>
+            <h3>Three US places worth the detour</h3>
+            <p className="sub">Explored properly, with a full plan, not just a photo.</p>
+            <div className="grid">
+              {HIDDEN_GEMS.map((d) => {
               const gemPhoto = homepagePhotos.get(`gem:${d.name}`)?.[0] ?? null;
               return (
               <article className="card" key={d.name}>
@@ -812,6 +818,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               </article>
               );
             })}
+            </div>
           </div>
         </section>
 
@@ -825,6 +832,16 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           <LocalVoicesTeaser
             photoByPlace={new Map(LOCAL_VOICES_PLACES.map((p) => [p, homepagePhotos.get(`voice:${p}`)?.[0] ?? null]))}
           />
+          {/* Community (UX direction round 2, Nov 21 2026 — P0-4):
+              the reels part hides only once the feed reports zero.
+              reelsCount starts null while the feed loads, so the
+              band renders server-side (heading, links, feed shell)
+              and stays — the checked-in seed (lib/reelsSeed.ts)
+              means the deployed feed is never empty, so the band
+              no longer flashes and vanishes on live the way it did
+              when data/reels.json never reached the deploy. A
+              genuinely empty feed (every post deleted) still hides
+              the band, never a "No reels yet" box. */}
           {reelsCount !== 0 && (
             <div style={{ marginTop: 32 }}>
               <h3>Travelers&apos; stories{reelsCount !== null ? ` · ${reelsCount} reel${reelsCount === 1 ? '' : 's'}` : ''}</h3>
@@ -852,7 +869,17 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
         {/* My Trips lives here now (UX direction, Nov 19 2026 —
             P1-1): the trips, preferences, emergency contact, embassy
             number and price watches are an account page, not a
-            homepage band. */}
+            homepage band. The full continue strip lives here too
+            (round 2, Nov 21 — P0-4): resuming a search from /account
+            routes home with the search params, and the homepage
+            re-runs it. */}
+        <ContinueStrip
+          trips={trips}
+          watches={watches}
+          lastSearch={lastSearch}
+          onResumeSearch={(q) => router.push(`/?${searchQueryToParams(q)}`)}
+          onGoToTrips={() => router.push('/account')}
+        />
         <section>
           <h1 id="mytrips">My Trips</h1>
           <p className="sub">Your saved trips, travel preferences, emergency contact and price watches.</p>

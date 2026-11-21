@@ -3,17 +3,20 @@ import type { ReactNode } from 'react';
 import './globals.css';
 import ServiceWorkerRegister from '../components/ServiceWorkerRegister';
 import { AuthProvider } from '../components/AccountGate';
-import { DM_Sans, Inter } from 'next/font/google';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 
-// Type system (Nov 15, 2026): two families, self-hosted WOFF2
-// variable fonts via next/font/google — no Google Fonts request at
-// runtime, display:swap so a font never blocks first paint. DM Sans
-// (variable, 100–1000) is the display face for headings; Inter
-// 400/600/700 is the body + UI face. Prices use Inter with
-// tabular-nums, not a mono face — the primary font system is
-// Inter + DM Sans.
-const dmSans = DM_Sans({
+// Type system (Nov 15, 2026; display face changed Nov 21 — UX
+// direction round 2, P0-2): two families, self-hosted WOFF2 variable
+// fonts via next/font/google — no Google Fonts request at runtime,
+// display:swap so a font never blocks first paint. Plus Jakarta Sans
+// (variable, 200–800) is the display face for headings, the hero and
+// prices; Inter 400/600/700 is the body + UI face. DM Sans was dropped
+// — it spoke in the same voice as Inter, so headings and body looked
+// identical. Prices use the display face with tabular-nums, not a mono
+// face.
+const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
+  weight: ['500', '600', '700', '800'],
   variable: '--font-display',
   display: 'swap',
 });
@@ -40,7 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${inter.variable}`}
+      className={`${jakarta.variable} ${inter.variable}`}
       suppressHydrationWarning
     >
       <head>

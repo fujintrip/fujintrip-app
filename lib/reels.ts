@@ -27,7 +27,7 @@ export type ReelMedia = {
   url: string;
   // Where the bytes live — shown honestly in the composer ("stored on
   // this server for now" vs "stored in FujinTrip media storage").
-  storage: 'local-dev' | 'spaces';
+  storage: 'local-dev' | 'spaces' | 'seed';
   alt: string;
   // Video only: length in seconds, checked in the browser before upload.
   durationSec?: number;

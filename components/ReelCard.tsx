@@ -30,7 +30,7 @@ export type PublicReelPost = {
   caption: string;
   overallRating?: number;
   ratings?: Record<string, number>;
-  media: { id: string; kind: 'photo' | 'video'; url: string; storage: 'local-dev' | 'spaces'; alt: string; durationSec?: number }[];
+  media: { id: string; kind: 'photo' | 'video'; url: string; storage: 'local-dev' | 'spaces' | 'seed'; alt: string; durationSec?: number }[];
   verified: boolean;
   verifiedNote: string;
   moderation: string;

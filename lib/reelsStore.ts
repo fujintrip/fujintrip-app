@@ -2,16 +2,24 @@
 // Data lives in data/reels.json (see lib/serverStore for the durability
 // warning: the container filesystem is ephemeral — a redeploy wipes
 // these files until Postgres lands).
+import fs from 'fs';
 import path from 'path';
 import { randomBytes } from 'crypto';
 import { DATA_DIR, readJsonFile, writeJsonFile } from './serverStore';
 import type { ReelPost } from './reels';
+import { REELS_SEED } from './reelsSeed';
 
 const POSTS_FILE = path.join(DATA_DIR, 'reels.json');
 
 export type PostsDoc = { posts: ReelPost[] };
 
 export async function listPosts(): Promise<ReelPost[]> {
+  // UX direction round 2 (Nov 21 2026 — P0-6d): the checked-in seed
+  // renders only when no data file exists at all. A file that exists
+  // — even an empty one, or one the traveler emptied by deleting
+  // every post — is the source of truth, so a deleted post never
+  // resurrects from the seed.
+  if (!fs.existsSync(POSTS_FILE)) return [...REELS_SEED];
   const doc = await readJsonFile<PostsDoc>(POSTS_FILE, { posts: [] });
   return Array.isArray(doc.posts) ? doc.posts : [];
 }

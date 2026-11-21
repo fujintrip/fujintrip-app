@@ -37,9 +37,12 @@ import { Icon, type IconName } from './icons';
 // One field: label above, Lucide icon inside the control, the input
 // or select below it. The icon is decorative (aria-hidden inside the
 // Icon component) — the label carries the field for assistive tech.
-function Field({ label, icon, children }: { label: string; icon?: IconName; children: React.ReactNode }) {
+// `narrow` is for time fields (UX direction round 2, Nov 21 2026 —
+// P0-5): a time input needs ~120px, not the standard 150px, so the
+// cars bar fits without squeezing the date fields.
+function Field({ label, icon, children, narrow }: { label: string; icon?: IconName; children: React.ReactNode; narrow?: boolean }) {
   return (
-    <label className="sw-field">
+    <label className={`sw-field${narrow ? ' sw-field--narrow' : ''}`}>
       <span>{label}</span>
       {icon ? (
         <span className="sw-field-control">
@@ -662,8 +665,14 @@ export default function SearchWidget({
           </button>
         </div>
         ) : (
-        <div className="sw-bar">
+        <>
+          {/* Trip type sits ABOVE the bar (UX direction round 2, Nov
+              21 2026 — P0-5): it used to be a flex child inside the
+              bar, ~380px wide, and it squeezed every field — dates
+              clipped to "12/10/20", Travelers to "2 traveler". The
+              bar now holds only fields + the search button. */}
           {tab === 'flights' && <TripTypeControl value={tripType} onChange={switchTripType} />}
+          <div className="sw-bar">
           {tab === 'hotels' && (
             <>
               <Field label="Destination" icon="pin">
@@ -719,13 +728,13 @@ export default function SearchWidget({
               <Field label="Pick-up date" icon="calendar">
                 <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Pick-up date" />
               </Field>
-              <Field label="Pick-up time" icon="clock">
+              <Field label="Pick-up time" icon="clock" narrow>
                 <DateField type="time" value={pickupTime} onChange={setPickupTime} ariaLabel="Pick-up time" />
               </Field>
               <Field label="Drop-off date" icon="calendar">
                 <DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Drop-off date" />
               </Field>
-              <Field label="Drop-off time" icon="clock">
+              <Field label="Drop-off time" icon="clock" narrow>
                 <DateField type="time" value={dropoffTime} onChange={setDropoffTime} ariaLabel="Drop-off time" />
               </Field>
               <label className="sw-check">
@@ -800,7 +809,7 @@ export default function SearchWidget({
               <Field label="Date" icon="calendar">
                 <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Date" />
               </Field>
-              <Field label="Time" icon="clock">
+              <Field label="Time" icon="clock" narrow>
                 <DateField type="time" value={pickupTime} onChange={setPickupTime} ariaLabel="Time" />
               </Field>
               <TravelersSelect value={travelers} onChange={setTravelers} label="Passengers" />
@@ -816,7 +825,8 @@ export default function SearchWidget({
             </span>
             <span className="sw-search-text">{searchButtonLabel(tab)}</span>
           </button>
-        </div>
+          </div>
+        </>
         )}
       </form>
       {note && (
@@ -826,7 +836,7 @@ export default function SearchWidget({
       )}
       {/* One honesty line for the homepage (UX direction, Nov 19
           2026 — P1-3): the per-card "planning estimate" repetition is
-          gone, this line + the trust strip carry it. */}
+          gone, this line + the trust line in the hero carry it. */}
       <p className="sw-honest">
         Prices are planning estimates until live suppliers connect —{' '}
         <a href="/faq#pricing">how pricing works →</a>

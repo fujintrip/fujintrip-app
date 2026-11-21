@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { featuredPackages, isoWeekOfYear, tripOfTheWeek, tripOfTheWeekPreview } from '../lib/packages.ts';
 import { buildPlan } from '../lib/planner.ts';
-import { assignPhotos, CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from '../lib/data.ts';
+import { assignPhotos, ALT_CITY_PHOTOS, CITY_PHOTOS, GLOBAL_DESTINATIONS, HIDDEN_GEMS } from '../lib/data.ts';
 import { discoveryDestinations, priceFor } from '../lib/discovery.ts';
 import { contrastRatio } from '../lib/interface.ts';
 
@@ -183,18 +183,20 @@ test('P2-4: one photo per destination — no photo URL appears on two homepage c
   }
 });
 
-test('P2-4: the featured band keeps its photos; the four collisions fall back honestly', () => {
+test('P2-4: the featured band keeps its photos; the three collisions fall back honestly', () => {
   const m = assignPhotos(homepageCards());
   for (const p of featuredPackages()) {
     const photos = m.get(`pkg:${p.id}`) ?? [];
     assert.ok(photos.length > 0, `featured ${p.destination} keeps a photo — the hero must be photo-led`);
     assert.equal(photos[0], p.photo, `featured ${p.destination} keeps its own lead photo`);
   }
-  // The four collisions, in claim order: the place's own card keeps
+  // The three collisions, in claim order: the place's own card keeps
   // its photo; the route or duplicate card falls back to the labeled
-  // tile instead of a borrowed photo.
-  assert.deepEqual(m.get('voice:Tokyo'), [], 'Tokyo’s voices card falls back — the Skytree belongs to the Japan package');
-  assert.deepEqual(m.get('popular:Spain'), [], 'Spain falls back — the Sagrada Familia belongs to Barcelona’s voices card');
+  // tile instead of a borrowed photo. (Round 2, Nov 21 2026 — P0-6b:
+  // Tokyo and Spain used to collide too, until the Shibuya second
+  // photo and the Madrid stop photo gave them their own.)
+  assert.deepEqual(m.get('voice:Tokyo'), [ALT_CITY_PHOTOS.Tokyo], 'Tokyo’s voices card takes the Shibuya second photo — the Skytree belongs to the Japan package');
+  assert.deepEqual(m.get('popular:Spain'), [CITY_PHOTOS.Madrid], 'Spain takes the Madrid stop photo — the Sagrada Familia belongs to Barcelona’s voices card');
   assert.deepEqual(m.get('popular:Santorini'), [], 'Santorini’s own card falls back — its photo belongs to the Greece package');
   assert.deepEqual(m.get('popular:Paris'), [], 'Paris’s own card falls back — its photo belongs to the France route');
   assert.ok((m.get('voice:Kyoto') ?? []).length > 0, 'Kyoto keeps its photo on its own voices card');
@@ -207,6 +209,7 @@ test('P2-4: the assignment is deterministic and uses only the verified photo poo
   assert.deepEqual([...a.entries()], [...b.entries()], 'same input, same assignment');
   const pool = new Set([
     ...Object.values(CITY_PHOTOS),
+    ...Object.values(ALT_CITY_PHOTOS),
     ...GLOBAL_DESTINATIONS.map((d) => d.image),
     ...HIDDEN_GEMS.map((d) => d.image),
   ]);

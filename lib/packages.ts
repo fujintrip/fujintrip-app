@@ -98,6 +98,23 @@ export function featuredPackages(): Package[] {
   return FEATURED.map((d) => packageFor(d)).filter((p): p is Package => p !== null);
 }
 
+// Ready-made trips (UX direction round 2, Nov 21 2026 — P0-4): the
+// six cards in the Ready-made band — the five featured packages that
+// are NOT this week's trip, plus the cheapest trip with no other
+// homepage band, so the band still shows six and the week's trip
+// never repeats. The filler is deterministic (cheapestPackages), so
+// the band is stable week to week except for the rotation.
+export function readyMadePackages(): Package[] {
+  const weekTrip = tripOfTheWeek();
+  const rest = featuredPackages().filter((p) => p.id !== weekTrip.id);
+  const filler = cheapestPackages(1, [
+    ...featuredPackages().map((p) => p.destination),
+    ...HIDDEN_GEMS.map((g) => g.name),
+    'Europe',
+  ]);
+  return [...rest, ...filler];
+}
+
 // Trip of the week (UX direction, Nov 19 2026 — P2-1): one of the
 // six featured packages gets the larger hero card in the Ready-made
 // trips band, with a 3-day preview of its real plan. The pick

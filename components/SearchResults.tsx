@@ -257,14 +257,19 @@ function FareCard({
         {!hidePrice && (
           <div className="fare-card-price">
             <strong>${offer.price.toLocaleString()}</strong>
-            {perPerson !== null && (
-              <span>
-                ${perPerson.toLocaleString()} per traveler · {travelers} travelers
-              </span>
-            )}
           </div>
         )}
       </div>
+      {/* Breakdown line (UX direction round 2, Nov 21 2026 — P0-7):
+          the per-traveler figure sits below the price, not under it
+          in the same block — one price per card. Only when this
+          card carries its own price (hidePrice cards are legs of a
+          group, whose breakdown lives on the group). */}
+      {!hidePrice && perPerson !== null && (
+        <p className="fare-card-breakdown">
+          ${perPerson.toLocaleString()} per traveler · {travelers} travelers
+        </p>
+      )}
       {offer.bags && (
         <p className="fare-card-bags">
           <Icon name="luggage" size={16} /> {offer.bags}
@@ -424,7 +429,7 @@ function IgnavItineraryGroup({
   // price block, one action.
   return (
     <div className="ignav-itinerary">
-      <TripPriceHeader total={itinerary.price} travelers={travelers} prefix="Trip total from" />
+      <TripPriceHeader total={itinerary.price} prefix="Trip total from" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {itinerary.legs.map((leg, i) => (
         <div key={`${leg.airline}-${leg.price}-${i}`}>
@@ -434,6 +439,7 @@ function IgnavItineraryGroup({
           </ul>
         </div>
       ))}
+      <FlightPriceBreakdown total={itinerary.price} travelers={travelers} />
       <div className="flight-option-actions">
         <button
           type="button"
@@ -485,7 +491,7 @@ function LetsfgItineraryGroup({
   // price block, one action.
   return (
     <div className="ignav-itinerary">
-      <TripPriceHeader total={itinerary.price} travelers={travelers} prefix="Trip total from" />
+      <TripPriceHeader total={itinerary.price} prefix="Trip total from" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {itinerary.legs.map((leg, i) => (
         <div key={`${leg.airline}-${leg.price}-${i}`}>
@@ -495,6 +501,7 @@ function LetsfgItineraryGroup({
           </ul>
         </div>
       ))}
+      <FlightPriceBreakdown total={itinerary.price} travelers={travelers} />
       <div className="flight-option-actions">
         <button
           type="button"
@@ -527,34 +534,37 @@ function LetsfgItineraryGroup({
   );
 }
 
-// One price block for every flight trip card (Nov 17, 2026): the
-// trip total once, loud (22px, tabular numerals — the Expedia
-// price-card), and ONE sub-line with the per-traveler price and,
-// for Duffel only, the service fee. Live Ignav/LetsFG totals say
-// "from" — a live fare can change before booking. The fee is shown
-// here once, never folded into the total and never repeated in a
-// banner below the list.
-function TripPriceHeader({
-  total,
-  travelers,
-  fee,
-  prefix,
-}: {
-  total: number;
-  travelers: number;
-  fee?: number;
-  prefix: string;
-}) {
-  const perPerson = travelers > 1 ? perTravelerPrice(total, travelers) : null;
-  const sub =
-    (perPerson !== null ? ` · $${perPerson.toLocaleString()} per traveler · ${travelers} travelers` : '') +
-    (fee !== undefined ? ` · + $${fee.toLocaleString()} service fee per flight order` : '');
+// One price block for every flight trip card (Nov 17, 2026;
+  // headline-only since Nov 21 — UX direction round 2, P0-7): the
+  // trip total once, loud (24px, tabular numerals — the Expedia
+  // price-card). Live Ignav/LetsFG totals say "from" — a live fare
+  // can change before booking. The per-traveler figure and the
+  // service fee moved to FlightPriceBreakdown below, rendered after
+  // the legs — the headline carries ONE dollar amount, never two.
+function TripPriceHeader({ total, prefix }: { total: number; prefix: string }) {
   return (
     <p className="flight-option-price">
       {prefix} <strong>${total.toLocaleString()}</strong>
-      {sub !== '' && <span className="plan-muted">{sub}</span>}
     </p>
   );
+}
+
+// The breakdown line (UX direction round 2, Nov 21 2026 — P0-7):
+// one price per flight card means the headline shows ONLY the trip
+// total. The per-traveler figure and, for Duffel only, the service
+// fee live here — after the legs, before the actions, still on
+// every card, still shown separately, never folded into the total
+// and never hidden. The fee is a separate charge at checkout; the
+// headline is the fare total alone. Returns null for a single
+// traveler with no fee (nothing to break down).
+function FlightPriceBreakdown({ total, travelers, fee }: { total: number; travelers: number; fee?: number }) {
+  const perPerson = travelers > 1 ? perTravelerPrice(total, travelers) : null;
+  const parts = [
+    perPerson !== null ? `$${perPerson.toLocaleString()} per traveler · ${travelers} travelers` : null,
+    fee !== undefined ? `+ $${fee.toLocaleString()} service fee per flight order` : null,
+  ].filter((x): x is string => x !== null);
+  if (parts.length === 0) return null;
+  return <p className="flight-option-breakdown">{parts.join(' · ')}</p>;
 }
 
 // Checkout link for a Duffel offer (Stripe test mode, Nov 20 2026):
@@ -635,7 +645,7 @@ function DuffelPairCard({
   const [saved, setSaved] = useState(false);
   return (
     <li className="flight-option-card">
-      <TripPriceHeader total={total} travelers={travelers} fee={fee} prefix="Trip total" />
+      <TripPriceHeader total={total} prefix="Trip total" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {testFare && <p className="fare-test-warning">{DUFFEL_TEST_FARE_WARNING}</p>}
       <h6 className="ignav-leg-label">Outbound — {departDate}</h6>
@@ -646,6 +656,7 @@ function DuffelPairCard({
       <ul className="fare-list">
         <FareCard offer={back} travelers={travelers} cabin={cabin} hidePrice />
       </ul>
+      <FlightPriceBreakdown total={total} travelers={travelers} fee={fee} />
       <div className="flight-option-actions">
         <button
           type="button"
@@ -700,12 +711,13 @@ function DuffelOneWayCard({
   const [saved, setSaved] = useState(false);
   return (
     <li className="flight-option-card">
-      <TripPriceHeader total={offer.price} travelers={travelers} fee={fee} prefix="Trip total" />
+      <TripPriceHeader total={offer.price} prefix="Trip total" />
       {sourceLabel && <p className="fare-card-source">{sourceLabel}</p>}
       {testFare && <p className="fare-test-warning">{DUFFEL_TEST_FARE_WARNING}</p>}
       <ul className="fare-list">
         <FareCard offer={offer} travelers={travelers} cabin={cabin} hidePrice />
       </ul>
+      <FlightPriceBreakdown total={offer.price} travelers={travelers} fee={fee} />
       <div className="flight-option-actions">
         <button
           type="button"

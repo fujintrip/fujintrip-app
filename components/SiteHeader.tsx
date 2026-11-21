@@ -1,9 +1,11 @@
 // Direction v3 site header (Nov 14, 2026): the sticky header,
 // Booking pattern — logo, category nav, ONE "Plan with AI" pill,
-// sign in, My Trips, theme toggle. The pill is the ONLY AI entry
-// point on the site: it links to /chat and is never duplicated
-// anywhere else (no hero AI button, no AI button in results or
-// footer, no "Ask Fujin AI" link).
+// sign in, My Trips, theme toggle. The pill is the AI entry point
+// in the header: it links to /chat and is never duplicated there
+// (no AI button in results or footer). The hero carries one quiet
+// text link, "Not sure yet? Ask Fujin AI →" (UX direction round 2,
+// Nov 21 2026 — P0-1) — a text link under the search, not a second
+// button, so the pill stays the one AI action.
 'use client';
 import { useState } from 'react';
 import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';

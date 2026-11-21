@@ -31,6 +31,45 @@ function continueLabel(q: SearchQuery): string {
   return `${tabLabel} · ${place} · ${dates} · ${q.travelers} traveler${q.travelers > 1 ? 's' : ''}`;
 }
 
+// The compact continue bar (UX direction round 2, Nov 21 2026 —
+// P0-4): the homepage's "Continue where you left off" is ONE thin
+// line under the hero, not a section band — it never inserts a band
+// between the hero and the first content band. The full strip
+// (ContinueStrip, below) still lives on /account, where resuming is
+// the page's job.
+export function ContinueBar({
+  trips,
+  watches,
+  lastSearch,
+  onResumeSearch,
+}: {
+  trips: Trip[];
+  watches: PriceWatch[];
+  lastSearch: SearchQuery | null;
+  onResumeSearch: (q: SearchQuery) => void;
+}) {
+  if (!lastSearch && trips.length === 0 && watches.length === 0) return null;
+  return (
+    <div className="wrap">
+      <div className="continue-bar" aria-label="Continue where you left off">
+        <span className="continue-bar-label">Continue where you left off:</span>
+        {lastSearch ? (
+          <button type="button" className="linklike" onClick={() => onResumeSearch(lastSearch)}>
+            {continueLabel(lastSearch)}
+          </button>
+        ) : trips.length > 0 ? (
+          <span>
+            {trips.length} saved trip{trips.length > 1 ? 's' : ''}
+          </span>
+        ) : (
+          <span>Price watches waiting</span>
+        )}
+        <a className="continue-bar-trips" href="/account">My Trips →</a>
+      </div>
+    </div>
+  );
+}
+
 export function ContinueStrip({
   trips,
   watches,
