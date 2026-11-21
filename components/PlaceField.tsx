@@ -41,12 +41,19 @@ export default function PlaceField({
   value,
   onChange,
   placeholder,
+  pinned,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  // Pinned suggestions (roadmap, Nov 21 2026 — F2): always shown at
+  // the top of the listbox, ahead of the fetched suggestions, even
+  // before the traveler types — the flights To field pins
+  // "Everywhere" here, so the destination-less search is one tap
+  // away. A pinned item is selected exactly like a fetched one.
+  pinned?: PlaceSuggestion[];
 }) {
   const listId = `${id}-suggestions`;
   const [open, setOpen] = useState(false);
@@ -54,6 +61,10 @@ export default function PlaceField({
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  // The listbox contents: pinned first, then the fetched
+  // suggestions — keyboard navigation and selection index into this
+  // combined list.
+  const shown = [...(pinned ?? []), ...suggestions];
   // True only when the last value change came from typing or pasting
   // in this field — selection and destination-card prefill set the
   // value without typing, and must not pop the listbox open.
@@ -69,7 +80,10 @@ export default function PlaceField({
     if (timerRef.current) clearTimeout(timerRef.current);
     if (q.trim().length < MIN_CHARS) {
       setSuggestions([]);
-      setOpen(false);
+      // A pinned listbox stays open — the pinned items need no
+      // typing to be useful. (shown is stale here — suggestions was
+      // just cleared — so the pinned list is checked directly.)
+      setOpen((pinned ?? []).length > 0);
       setActive(-1);
       setLoading(false);
       setSearched(false);
@@ -139,10 +153,10 @@ export default function PlaceField({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const { state, selected } = autocompleteKeyDown({ open, active }, e.key, suggestions.length);
+    const { state, selected } = autocompleteKeyDown({ open, active }, e.key, shown.length);
     if (selected !== null) {
       e.preventDefault();
-      select(suggestions[selected]);
+      select(shown[selected]);
       return;
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
@@ -163,7 +177,9 @@ export default function PlaceField({
         }}
         onPaste={onPaste}
         onFocus={() => {
-          if (suggestions.length > 0) setOpen(true);
+          // Pinned items open the listbox on focus even before the
+          // traveler types — that is how "Everywhere" is found.
+          if (shown.length > 0) setOpen(true);
         }}
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
@@ -178,17 +194,20 @@ export default function PlaceField({
       />
       {open && (
         <div className="sw-suggestions" id={listId}>
-          {loading ? (
+          {loading && (
             <p className="sw-sug-status" role="status">
               Searching…
             </p>
-          ) : suggestions.length === 0 ? (
-            <p className="sw-sug-status" role="status">
-              No matches — try another spelling
-            </p>
+          )}
+          {shown.length === 0 ? (
+            !loading && (
+              <p className="sw-sug-status" role="status">
+                No matches — try another spelling
+              </p>
+            )
           ) : (
             <ul role="listbox" aria-label={`${label} suggestions`}>
-              {suggestions.map((s, i) => (
+              {shown.map((s, i) => (
                 <li
                   key={`${s.kind}:${s.name}`}
                   id={`${listId}-${i}`}

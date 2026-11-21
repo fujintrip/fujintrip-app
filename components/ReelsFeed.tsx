@@ -39,6 +39,13 @@ export default function ReelsFeed({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [notice, setNotice] = useState('');
+  // Roadmap, Nov 21 2026 — F3: whether the last load SUCCEEDED. A
+  // failed fetch used to report a count of 0, which made the parent
+  // hide the Community section on a transient error — the section
+  // vanished even though the reels existed. A failed load now reports
+  // no count at all (the parent keeps its last one) and the feed says
+  // so, instead of claiming "No reels yet".
+  const [loadedOk, setLoadedOk] = useState(false);
 
   const load = useCallback(async (dest: string, cursor?: string) => {
     const params = new URLSearchParams({ limit: '10' });
@@ -59,8 +66,10 @@ export default function ReelsFeed({
       setPosts(j.posts.filter((p) => !reported.includes(p.id)));
       setNextCursor(j.nextCursor);
       setTotal(j.total);
+      setLoadedOk(true);
     } catch {
       setNotice('Couldn’t load the reels right now — try again in a moment.');
+      setLoadedOk(false);
     } finally {
       setLoading(false);
     }
@@ -72,10 +81,13 @@ export default function ReelsFeed({
 
   // Report the visible count once a load has finished — the parent
   // hides its section while the feed is empty. Reporting during the
-  // first load would hide the section before the reels arrive.
+  // first load would hide the section before the reels arrive, and
+  // reporting after a FAILED load would hide it on a transient
+  // error — so a failed load reports nothing and the parent keeps
+  // its last count.
   useEffect(() => {
-    if (!loading) onCount?.(posts.length);
-  }, [loading, posts, onCount]);
+    if (loadedOk && !loading) onCount?.(posts.length);
+  }, [loadedOk, loading, posts, onCount]);
 
   const loadMore = async () => {
     if (!nextCursor || loadingMore) return;
@@ -115,7 +127,7 @@ export default function ReelsFeed({
         </button>
       </div>
       {notice && <p className="plan-note">{notice}</p>}
-      {!loading && posts.length === 0 && (
+      {!loading && loadedOk && posts.length === 0 && (
         <div className="reel-empty">
           <p>
             <strong>No reels yet{filter ? ` from ${filter}` : ''}.</strong>

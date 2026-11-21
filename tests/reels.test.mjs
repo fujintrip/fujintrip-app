@@ -224,7 +224,11 @@ test('audit round Nov 17: no developer storage note in the feed, section hides w
   // the homepage hides the whole section while the count is zero —
   // never a "No reels yet" box on the homepage.
   assert.ok(feed.includes('onCount?: (count: number) => void'), 'the feed reports its visible count');
-  assert.ok(feed.includes('if (!loading) onCount?.(posts.length)'), 'the count reports only after a load finishes');
+  // Roadmap, Nov 21 2026 — F3: the count reports only after a
+  // SUCCESSFUL load — a failed fetch reports nothing, so the parent
+  // keeps its last count instead of hiding the section on a
+  // transient error.
+  assert.ok(feed.includes('if (loadedOk && !loading) onCount?.(posts.length)'), 'the count reports only after a successful load finishes');
   assert.ok(app.includes('reelsCount !== 0'), 'the homepage section hides while the feed is empty');
   assert.ok(app.includes('<ReelsFeed onPost={() => openComposer()} onCount={setReelsCount} />'), 'the homepage feed reports its count');
   // Posting the first reel still works from My Trips and the chat,

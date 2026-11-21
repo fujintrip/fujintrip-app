@@ -30,6 +30,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const post = await getPost(params.id);
   if (!post) return NextResponse.json({ message: 'No post with that id.' }, { status: 404 });
   if (post.moderation === 'removed') return NextResponse.json({ message: 'This post was removed by its traveler.' }, { status: 410 });
+  // The seed post carries no owner token (roadmap, Nov 21 2026 —
+  // F3): an empty stored token must never match an empty submitted
+  // one — otherwise anyone could edit the seeded reel by sending no
+  // token at all.
+  if (!post.posterToken) {
+    return NextResponse.json({ message: 'This post cannot be edited.' }, { status: 403 });
+  }
   const body = await req.json().catch(() => ({}));
   const raw = body as Record<string, unknown>;
   if (typeof raw.posterToken !== 'string' || raw.posterToken !== post.posterToken) {
@@ -53,6 +60,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const post = await getPost(params.id);
   if (!post) return NextResponse.json({ message: 'No post with that id.' }, { status: 404 });
+  // The seed post carries no owner token (roadmap, Nov 21 2026 —
+  // F3): an empty stored token must never match — otherwise anyone
+  // could soft-delete the seeded reel by sending no token at all.
+  if (!post.posterToken) {
+    return NextResponse.json({ message: 'This post cannot be deleted.' }, { status: 403 });
+  }
   const body = await req.json().catch(() => ({}));
   const raw = body as Record<string, unknown>;
   if (typeof raw.posterToken !== 'string' || raw.posterToken !== post.posterToken) {

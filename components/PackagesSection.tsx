@@ -13,15 +13,20 @@
 // connects. Never "Book now" — checkout is not built.
 'use client';
 import { packagePrice, readyMadePackages, tripOfTheWeek, tripOfTheWeekPreview, type LivePackageFare, type Package } from '../lib/packages';
+import { packageSavedKey } from '../lib/savedTrips';
 import { shareTextFor } from '../lib/share';
 import { Icon } from './icons';
 import { SafeImg } from './FujinChat';
 import ShareMenu from './ShareMenu';
 
+export type SavePackageFn = (pkg: Package, price: { perTraveler: number; label: string; source: string | null }) => void;
+
 export function PackageCard({
   pkg,
   liveFares,
   photo,
+  savedKeys,
+  onSavePackage,
 }: {
   pkg: Package;
   liveFares?: LivePackageFare[] | null;
@@ -30,8 +35,15 @@ export function PackageCard({
   // photo"; `null` means "assigned elsewhere — render the labeled
   // fallback, never a borrowed photo".
   photo?: string | null;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): the keys
+  // already in My Trips, so a saved package renders "Saved ✓" on
+  // every load. Absent outside the homepage (e.g. the destination
+  // page) — then no Save button renders at all.
+  savedKeys?: Set<string>;
+  onSavePackage?: SavePackageFn;
 }) {
   const price = packagePrice(pkg, liveFares);
+  const saved = savedKeys?.has(packageSavedKey(pkg.destination, price.perTraveler)) ?? false;
   const shownPhoto = photo === undefined ? pkg.photo : photo;
   return (
     <article className="pkg-card">
@@ -78,6 +90,11 @@ export function PackageCard({
         )}
         <div className="pkg-actions">
           <a className="primary" href={`/destination/${encodeURIComponent(pkg.destination)}`}>View trip</a>
+          {onSavePackage && (
+            <button type="button" className="ghost" disabled={saved} onClick={() => onSavePackage(pkg, price)}>
+              {saved ? 'Saved ✓' : '♥ Save'}
+            </button>
+          )}
         </div>
       </div>
     </article>
@@ -93,13 +110,18 @@ export function PackageCard({
 export function TripOfTheWeekFeature({
   liveFares,
   photo,
+  savedKeys,
+  onSavePackage,
 }: {
   liveFares?: LivePackageFare[] | null;
   photo?: string | null;
+  savedKeys?: Set<string>;
+  onSavePackage?: SavePackageFn;
 }) {
   const weekTrip = tripOfTheWeek();
   const preview = tripOfTheWeekPreview(weekTrip);
   const price = packagePrice(weekTrip, liveFares);
+  const saved = savedKeys?.has(packageSavedKey(weekTrip.destination, price.perTraveler)) ?? false;
   const shownPhoto = photo === undefined ? weekTrip.photo : photo;
   return (
     <section className="home-section" id="trip-of-the-week" aria-label="Trip of the week">
@@ -147,6 +169,11 @@ export function TripOfTheWeekFeature({
           )}
           <div className="pkg-actions">
             <a className="primary" href={`/destination/${encodeURIComponent(weekTrip.destination)}`}>View trip</a>
+            {onSavePackage && (
+              <button type="button" className="ghost" disabled={saved} onClick={() => onSavePackage(weekTrip, price)}>
+                {saved ? 'Saved ✓' : '♥ Save'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -157,6 +184,8 @@ export function TripOfTheWeekFeature({
 export default function PackagesSection({
   liveFares,
   photosById,
+  savedKeys,
+  onSavePackage,
 }: {
   // Live fares, when a supplier connects — always null today, so
   // every card shows the planning estimate (see lib/packages.ts).
@@ -167,6 +196,10 @@ export default function PackagesSection({
   // fallback when its photo was claimed by another card. When
   // absent, the package's own photo is used.
   photosById?: Map<string, string[]>;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): passed through
+  // to every card, so a saved package renders "Saved ✓".
+  savedKeys?: Set<string>;
+  onSavePackage?: SavePackageFn;
 }) {
   const pkgs = readyMadePackages();
   return (
@@ -183,6 +216,8 @@ export default function PackagesSection({
             pkg={pkg}
             liveFares={liveFares}
             photo={photosById ? photosById.get(`pkg:${pkg.id}`)?.[0] ?? null : undefined}
+            savedKeys={savedKeys}
+            onSavePackage={onSavePackage}
           />
         ))}
       </div>

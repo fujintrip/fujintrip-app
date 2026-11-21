@@ -187,6 +187,29 @@ export function discoveryDestinations(): DiscoveryEntry[] {
 
 // The standard trip behind a pin, for the price label next to it:
 // Best value, 2 travelers — the same basis as the destination cards.
+// "Everywhere" inspiration search (roadmap, Nov 21 2026 — F2,
+// Skyscanner model): the cheapest trips from the planner, per
+// traveler, cheapest first — the destination-less search's list. Only
+// entries with a real planner price are included (priceFor() returns
+// null for a destination the planner has no price for, and that entry
+// is skipped, never guessed). Every price is the planner's planning
+// estimate — the UI labels it as such and never as a live fare, and
+// the list is date-independent: the planner's price does not depend
+// on dates, so the same list answers any date the traveler picked.
+export function cheapestDestinations(n: number): { destination: string; tag: string; perTraveler: number; total: number }[] {
+  const priced = discoveryDestinations()
+    .map((entry) => ({ entry, total: priceFor(entry.destination) }))
+    .filter((x): x is { entry: DiscoveryEntry; total: number } => x.total !== null)
+    .map(({ entry, total }) => ({
+      destination: entry.destination,
+      tag: entry.tag,
+      perTraveler: Math.round(total / 2),
+      total,
+    }))
+    .sort((a, b) => a.perTraveler - b.perTraveler || a.destination.localeCompare(b.destination));
+  return priced.slice(0, Math.max(0, n));
+}
+
 export function discoveryPriceLabel(entry: DiscoveryEntry): string {
   return entry.price === null
     ? 'No planning estimate for this one yet'

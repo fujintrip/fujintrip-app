@@ -9,6 +9,7 @@ import { spawn, execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { buildTripCard } from '../lib/tripCard.ts';
 import { snapshotFor } from '../lib/today.ts';
+import { cheapestDestinations } from '../lib/discovery.ts';
 
 const PORT = 3106;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -1929,4 +1930,70 @@ test('stripe checkout: /checkout renders (200) with and without an offer', async
     const html = await r.text();
     assert.ok(html.includes('Checkout'), `${path} renders the checkout heading`);
   }
+});
+
+// --- Roadmap "now" functions (Nov 21, 2026) --------------------------
+// Saved trips / wishlist (F1) is a client-side localStorage flow —
+// covered by the unit tests in tests/now-functions.test.mjs. The
+// server-rendered parts live here: the Everywhere results page and
+// the reels seed merge + empty-token guard.
+
+test('everywhere: a destination-less flight search shows the cheapest trips, never a live-fare fetch', async () => {
+  const r = await fetch(`${BASE}/?tab=flights&from=New+York&to=Everywhere&depart=2026-12-10&return=2026-12-17&travelers=2`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  assert.ok(html.includes('Cheapest trips from New York'), 'the page names the origin');
+  assert.ok(html.includes('Planning estimate'), 'every price is labeled a planning estimate');
+  assert.ok(!html.includes('Checking live fares'), 'no live-fare fetch runs for a destination-less search');
+  assert.ok(!html.includes('Showing') || !html.includes('options'), 'no fare count row — there are no fares');
+  const cheapest = cheapestDestinations(10);
+  assert.ok(cheapest.length > 0, 'the planner has priced trips to show');
+  assert.ok(html.includes(cheapest[0].destination), 'the cheapest trip is on the page');
+  assert.ok(html.includes('Trip total from'), 'each trip shows one total');
+  assert.ok(html.includes('View trip'), 'each trip offers its one View trip action');
+  assert.ok(html.includes('Save this search'), 'the search itself can be saved');
+});
+
+test('reels: the seeded Mina/Kyoto reel renders even when a data file exists (roadmap F3)', async () => {
+  // Any POST creates data/reels.json — the seed used to stop
+  // rendering the moment the file existed. The feed must still
+  // carry it, with its real media.
+  const r = await fetch(`${BASE}/api/reels?view=feed&destination=Kyoto&limit=100`);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  const seed = j.posts.find((p) => p.id === 'reel_mwd0vb6yfe42c28c');
+  assert.ok(seed, 'the seeded reel is in the feed');
+  assert.equal(seed.moderation, 'published', 'the seed is published');
+  assert.ok(Array.isArray(seed.media) && seed.media.length >= 1, 'the seed carries real media');
+  // The seed media resolves: either the durable Unsplash URL (when
+  // the local-dev upload is gone) or the local-dev URL itself — but
+  // only when its file is actually on this server, which is exactly
+  // what the fallback guarantees.
+  assert.ok(typeof seed.media[0].url === 'string' && seed.media[0].url.length > 0, 'the seed media is a real URL');
+  if (seed.media[0].url.startsWith('/api/reels/media/')) {
+    const mediaRes = await fetch(`${BASE}${seed.media[0].url}`);
+    assert.equal(mediaRes.status, 200, 'a local-dev seed media URL serves its file');
+  } else {
+    assert.ok(seed.media[0].url.startsWith('http'), 'otherwise the seed media is a durable remote URL');
+  }
+});
+
+test('reels: an empty poster token can neither edit nor delete the seeded reel (roadmap F3)', async () => {
+  const id = 'reel_mwd0vb6yfe42c28c';
+  const badEdit = await fetch(`${BASE}/api/reels/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ caption: 'Hijacked.', posterToken: '' }),
+  });
+  assert.equal(badEdit.status, 403, 'an empty token must never match the seed’s empty stored token');
+  const badDelete = await fetch(`${BASE}/api/reels/${id}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ posterToken: '' }),
+  });
+  assert.equal(badDelete.status, 403, 'the seeded reel cannot be soft-deleted with no token');
+  // And the seed is still there afterwards.
+  const single = await fetch(`${BASE}/api/reels/${id}`);
+  assert.equal(single.status, 200);
+  assert.equal((await single.json()).post.id, id);
 });

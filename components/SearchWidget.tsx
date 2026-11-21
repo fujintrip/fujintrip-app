@@ -698,7 +698,23 @@ export default function SearchWidget({
                 <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
               </Field>
               <Field label="To" icon="pin">
-                <PlaceField id="flights-to" label="Flying to" value={place} onChange={setPlace} placeholder="Destination" />
+                <PlaceField
+                  id="flights-to"
+                  label="Flying to"
+                  value={place}
+                  onChange={setPlace}
+                  placeholder="Destination"
+                  // "Everywhere" inspiration search (roadmap, Nov 21
+                  // 2026 — F2, Skyscanner model): pinned at the top
+                  // of the listbox, so a destination-less search is
+                  // one tap away. Selecting it searches without a
+                  // destination and shows the cheapest trips from the
+                  // origin — planner planning estimates, labeled as
+                  // such, never live fares.
+                  pinned={[
+                    { name: 'Everywhere', value: 'Everywhere', kind: 'city', country: 'Cheapest trips first · planning estimates' },
+                  ]}
+                />
               </Field>
               <Field label="Depart" icon="calendar">
                 <DateField min={today || undefined} value={depart} onChange={setDepart} ariaLabel="Departure date" />

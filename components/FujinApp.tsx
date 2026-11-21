@@ -27,7 +27,8 @@ import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
 import PackagesSection, { TripOfTheWeekFeature } from './PackagesSection';
 import { ContinueBar, ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
-import { featuredPackages, tripOfTheWeek } from '../lib/packages';
+import { featuredPackages, tripOfTheWeek, type Package } from '../lib/packages';
+import { isSavedDetail, packageSavedKey, savedDetailLine, tripSavedKey, type SavedDetail } from '../lib/savedTrips';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
 
 // Seed handoff: the /chat page consumes this once on mount so the
@@ -140,11 +141,77 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   useEffect(() => {
     try {
       const raw = localStorage.getItem('fujintrip-trips');
-      if (raw) setTrips(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          // Saved trips & fares (roadmap, Nov 21 2026 — F1): a corrupt
+          // or foreign `saved` detail is stripped, never rendered —
+          // the trip itself stays, only the bad detail goes.
+          setTrips(
+            parsed.filter((t): t is Trip => Boolean(t) && typeof t === 'object' && typeof (t as Trip).id === 'string' && typeof (t as Trip).label === 'string').map((t) => {
+              const trip = t as Trip;
+              if (trip.saved !== undefined && !isSavedDetail(trip.saved)) {
+                const { saved: _bad, ...rest } = trip;
+                void _bad;
+                return rest;
+              }
+              return trip;
+            }),
+          );
+        }
+      }
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem('fujintrip-trips', JSON.stringify(trips)); } catch {} }, [trips]);
-  const saveTrip = (label: string, status = 'Request saved', destination?: string) => setTrips((t) => [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString(), ...(destination ? { destination } : {}) }, ...t]);
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): a save carries
+  // its structured detail, and the key dedupes — saving the same fare
+  // twice adds nothing, so My Trips never shows the same fare twice.
+  const saveTrip = (label: string, status = 'Request saved', destination?: string, saved?: SavedDetail) => setTrips((t) => {
+    if (saved && t.some((x) => x.saved?.key === saved.key)) return t;
+    return [{ id: String(Date.now()), label, status, date: new Date().toLocaleDateString(), ...(destination ? { destination } : {}), ...(saved ? { saved } : {}) }, ...t];
+  });
+  // The keys already in My Trips — fare cards and package cards read
+  // this so "Saved ✓" survives a reload, not just the click.
+  const savedKeys = useMemo(() => new Set(trips.filter((t) => t.saved).map((t) => (t.saved as SavedDetail).key)), [trips]);
+  // A fare saved from the results: the structured detail goes to My
+  // Trips with the search label, status 'Saved fare'.
+  const saveFareDetail = (label: string, detail: SavedDetail) => saveTrip(label, 'Saved fare', detail.destination, detail);
+  // A package saved from a card: the price is the card's own
+  // packagePrice — a live fare keeps its supplier as the source, an
+  // estimate reads 'FujinTrip planner'.
+  const savePackageDetail = (pkg: Package, price: { perTraveler: number; label: string; source: string | null }) => {
+    const source = price.source ? price.source.split(' · checked ')[0] : 'FujinTrip planner';
+    const detail: SavedDetail = {
+      key: packageSavedKey(pkg.destination, price.perTraveler),
+      kind: 'package',
+      destination: pkg.destination,
+      source,
+      priceKind: price.source ? 'live' : 'estimate',
+      total: price.perTraveler * 2,
+      perTraveler: price.perTraveler,
+      travelers: 2,
+      route: pkg.stops.join(' → '),
+      checkedAt: new Date().toISOString(),
+    };
+    saveTrip(`${pkg.destination} · from $${price.perTraveler.toLocaleString()} per traveler`, 'Saved trip', pkg.destination, detail);
+  };
+  // A destination saved from a Popular / hidden-gem card: the Best
+  // value total for 2 travelers, a planning estimate.
+  const saveDestination = (destination: string, total: number) => {
+    const perTraveler = Math.round(total / 2);
+    const detail: SavedDetail = {
+      key: tripSavedKey(destination, perTraveler),
+      kind: 'trip',
+      destination,
+      source: 'FujinTrip planner',
+      priceKind: 'estimate',
+      total,
+      perTraveler,
+      travelers: 2,
+      checkedAt: new Date().toISOString(),
+    };
+    saveTrip(`${destination} · from $${perTraveler.toLocaleString()} per traveler`, 'Saved trip', destination, detail);
+  };
   // Free-account gate (Clerk, Nov 14 2026) — the one-tap merge
   // (plan-sync-design.md §3): on first sign-in, My Trips offers to
   // move the localStorage trips to the account. The server sync that
@@ -534,7 +601,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           {trips.length === 0 ? <p style={{ color: 'var(--muted)' }}>No trips saved yet — tell Fujin AI where to go and it will appear here.</p> : (
             <>
               <ul className="mytrips" style={{ listStyle: 'none', padding: 0 }}>
-                {(showAllTrips ? trips : trips.slice(0, 5)).map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
+                {(showAllTrips ? trips : trips.slice(0, 5)).map((t) => (<li key={t.id}><span>{t.label} · {t.status} · {t.date}{t.saved && (<><br /><span className="plan-muted">{savedDetailLine(t.saved)}</span></>)}</span><span>{t.destination && t.status !== 'Booked with FujinTrip' && (<><button className="ghost" onClick={() => setTrips((x) => x.map((y) => (y.id === t.id ? { ...y, status: 'Booked with FujinTrip' } : y)))}>Mark as booked</button>{' '}</>)}<button className="ghost" onClick={() => setTrips((x) => x.filter((y) => y.id !== t.id))}>Delete</button>{t.destination && t.status === 'Booked with FujinTrip' && (<>{' '}<button className="ghost" onClick={() => openComposer(t.destination)}>Share how it went</button></>)}</span></li>))}
               </ul>
               {trips.length > 5 && (
                 <p style={{ marginTop: 8 }}>
@@ -721,6 +788,8 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             query={search}
             dark={theme === 'dark'}
             onSaveSearch={(label) => saveTrip(label, 'Request saved')}
+            onSaveFare={saveFareDetail}
+            savedKeys={savedKeys}
             onEditSearch={editSearch}
             onClearSearch={() => setSearch(null)}
           />
@@ -740,16 +809,23 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             /account now, not on the homepage. */}
         {!search && (
         <>
-        <TripOfTheWeekFeature photo={homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? null} />
+        <TripOfTheWeekFeature photo={homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? null} savedKeys={savedKeys} onSavePackage={savePackageDetail} />
 
-        <PackagesSection photosById={homepagePhotos} />
+        <PackagesSection photosById={homepagePhotos} savedKeys={savedKeys} onSavePackage={savePackageDetail} />
 
         <section id="destinations" className="home-section">
           <p className="eyebrow">Where to go</p>
           <h2>Popular destinations</h2>
           <p className="sub">Open a trip to see the plan — Best value per traveler.</p>
           <div className="grid">
-            {visibleEntries.map((e) => (
+            {visibleEntries.map((e) => {
+              // Saved trips & fares (roadmap, Nov 21 2026 — F1): the
+              // total is captured in a const so the narrowing survives
+              // into the Save button's closure.
+              const total = e.total;
+              const perTraveler = total !== null ? Math.round(total / 2) : null;
+              const saved = perTraveler !== null && savedKeys.has(tripSavedKey(e.name, perTraveler));
+              return (
               <article className="card" key={e.key}>
                 <PhotoCarousel photos={e.photos} alt={e.name} />
                 <div className="body">
@@ -763,18 +839,30 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                       name + from-price sit in the white body,
                       Expedia's destination-card pattern. */}
                   <h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
-                  {e.total !== null ? (
+                  {total !== null ? (
                     <>
-                      <p className="result-price">from ${Math.round(e.total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
+                      <p className="result-price">from ${Math.round(total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
                       <p className="plan-muted">Best value · 2 travelers</p>
                     </>
                   ) : (
                     <p className="plan-muted">No estimate for this one yet</p>
                   )}
                   <a className="primary" href={`/destination/${encodeURIComponent(e.name)}`}>View trip</a>
+                  {total !== null && perTraveler !== null && (
+                    <button
+                      type="button"
+                      className="ghost"
+                      style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                      disabled={saved}
+                      onClick={() => saveDestination(e.name, total)}
+                    >
+                      {saved ? 'Saved ✓' : '♥ Save'}
+                    </button>
+                  )}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
           {/* Hidden gems, folded into the Destinations band (UX
               direction round 2, Nov 21 2026 — P0-4): a labelled row
@@ -814,6 +902,17 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                     <ul style={{ fontSize: 13, paddingLeft: 18 }}>{d.itinerary.map((s) => <li key={s}>{s}</li>)}</ul>
                   </details>
                   <a className="primary" href={`/destination/${encodeURIComponent(d.name)}`}>View trip</a>
+                  {cardInfo[d.name]?.total !== undefined && cardInfo[d.name]?.total !== null && (
+                    <button
+                      type="button"
+                      className="ghost"
+                      style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                      disabled={savedKeys.has(tripSavedKey(d.name, Math.round((cardInfo[d.name]?.total ?? 0) / 2)))}
+                      onClick={() => saveDestination(d.name, cardInfo[d.name]?.total ?? 0)}
+                    >
+                      {savedKeys.has(tripSavedKey(d.name, Math.round((cardInfo[d.name]?.total ?? 0) / 2))) ? 'Saved ✓' : '♥ Save'}
+                    </button>
+                  )}
                 </div>
               </article>
               );

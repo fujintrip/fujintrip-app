@@ -19,6 +19,7 @@ import { visaForDestination, VISA_LAST_CHECKED, VISA_PASSPORT_NOTE, type VisaInf
 import { checkPassportValidity, isSchengenCountry, parsePassportExpiry, parsePassportExpiryValue, passportWarningLine, schengenRemaining, type PassportCheck } from '../lib/passport';
 import { DIETARY_OPTIONS, mergeProfile, parsePreferenceSignals, parseProfile, profileLine, profileSummary, type Dietary, type TravelerProfile } from '../lib/preferences';
 import { paceFromProfile } from '../lib/pace';
+import type { SavedDetail } from '../lib/savedTrips';
 import { interfaceState } from '../lib/interface';
 import { useTheme } from '../lib/theme';
 import { buildChecklist, checklistKeyFor, type ChecklistItem } from '../lib/checklist';
@@ -55,7 +56,14 @@ const TripMap = dynamic(() => import('../components/TripMap'), {
 });
 
 
-export type Trip = { id: string; label: string; status: string; date: string; destination?: string; accountId?: string };
+// A saved trip or fare (roadmap, Nov 21 2026 — F1): a trip entry in
+// My Trips ('fujintrip-trips') carries its saved detail when it came
+// from a Save button — source, price kind, totals, route, dates, when
+// the price was checked — so the traveler sees what was actually
+// saved, not a bare label. Entries without `saved` are the older
+// label-only saves (chat plans, "Save this search"); they still
+// render exactly as before.
+export type Trip = { id: string; label: string; status: string; date: string; destination?: string; accountId?: string; saved?: SavedDetail };
 // A trip stamped with accountId was moved to that free account by the
 // one-tap merge in My Trips (Clerk, Nov 14 2026). The stamp is the link
 // the Postgres sync build will use to pull these trips into the

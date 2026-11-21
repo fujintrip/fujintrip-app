@@ -14,7 +14,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { comparisonFor, MONTH_NAMES, ROUTE_STOPS, routeKeyForDestination } from '../lib/planner';
-import { discoveryDestinations, type DiscoveryEntry } from '../lib/discovery';
+import { cheapestDestinations, discoveryDestinations, type DiscoveryEntry } from '../lib/discovery';
+import { fareSavedKey, tripSavedKey, type SavedDetail } from '../lib/savedTrips';
 import {
   DUFFEL_TEST_FARE_WARNING,
   HOME_TABS,
@@ -408,6 +409,7 @@ function IgnavItineraryGroup({
   labels,
   sourceLabel,
   onSaveFare,
+  alreadySaved,
 }: {
   itinerary: IgnavItinerary;
   travelers: number;
@@ -423,8 +425,12 @@ function IgnavItineraryGroup({
   // Ignav and LetsFG cards only offered booking, so the cheapest
   // live fare could not be picked.
   onSaveFare: (fareLabel: string) => void;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): already in My
+  // Trips, so the card renders "Saved ✓" on load, not just after
+  // the click.
+  alreadySaved?: boolean;
 }) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(alreadySaved ?? false);
   // Same trip-card shape as the Duffel cards (Nov 17, 2026): one
   // price block, one action.
   return (
@@ -473,6 +479,7 @@ function LetsfgItineraryGroup({
   labels,
   sourceLabel,
   onSaveFare,
+  alreadySaved,
 }: {
   itinerary: LetsfgItinerary;
   travelers: number;
@@ -485,8 +492,11 @@ function LetsfgItineraryGroup({
   // Save this fare — see IgnavItineraryGroup: every flight card
   // carries the same two actions.
   onSaveFare: (fareLabel: string) => void;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): already in My
+  // Trips, so the card renders "Saved ✓" on load.
+  alreadySaved?: boolean;
 }) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(alreadySaved ?? false);
   // Same trip-card shape as the Ignav group (Nov 17, 2026): one
   // price block, one action.
   return (
@@ -621,6 +631,7 @@ function DuffelPairCard({
   departDate,
   returnDate,
   onSaveFare,
+  alreadySaved,
   testFare = false,
   checkoutHref = '',
 }: {
@@ -632,6 +643,9 @@ function DuffelPairCard({
   departDate: string;
   returnDate: string;
   onSaveFare: (fareLabel: string) => void;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): already in My
+  // Trips, so the card renders "Saved ✓" on load.
+  alreadySaved?: boolean;
   // A Duffel test fare (UX direction, Nov 19 2026 — P0-4): the
   // warning renders on the card itself, always — it never hides
   // behind a filter, unlike the small source tag.
@@ -642,7 +656,7 @@ function DuffelPairCard({
 }) {
   const total = out.price + back.price;
   const fee = serviceFee(total);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(alreadySaved ?? false);
   return (
     <li className="flight-option-card">
       <TripPriceHeader total={total} prefix="Trip total" />
@@ -691,6 +705,7 @@ function DuffelOneWayCard({
   cabin,
   sourceLabel,
   onSaveFare,
+  alreadySaved,
   testFare = false,
   checkoutHref = '',
 }: {
@@ -699,6 +714,9 @@ function DuffelOneWayCard({
   cabin: string;
   sourceLabel?: string;
   onSaveFare: (fareLabel: string) => void;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): already in My
+  // Trips, so the card renders "Saved ✓" on load.
+  alreadySaved?: boolean;
   // A Duffel test fare (UX direction, Nov 19 2026 — P0-4): the
   // warning renders on the card itself, always — it never hides
   // behind a filter, unlike the small source tag.
@@ -708,7 +726,7 @@ function DuffelOneWayCard({
   checkoutHref?: string;
 }) {
   const fee = serviceFee(offer.price);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(alreadySaved ?? false);
   return (
     <li className="flight-option-card">
       <TripPriceHeader total={offer.price} prefix="Trip total" />
@@ -737,6 +755,89 @@ function DuffelOneWayCard({
         )}
       </div>
     </li>
+  );
+}
+
+// "Everywhere" inspiration search (roadmap, Nov 21 2026 — F2,
+// Skyscanner model): the results page for a destination-less flights
+// search (To = "Everywhere"). No live fares are fetched — the list is
+// the planner's cheapest trips from the origin, per traveler,
+// cheapest first, and every price is the planner's planning estimate,
+// labeled as such on the page and on every card. The planner's price
+// does not depend on dates, so the list is the same whatever dates
+// the traveler picked — the copy says so instead of pretending the
+// dates matter. "View trip" opens the destination page; "Save" keeps
+// the trip in My Trips with its structured detail.
+function EverywhereResults({
+  query,
+  onSaveSearch,
+  onSaveFare,
+  savedKeys,
+}: {
+  query: SearchQuery;
+  onSaveSearch: (label: string) => void;
+  onSaveFare?: (label: string, detail: SavedDetail) => void;
+  savedKeys?: Set<string>;
+}) {
+  const trips = cheapestDestinations(10);
+  const origin = query.from || 'your origin';
+  return (
+    <div aria-label="Cheapest trips from your origin">
+      <h3>Cheapest trips from {origin}</h3>
+      <p className="plan-muted">
+        No destination picked — these are the cheapest trips FujinTrip&rsquo;s planner can build from {origin}, cheapest first.
+        Every price is a planning estimate from the planner, not a live fare: the planner&rsquo;s price does not change with your
+        dates, and live fares will vary by date. Pick a destination to see live fares for it.
+      </p>
+      {trips.length === 0 ? (
+        <p className="plan-muted">No priced trips yet — the planner has no prices for this origin.</p>
+      ) : (
+        <ul className="flight-card-grid">
+          {trips.map((t, i) => {
+            const saved = savedKeys?.has(tripSavedKey(t.destination, t.perTraveler)) ?? false;
+            const save = () => {
+              const detail: SavedDetail = {
+                key: tripSavedKey(t.destination, t.perTraveler),
+                kind: 'trip',
+                destination: t.destination,
+                source: 'FujinTrip planner',
+                priceKind: 'estimate',
+                total: t.total,
+                perTraveler: t.perTraveler,
+                travelers: 2,
+                route: t.destination,
+                checkedAt: new Date().toISOString(),
+              };
+              const label = `${t.destination} · from $${t.perTraveler.toLocaleString()} per traveler · Planning estimate`;
+              if (onSaveFare) onSaveFare(label, detail);
+              else onSaveSearch(label);
+            };
+            return (
+              <li key={t.destination} className="flight-option-card">
+                <p className="plan-muted">
+                  #{i + 1} cheapest · {t.tag}
+                </p>
+                <h4>{t.destination}</h4>
+                <TripPriceHeader total={t.total} prefix="Trip total from" />
+                <FlightPriceBreakdown total={t.total} travelers={2} />
+                <p className="plan-muted">Planning estimate · Best value · 2 travelers</p>
+                <div className="flight-option-actions">
+                  <a className="primary" href={`/destination/${encodeURIComponent(t.destination)}`}>View trip</a>
+                  <button type="button" className="ghost" disabled={saved} onClick={save}>
+                    {saved ? 'Saved ✓' : '♥ Save'}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p>
+        <button type="button" className="primary" onClick={() => onSaveSearch(searchRequestLabel(query))}>
+          Save this search
+        </button>
+      </p>
+    </div>
   );
 }
 
@@ -788,6 +889,8 @@ function FlightResults({
   hideSourceTags,
   onLiveOptions,
   onSave,
+  onSaveFare,
+  savedKeys,
   onClearLiveFilters,
   onClearPrice,
   onClearSort,
@@ -811,6 +914,11 @@ function FlightResults({
   hideSourceTags: boolean;
   onLiveOptions: (opts: LiveFilterOptions | null) => void;
   onSave: (label: string) => void;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): a fare saved
+  // from a card carries its structured detail to My Trips. Absent,
+  // the label-only save is kept (the old behavior).
+  onSaveFare?: (label: string, detail: SavedDetail) => void;
+  savedKeys?: Set<string>;
   onClearLiveFilters: () => void;
   onClearPrice: () => void;
   onClearSort: () => void;
@@ -1197,10 +1305,56 @@ function FlightResults({
   const duffelTagShown = hideSourceTags ? undefined : duffelTag;
   const ignavTagShown = hideSourceTags ? undefined : ignavTag;
   const letsfgTagShown = hideSourceTags ? undefined : letsfgTag;
-  // "Save this fare" (Nov 17, 2026): a Duffel card's one action —
-  // the chosen option is stored in My Trips with the search label,
-  // so the saved item records exactly which fare was picked.
-  const onSaveFare = (fareLabel: string) => onSave(`${searchRequestLabel(query)} · ${fareLabel}`);
+  // "Save this fare" (Nov 17, 2026; structured detail, Nov 21 2026 —
+  // F1): the chosen option is stored in My Trips with the search
+  // label AND its structured detail — source, price kind, totals,
+  // route, dates, when it was checked — so the saved fare in My Trips
+  // says what it is. A Duffel test fare is saved as 'test', never as
+  // a live fare. Without the detail handler the label-only save is
+  // kept (the old behavior). The airline is part of the key: two
+  // airlines can quote the same total on the same route.
+  const fareKey = (source: string, total: number, airline: string, ret?: string) =>
+    fareSavedKey({
+      source,
+      from: ctx.origin,
+      to: destCity,
+      depart: departIso,
+      ret: ret ?? (tripType === 'oneway' ? '' : returnIso),
+      travelers: query.travelers,
+      total,
+      airline,
+    });
+  const saveFare = (
+    source: 'Duffel' | 'Ignav' | 'LetsFG',
+    total: number,
+    testFare: boolean,
+    fareLabel: string,
+    airline: string,
+    opts?: { route?: string; dates?: string; ret?: string },
+  ) => {
+    const label = `${searchRequestLabel(query)} · ${fareLabel}`;
+    if (!onSaveFare) {
+      onSave(label);
+      return;
+    }
+    const ret = opts?.ret ?? (tripType === 'oneway' ? '' : returnIso);
+    const detail: SavedDetail = {
+      key: fareKey(source, total, airline, ret),
+      kind: 'fare',
+      destination: destCity,
+      source,
+      priceKind: testFare ? 'test' : 'live',
+      total,
+      perTraveler: Math.round(total / query.travelers),
+      travelers: query.travelers,
+      route: opts?.route ?? `${ctx.origin} → ${destCity}`,
+      dates: opts?.dates ?? (tripType === 'oneway' ? departIso : `${departIso} – ${returnIso}`),
+      checkedAt: new Date().toISOString(),
+    };
+    onSaveFare(label, detail);
+  };
+  const isFareSaved = (source: string, total: number, airline: string, ret?: string) =>
+    savedKeys?.has(fareKey(source, total, airline, ret)) ?? false;
   // The plan flight budget is a round-trip figure — for one-way and
   // multi-city it would quote a budget that does not apply, so the
   // line (and the budget inside noFareMessage) stays round-trip only.
@@ -1252,7 +1406,10 @@ function FlightResults({
                         sourceLabel={duffelTagShown}
                         departDate={fares.data?.departDate ?? departIso}
                         returnDate={fares.data?.returnDate ?? returnIso}
-                        onSaveFare={onSaveFare}
+                        onSaveFare={(label) =>
+                          saveFare('Duffel', opt.out.price + opt.back.price, duffelTest, label, `${opt.out.airline} + ${opt.back.airline}`)
+                        }
+                        alreadySaved={isFareSaved('Duffel', opt.out.price + opt.back.price, `${opt.out.airline} + ${opt.back.airline}`)}
                         testFare={duffelTest}
                         checkoutHref={duffelCheckoutHref({
                           offerId: opt.out.offerId,
@@ -1277,7 +1434,8 @@ function FlightResults({
                         travelers={query.travelers}
                         cabin={query.cabin}
                         sourceLabel={duffelTagShown}
-                        onSaveFare={onSaveFare}
+                        onSaveFare={(label) => saveFare('Duffel', opt.offer.price, duffelTest, label, opt.offer.airline)}
+                        alreadySaved={isFareSaved('Duffel', opt.offer.price, opt.offer.airline)}
                         testFare={duffelTest}
                         checkoutHref={duffelCheckoutHref({
                           offerId: opt.offer.offerId,
@@ -1302,7 +1460,10 @@ function FlightResults({
                           cabin={query.cabin}
                           labels={tripType === 'oneway' ? ['One-way'] : ['Outbound', 'Return']}
                           sourceLabel={letsfgTagShown}
-                          onSaveFare={onSaveFare}
+                          onSaveFare={(label) =>
+                            saveFare('LetsFG', opt.itinerary.price, false, label, opt.itinerary.legs[0]?.airline ?? 'LetsFG')
+                          }
+                          alreadySaved={isFareSaved('LetsFG', opt.itinerary.price, opt.itinerary.legs[0]?.airline ?? 'LetsFG')}
                         />
                       </li>
                     );
@@ -1315,7 +1476,10 @@ function FlightResults({
                         cabin={query.cabin}
                         labels={tripType === 'oneway' ? ['One-way'] : ['Outbound', 'Return']}
                         sourceLabel={ignavTagShown}
-                        onSaveFare={onSaveFare}
+                        onSaveFare={(label) =>
+                          saveFare('Ignav', opt.itinerary.price, false, label, opt.itinerary.legs[0]?.airline ?? 'Ignav')
+                        }
+                        alreadySaved={isFareSaved('Ignav', opt.itinerary.price, opt.itinerary.legs[0]?.airline ?? 'Ignav')}
                       />
                     </li>
                   );
@@ -1431,7 +1595,14 @@ function FlightResults({
                     cabin={query.cabin}
                     labels={queryLegs.map((l, i) => `Leg ${i + 1} — ${l.from} → ${l.to} · ${l.depart}`)}
                     sourceLabel={ignavTagShown}
-                    onSaveFare={onSaveFare}
+                    onSaveFare={(label) =>
+                      saveFare('Ignav', it.price, false, label, it.legs.map((l) => l.airline).join(' + '), {
+                        route: queryLegs.map((l) => `${l.from} → ${l.to}`).join(' · '),
+                        dates: queryLegs.length > 1 ? `${queryLegs[0].depart} – ${queryLegs[queryLegs.length - 1].depart}` : queryLegs[0].depart,
+                        ret: queryLegs[queryLegs.length - 1].depart,
+                      })
+                    }
+                    alreadySaved={isFareSaved('Ignav', it.price, it.legs.map((l) => l.airline).join(' + '), queryLegs[queryLegs.length - 1].depart)}
                   />
                 ))}
                 {ignavItineraries.length === 0 && (
@@ -2710,12 +2881,20 @@ export default function SearchResults({
   query,
   dark,
   onSaveSearch,
+  onSaveFare,
+  savedKeys,
   onEditSearch,
   onClearSearch,
 }: {
   query: SearchQuery;
   dark: boolean;
   onSaveSearch: (label: string) => void;
+  // Saved trips & fares (roadmap, Nov 21 2026 — F1): a fare saved
+  // from a flight card carries its structured detail to My Trips.
+  // Absent, the fare falls back to the label-only save (the old
+  // behavior) — nothing breaks for callers that do not pass it.
+  onSaveFare?: (label: string, detail: SavedDetail) => void;
+  savedKeys?: Set<string>;
   onEditSearch: () => void;
   onClearSearch: () => void;
 }) {
@@ -2831,6 +3010,10 @@ export default function SearchResults({
   const primaryPlace =
     query.tab === 'buses' ? query.to : query.tab === 'taxis' ? query.dropoff || query.from : query.tab === 'flights' ? query.to : query.dest;
   const unknownPlace = primaryPlace !== '' && !isKnownPlace(primaryPlace);
+  // "Everywhere" inspiration search (roadmap, Nov 21 2026 — F2):
+  // a flights search with To = "Everywhere" skips the live-fare
+  // fetch entirely and shows the planner's cheapest trips instead.
+  const isEverywhere = query.tab === 'flights' && query.to === 'Everywhere';
 
   const toggleIn = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
@@ -3190,9 +3373,11 @@ export default function SearchResults({
           <strong>{label}</strong> · {searchSummary(query)}
         </span>
         <span className="results-bar-note">
-          {query.tab === 'flights'
-            ? 'Planning estimates from FujinTrip\u2019s planner, plus live fares from Ignav and LetsFG.'
-            : 'Planning estimates from FujinTrip\u2019s planner — not live prices. Live inventory arrives as suppliers connect.'}{' '}
+          {isEverywhere
+            ? 'Planning estimates from FujinTrip\u2019s planner — not live fares. Live fares appear once you pick a destination.'
+            : query.tab === 'flights'
+              ? 'Planning estimates from FujinTrip\u2019s planner, plus live fares from Ignav and LetsFG.'
+              : 'Planning estimates from FujinTrip\u2019s planner — not live prices. Live inventory arrives as suppliers connect.'}{' '}
           <a href="/faq#pricing">How pricing works →</a>
         </span>
         <button type="button" className="ghost" onClick={onEditSearch}>
@@ -3214,6 +3399,12 @@ export default function SearchResults({
           </p>
         </div>
       ) : query.tab === 'flights' ? (
+        // "Everywhere" inspiration search (roadmap, Nov 21 2026 —
+        // F2): a destination-less search never fetches fares — it
+        // shows the planner's cheapest trips from the origin instead.
+        isEverywhere ? (
+          <EverywhereResults query={query} onSaveSearch={onSaveSearch} onSaveFare={onSaveFare} savedKeys={savedKeys} />
+        ) : (
         // Flights (audit round, Nov 17, 2026): the same 230px left
         // rail + results column as every other tab — the top filter
         // bar is gone. Sort + price + facets live in the rail
@@ -3255,6 +3446,8 @@ export default function SearchResults({
               hideSourceTags={liveFiltersActive}
               onLiveOptions={setLiveOptions}
               onSave={onSaveSearch}
+              onSaveFare={onSaveFare}
+              savedKeys={savedKeys}
               onClearLiveFilters={() => {
                 setStopsFilter([]);
                 setAirlinesFilter([]);
@@ -3265,6 +3458,7 @@ export default function SearchResults({
             />
           </div>
         </div>
+        )
       ) : (
         <div className="results-layout">
           <aside className="results-filters" aria-label="Filters">
