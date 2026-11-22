@@ -100,10 +100,10 @@ test('audit round Nov 17: date fields never garble, search is a pill bar ending 
   assert.ok(widget.includes('if (el && el.value !== value) el.value = value;'), 'external changes sync through the ref');
   assert.ok(widget.includes('<DateField min={today || undefined} value={ret} onChange={setRet} ariaLabel="Return date" />'), 'the Return field uses DateField');
   // Expedia rebuild (Nov 17, 2026): the search is ONE pill bar — the
-  // fields are segments, and the bar ends in a circular navy button,
+  // fields are segments, and the bar ends in a circular white button,
   // magnifier only. The label stays in the HTML (visually hidden)
   // and in aria-label, so the button keeps its name. Multi-city
-  // keeps the stacked leg editor with a full-width navy pill.
+  // keeps the stacked leg editor with a full-width plum pill.
   assert.ok(widget.includes('<div className="sw-bar">'), 'the search is a pill bar');
   assert.ok(widget.includes('<div className="sw-multicity">'), 'multi-city keeps the stacked editor');
   assert.ok(widget.includes('<button type="submit" className="primary sw-search" aria-label={searchButtonLabel(tab)}>'), 'the search button exists, with its label as its accessible name');

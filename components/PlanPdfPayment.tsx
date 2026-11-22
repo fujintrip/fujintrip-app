@@ -80,7 +80,7 @@ export default function PlanPdfPayment({
   }
   return (
     <div style={{ marginTop: 8 }}>
-      <Elements stripe={stripePromise} options={{ clientSecret, appearance: { variables: { colorPrimary: '#00255d' } } }}>
+      <Elements stripe={stripePromise} options={{ clientSecret, appearance: { variables: { colorPrimary: '#4a3f4b' } } }}>
         <PdfPaymentForm onPaid={onPaid} onError={() => {}} />
       </Elements>
       <p style={{ margin: '8px 0 0' }}>

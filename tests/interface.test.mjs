@@ -37,24 +37,24 @@ test('contrastRatio: white on black is 21:1', () => {
 });
 
 test('contrast: light theme — small text on accent uses accent-text, not the accent', () => {
-  // The accent itself is display-only: 2.8:1 on white fails 4.5:1.
-  assert.ok(contrastRatio('#f97316', '#ffffff') < 4.5, 'accent #f97316 must NOT be used for small text');
-  assert.equal(meetsContrast('#f97316', '#ffffff'), false);
-  // accent-text #c2410c is the small-text colour: 5.18:1.
-  assert.ok(meetsContrast('#c2410c', '#ffffff'));
-  assert.ok(contrastRatio('#c2410c', '#ffffff') > 5.1);
+  // The accent itself is display-only: 4.15:1 on white fails 4.5:1.
+  assert.ok(contrastRatio('#c3603e', '#ffffff') < 4.5, 'accent #c3603e must NOT be used for small text');
+  assert.equal(meetsContrast('#c3603e', '#ffffff'), false);
+  // accent-text #9e4a2c is the small-text colour: 6.05:1.
+  assert.ok(meetsContrast('#9e4a2c', '#ffffff'));
+  assert.ok(contrastRatio('#9e4a2c', '#ffffff') > 5.1);
   // Light-theme body and muted text pass on white.
-  assert.ok(meetsContrast('#0a0a0a', '#ffffff'));
-  assert.ok(meetsContrast('#6b7280', '#ffffff'), 'light muted #6b7280 on white');
+  assert.ok(meetsContrast('#060609', '#ffffff'));
+  assert.ok(meetsContrast('#6b6660', '#ffffff'), 'light muted #6b6660 on white');
 });
 
 test('contrast: dark theme — small text on accent uses the light accent-text', () => {
-  // Dark accent-text #fb923c on the dark page background.
-  assert.ok(meetsContrast('#fb923c', '#0b0a09'));
-  assert.ok(meetsContrast('#fb923c', '#141210'), 'dark accent-text on dark surface');
+  // Dark accent-text #f09357 on the dark page background.
+  assert.ok(meetsContrast('#f09357', '#060609'));
+  assert.ok(meetsContrast('#f09357', '#161214'), 'dark accent-text on dark surface');
   // Dark-theme body and muted text pass on the dark background.
-  assert.ok(meetsContrast('#f5f4f0', '#0b0a09'));
-  assert.ok(meetsContrast('#a3a3a3', '#0b0a09'), 'dark muted #a3a3a3 on dark page');
+  assert.ok(meetsContrast('#f5f2ee', '#060609'));
+  assert.ok(meetsContrast('#afaaa5', '#060609'), 'dark muted #afaaa5 on dark page');
   // A filled dark-theme accent button: near-black text on the accent.
-  assert.ok(meetsContrast('#1c0a00', '#fb923c'));
+  assert.ok(meetsContrast('#060609', '#f09357'));
 });

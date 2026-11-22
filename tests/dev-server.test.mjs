@@ -1276,11 +1276,13 @@ test('popular destinations (direction v3): 6 cards, no expander, per-traveler pr
   assert.ok(!popularHtml.includes('Japan'), 'Japan is not repeated in Popular');
   // A card carries the per-traveler Best value price line, never a
   // counts line or a guessed rate. Portugal is $2,900 for 2.
-  // (Audit round, Nov 17, 2026 — gap 10: the price lives in the
-  // white body now, so "from $1,450" and "per traveler" sit in
-  // separate elements instead of one overlay line.)
+  // (Dribbble makeover, Nov 21, 2026: the price sits ON the photo
+  // in the frosted pill — reversing the audit-round gap-10 call
+  // that moved it into the white body; the bottom gradient keeps
+  // the white text readable. "from $1,450" and "per traveler" sit
+  // in the one overlay line.)
   assert.ok(html.includes('from $1,450'), 'Portugal card carries the per-traveler price');
-  assert.ok(html.includes('class="result-price"'), 'the price is the 22px price-card in the body');
+  assert.ok(html.includes('class="result-price"'), 'the price is the price line on the photo overlay');
   assert.ok(html.includes('Best value · 2 travelers'), 'the price line names the tier');
   assert.ok(!html.includes('Best value · 2 travelers · planning estimate'), 'no per-card planning-estimate label — the widget line covers the page');
   // The card action opens the trip — it never seeds the chat, and

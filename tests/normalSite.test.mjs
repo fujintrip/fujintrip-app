@@ -742,26 +742,26 @@ test('restructure: the new grids stack to one column at 390px', () => {
   assert.ok(css.includes('.pkg-actions button,.pkg-actions a{min-height:44px'), 'package actions are 44px touch targets');
 });
 
-// Expedia restyle (Nov 16, 2026 — "copy everything"): the design
-// language is Expedia's — a wide 1200px container with 24px gutters,
-// one radius scale (8px fields, 12px bars, 16px cards), barely-there
+// Dribbble makeover (Nov 21, 2026): the design language is the
+// shot's — a wide 1200px container with 24px gutters, one radius
+// scale (12px fields, 16px panels, 24px cards), barely-there
 // resting shadows, and one 24px gap token between cards (UX
 // direction round 2, Nov 21 2026 — P0-3). Visual layer only: no
-// layout, copy, or behavior changes. Brand, fonts, and the white
+// layout, copy, or behavior changes. Brand, fonts, and the photo
 // hero are FujinTrip's own.
-test('expedia restyle: wide container, one radius scale, airy grids', () => {
+test('dribbble makeover: wide container, one radius scale, airy grids', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   assert.ok(css.includes('.wrap{max-width:1200px;margin:0 auto;padding:0 24px}'), 'the container is 1200px with 24px gutters');
   assert.ok(css.includes('calc((100vw - 1200px)/2 + 24px)'), 'the sticky header caps at the same 1200px container');
   for (const cls of ['.card', '.result-card', '.pkg-card', '.fare-card', '.flight-option-card', '.step', '.voices-teaser']) {
-    assert.ok(new RegExp(`\\${cls}\\{[^}]*border-radius:12px`).test(css), `${cls} uses the 12px card radius`);
+    assert.ok(new RegExp(`\\${cls}\\{[^}]*border-radius:var\\(--r-lg\\)`).test(css), `${cls} uses the 24px card radius`);
   }
-  // Expedia rebuild (Nov 17, 2026): the search widget is a transparent
-  // wrapper now — the 12px radius lives on the pill bar's phone form,
-  // and the bar itself is a 999px pill.
+  // The search widget is a transparent wrapper — the 24px radius
+  // lives on the pill bar's phone form, and the bar itself is a
+  // 999px pill.
   assert.ok(/\.sw-bar\{[^}]*border-radius:999px/.test(css), 'the search bar is a 999px pill');
-  assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:8px/.test(css), 'search fields use the 8px radius');
-  assert.ok(/\.results-bar\{[^}]*border-radius:12px/.test(css), 'the results bar uses the 12px radius');
+  assert.ok(/\.sw-field input,\.sw-field select\{[^}]*border-radius:var\(--r-sm\)/.test(css), 'search fields use the 12px radius');
+  assert.ok(/\.results-bar\{[^}]*border-radius:var\(--r-lg\)/.test(css), 'the results bar uses the 24px radius');
   // The stays top bar is gone (review round, Nov 17 2026 — gap 6:
   // sort, max price, tier and the sandbox facets all live in the
   // sidebar now — one filter surface). The flights top bar is gone
@@ -825,12 +825,16 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(page.includes('initialTab={homeTabIdFromQuery'), 'a ?tab= link still switches the widget tab');
   assert.ok(!app.includes('SHELF_COPY'), 'no shelf copy remains');
   assert.ok(!app.includes('shelfEntries'), 'no shelf entries remain');
-  // 2 — distinct section grammars: photo destination cards, deals grid.
+  // 2 — distinct section grammars: portrait destination cards with
+  // the name + price overlaid on the photo (Dribbble makeover, Nov
+  // 21, 2026 — reversing the audit-round gap-10 call that moved the
+  // price into the white body; the bottom gradient keeps the white
+  // text readable).
   assert.ok(!app.includes('dest-card--photo'), 'destination cards no longer use the overlay variant');
-  assert.ok(!app.includes('dest-overlay'), 'the name + from-price no longer overlay the photo');
-  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the white body, below the photo');
-  assert.ok(!css.includes('.dest-overlay'), 'the overlay style is gone');
-  assert.ok(css.includes('.card .body .result-price{font-family:var(--font-display);font-size:24px'), 'the body price is the 24px price-card');
+  assert.ok(app.includes('dest-overlay'), 'the name + from-price overlay the photo on the gradient');
+  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits on the photo in the frosted pill');
+  assert.ok(css.includes('.dest-overlay'), 'the overlay style exists');
+  assert.ok(css.includes('.dest-overlay .result-price{flex:0 0 auto;background:rgba(252,252,252,.16)'), 'the overlay price is a frosted pill');
   assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
   assert.ok(!existsSync(new URL('../components/DealsSection.tsx', import.meta.url)), 'the deals component is deleted with the band');
   assert.ok(!css.includes('.deals-grid'), 'no deals-grid style remains');
@@ -904,12 +908,12 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
   assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
   assert.ok(results.includes('onClearSearch: () => void'), 'the clear callback is a declared prop');
-  // Tokens — Expedia radius scale: cards 12px, buttons pill,
-  // inputs 8px; no 16px radius remains.
+  // Tokens — Dribbble radius scale: cards 24px, buttons pill,
+  // inputs 12px; no 16px radius remains.
   assert.ok(!css.includes('border-radius:16px'), 'no 16px radius remains in the stylesheet');
-  assert.ok(css.includes('--brand:#00255d'), 'navy is the primary-action color');
-  assert.ok(css.includes('--ink:#191e3b'), 'ink is the blue-tinted near-black');
-  assert.ok(css.includes('--line:#dcdee5'), 'hairlines are the Expedia grey');
+  assert.ok(css.includes('--brand:#4a3f4b'), 'plum is the primary-action color');
+  assert.ok(css.includes('--ink:#060609'), 'ink is the near-black');
+  assert.ok(css.includes('--line:#e3ded9'), 'hairlines are the warm greige');
   // Tokens — section headings 24px, sections 48px apart.
   assert.ok(css.includes('section h2{font-size:24px'), 'section headings are 24px');
   assert.ok(css.includes('.home-section{padding:48px 0}'), 'sections sit 48px apart');

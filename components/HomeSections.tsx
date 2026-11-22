@@ -231,17 +231,21 @@ export function LocalVoicesTeaser({
           const guide = guideFor(p);
           const photo = photoByPlace ? photoByPlace.get(p) ?? null : voicePhoto(p);
           return (
-            <article className="card" key={p}>
-              {photo ? (
-                <SafeImg src={photo} alt={p} label={p} />
-              ) : (
-                <div className="img-fallback" role="img" aria-label={p}>
-                  <span>{p}</span>
+            <article className="card dest-card" key={p}>
+              <div className="dest-photo">
+                {photo ? (
+                  <SafeImg src={photo} alt={p} label={p} />
+                ) : (
+                  <div className="img-fallback" role="img" aria-label={p}>
+                    <span>{p}</span>
+                  </div>
+                )}
+                <div className="dest-overlay">
+                  <span className="dest-name"><Icon name="pin" size={18} /> {p}</span>
                 </div>
-              )}
+              </div>
               <div className="body">
                 <span className="pill">Local voices</span>
-                <h3>{p}</h3>
                 <p className="plan-muted">{bestTimeLine(p)}</p>
                 {guide ? (
                   <p className="plan-muted">A researched local guide is on the destination page — dishes to try and where to go.</p>

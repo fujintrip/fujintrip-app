@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, assignPhotos } from '../lib/data';
+import { GLOBAL_DESTINATIONS, HIDDEN_GEMS, assignPhotos, CITY_PHOTOS } from '../lib/data';
 import { discoveryDestinations } from '../lib/discovery';
 import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
@@ -31,6 +31,7 @@ import { featuredPackages, tripOfTheWeek, type Package } from '../lib/packages';
 import { isSavedDetail, packageSavedKey, savedDetailLine, tripSavedKey, type SavedDetail } from '../lib/savedTrips';
 import { alertIsDrop, evaluatePriceAlert, isPriceAlert, priceAlertLine, PRICE_ALERTS_STORAGE_KEY, type PriceAlert } from '../lib/priceAlerts';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
+import { Icon } from './icons';
 
 // Seed handoff: the /chat page consumes this once on mount so the
 // chat greets with the route ready, then drops it. Direction v3:
@@ -632,6 +633,38 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // on purpose. No photo → the white hero below.
   const weekTrip = tripOfTheWeek();
   const heroPhoto = homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? weekTrip.photo;
+  // The hero photo cycler (Dribbble makeover, Nov 21 2026): the
+  // shot's circular arrow buttons cycle the hero photo — this
+  // week's trip, then two sunset photos from the verified pool
+  // (London's Big Ben at sunset, Santorini's caldera sunset). The
+  // caption names the photo on display, so a cycled photo never
+  // pretends to be the week's trip.
+  const heroPhotoOptions = useMemo(() => {
+    const options: Array<{ url: string; label: string }> = [];
+    if (heroPhoto) options.push({ url: heroPhoto, label: weekTrip.destination });
+    const london = CITY_PHOTOS['London'];
+    if (london) options.push({ url: london, label: 'London' });
+    const santorini = GLOBAL_DESTINATIONS.find((d) => d.name === 'Santorini')?.image;
+    if (santorini) options.push({ url: santorini, label: 'Santorini' });
+    return options.filter((o, i, a) => o.url && a.findIndex((x) => x.url === o.url) === i);
+  }, [heroPhoto, weekTrip.destination]);
+  const [heroIdx, setHeroIdx] = useState(0);
+  const currentHeroPhoto = heroPhotoOptions[Math.min(heroIdx, heroPhotoOptions.length - 1)] ?? { url: heroPhoto ?? '', label: weekTrip.destination };
+  // The hero destination pills (Dribbble makeover, Nov 21 2026):
+  // the shot's frosted-glass pills over the photo — ours name real
+  // destinations and prefill the search widget, like a destination
+  // card does.
+  const heroPillDestinations = useMemo(() => {
+    const names = [weekTrip.destination, 'Kyoto', 'Santorini', 'Bali'];
+    return names.filter((n, i, a) => n && a.indexOf(n) === i);
+  }, [weekTrip.destination]);
+  const pillSearch = (name: string) => {
+    setPrefill({ destination: name, nonce: Date.now() });
+    document.getElementById('search-widget')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>('#search-widget input')?.focus({ preventScroll: true });
+    }, 350);
+  };
   // The reels composer panel — opened from the trip-card strip, the
   // feed, or a booked trip in My Trips. It lives in both variants:
   // on /chat under the app, on the homepage at the top of the page.
@@ -640,6 +673,18 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       <ReelComposer trips={trips} prefillDestination={composerDest} onPosted={() => {}} onClose={() => setComposerOpen(false)} />
     </div>
   );
+  // Trip overview figures (Dribbble makeover, Nov 21 2026): sums and
+  // counts from this device's saved trips only — a trip without a
+  // saved total contributes nothing, never a guess. The barcode is
+  // one segment per saved trip (cap 30), filled when booked — the
+  // shot's segmented progress bar, from real trips. An empty My
+  // Trips shows an all-outline bar.
+  const savedTotals = trips.filter((t) => t.saved && typeof t.saved.total === 'number');
+  const plannedTotal = savedTotals.reduce((sum, t) => sum + (t.saved?.total ?? 0), 0);
+  const bookedCount = trips.filter((t) => t.status === 'Booked with FujinTrip').length;
+  const barcodeSegments = trips.length === 0
+    ? Array.from({ length: 30 }, () => false)
+    : trips.slice(0, 30).map((t) => t.status === 'Booked with FujinTrip');
   // My Trips body (UX direction, Nov 19 2026 — P1-1): the
   // account page's content — trips, free-account box, preferences,
   // emergency contact, embassy number and price watches. It renders
@@ -647,6 +692,55 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // <details> anymore.
   const myTripsBody = (
     <>
+          {/* Trip overview (Dribbble makeover, Nov 21 2026): the
+              shot's Trip Overview screen — a dark plum budget card
+              with the segmented barcode bar, then a 2×2 grid of
+              white overview cards with thin circular icons and
+              large thin numbers. */}
+          <div className="trip-overview">
+            <div className="budget-card">
+              <div className="budget-card-top">
+                <div>
+                  <p className="budget-label">Planned total</p>
+                  <p className="budget-total">${plannedTotal.toLocaleString()}</p>
+                  <p className="budget-sub">
+                    {savedTotals.length === 0
+                      ? 'No saved trip totals yet — save a fare or a trip and it totals here.'
+                      : `${savedTotals.length} saved trip${savedTotals.length === 1 ? '' : 's'} · planning estimates`}
+                  </p>
+                </div>
+                <span className="budget-icon" aria-hidden="true"><Icon name="tag" size={20} /></span>
+              </div>
+              <div className="barcode" role="img" aria-label={`${bookedCount} of ${trips.length} trips booked`}>
+                {barcodeSegments.map((filled, i) => (
+                  <span key={i} className={filled ? 'barcode-seg filled' : 'barcode-seg'} />
+                ))}
+              </div>
+              <p className="budget-foot">{trips.length === 0 ? 'No trips saved yet.' : `${bookedCount} of ${trips.length} trip${trips.length === 1 ? '' : 's'} booked`}</p>
+            </div>
+            <div className="overview-grid">
+              <div className="overview-card">
+                <span className="overview-icon" aria-hidden="true"><Icon name="bookmark" size={18} /></span>
+                <p className="overview-label">Saved trips</p>
+                <p className="overview-num">{trips.length}</p>
+              </div>
+              <div className="overview-card">
+                <span className="overview-icon" aria-hidden="true"><Icon name="tag" size={18} /></span>
+                <p className="overview-label">Price alerts</p>
+                <p className="overview-num">{alerts.length}</p>
+              </div>
+              <div className="overview-card">
+                <span className="overview-icon" aria-hidden="true"><Icon name="clock" size={18} /></span>
+                <p className="overview-label">Price watches</p>
+                <p className="overview-num">{watches.length}</p>
+              </div>
+              <div className="overview-card">
+                <span className="overview-icon" aria-hidden="true"><Icon name="check" size={18} /></span>
+                <p className="overview-label">Booked</p>
+                <p className="overview-num">{bookedCount}</p>
+              </div>
+            </div>
+          </div>
           {/* Free account (Clerk, Nov 14 2026) — sign-in lives in My
               Trips, not in the chat: accounts come AFTER the traveler
               has a plan worth saving, and browsing, the tabs and the
@@ -867,11 +961,18 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           themes; the trust line lives inside the hero now, not as a
           standalone strip. No photo → the white hero. */}
       {variant === 'home' && (
-        <section className={`hero-booking${heroPhoto ? ' hero-photo' : ''}`} style={heroPhoto ? { backgroundImage: `url(${heroPhoto})` } : undefined}>
+        <section className={`hero-booking${heroPhoto ? ' hero-photo' : ''}`} style={heroPhoto ? { backgroundImage: `url(${currentHeroPhoto.url})` } : undefined}>
           <div className="wrap hero-booking-inner">
             <p className="hero-booking-eyebrow">Named for Fujin, Japan’s wind god — ride the wind, pay less.</p>
             <h1>Where to?</h1>
             <p className="hero-booking-sub">One trip, one price, one plan — flights, stay, car and activities included. All-in, no hidden fees.</p>
+            <div className="hero-pills" role="group" aria-label="Top destinations">
+              {heroPillDestinations.map((name) => (
+                <button key={name} type="button" className="hero-pill" onClick={() => pillSearch(name)}>
+                  <Icon name="pin" size={15} /> {name}
+                </button>
+              ))}
+            </div>
             <SearchWidget
               tab={widgetTab}
               onTabChange={changeTab}
@@ -883,7 +984,19 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               Not sure yet? <a href="/chat">Ask Fujin AI →</a>
             </p>
             <p className="hero-trust">All-in prices · No hidden fees · Compare prices from different sources</p>
+            {heroPhoto && heroPhotoOptions.length > 1 && (
+              <div className="hero-arrows">
+                <button type="button" className="hero-arrow" aria-label="Previous hero photo" onClick={() => setHeroIdx((i) => (i - 1 + heroPhotoOptions.length) % heroPhotoOptions.length)}>
+                  <Icon name="arrowLeft" size={20} />
+                </button>
+                <span className="hero-arrows-chevrons" aria-hidden="true">›››</span>
+                <button type="button" className="hero-arrow" aria-label="Next hero photo" onClick={() => setHeroIdx((i) => (i + 1) % heroPhotoOptions.length)}>
+                  <Icon name="arrowRight" size={20} />
+                </button>
+              </div>
+            )}
           </div>
+          {heroPhoto && <span className="hero-photo-label">Photo: {currentHeroPhoto.label}</span>}
         </section>
       )}
       {/* Continue where you left off (UX direction round 2, Nov 21
@@ -944,24 +1057,29 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               const perTraveler = total !== null ? Math.round(total / 2) : null;
               const saved = perTraveler !== null && savedKeys.has(tripSavedKey(e.name, perTraveler));
               return (
-              <article className="card" key={e.key}>
-                <PhotoCarousel photos={e.photos} alt={e.name} />
+              <article className="card dest-card" key={e.key}>
+                <PhotoCarousel photos={e.photos} alt={e.name} overlay={(
+                  <div className="dest-overlay">
+                    <span className="dest-name"><Icon name="pin" size={18} /> {e.name}{e.country ? `, ${e.country}` : ''}</span>
+                    {total !== null && (
+                      <p className="result-price">from ${Math.round(total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
+                    )}
+                  </div>
+                )} />
                 <div className="body">
                   <div className="card-top">
                     <span className="pill">{e.tag}</span>
                     <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} buttonClassName="linklike" />
                   </div>
-                  {/* The price lives below the photo now (audit round,
-                      Nov 17, 2026 — gap 10): white text over a busy
-                      photo wrapped to two lines and read badly. The
-                      name + from-price sit in the white body,
-                      Expedia's destination-card pattern. */}
-                  <h3>{e.name}{e.country ? `, ${e.country}` : ''}</h3>
+                  {/* The name + from-price sit ON the photo now
+                      (Dribbble makeover, Nov 21, 2026): tall portrait
+                      photo, bottom gradient, white text + pin — the
+                      gradient keeps them readable, reversing the
+                      audit-round gap-10 call that moved the price
+                      into the white body. The tier line stays in the
+                      body, under the photo. */}
                   {total !== null ? (
-                    <>
-                      <p className="result-price">from ${Math.round(total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
-                      <p className="plan-muted">Best value · 2 travelers</p>
-                    </>
+                    <p className="plan-muted">Best value · 2 travelers</p>
                   ) : (
                     <p className="plan-muted">No estimate for this one yet</p>
                   )}
@@ -994,24 +1112,31 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               {HIDDEN_GEMS.map((d) => {
               const gemPhoto = homepagePhotos.get(`gem:${d.name}`)?.[0] ?? null;
               return (
-              <article className="card" key={d.name}>
-                {gemPhoto ? (
-                  <SafeImg src={gemPhoto} alt={d.name} label={d.name} />
-                ) : (
-                  <div className="img-fallback" role="img" aria-label={d.name}>
-                    <span>{d.name}</span>
+              <article className="card dest-card" key={d.name}>
+                <div className="dest-photo">
+                  {gemPhoto ? (
+                    <SafeImg src={gemPhoto} alt={d.name} label={d.name} />
+                  ) : (
+                    <div className="img-fallback" role="img" aria-label={d.name}>
+                      <span>{d.name}</span>
+                    </div>
+                  )}
+                  <div className="dest-overlay">
+                    <span className="dest-name"><Icon name="pin" size={18} /> {d.name}, {d.country}</span>
+                    {cardInfo[d.name]?.total !== undefined && cardInfo[d.name]?.total !== null && (
+                      <p className="result-price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()}</p>
+                    )}
                   </div>
-                )}
+                </div>
                 <div className="body">
                   <div className="card-top">
                     <span className="pill">{d.tag}</span>
                     <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} buttonClassName="linklike" />
                   </div>
-                  <h3>{d.name}, {d.country}</h3><p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
+                  <p>{d.blurb}</p><p style={{ fontSize: 13 }}>{d.trend}</p>
                   {cardInfo[d.name] && (
                     <>
                       <p className="plan-muted">{cardInfo[d.name]?.experiences} experience{cardInfo[d.name]?.experiences !== 1 ? 's' : ''} · {cardInfo[d.name]?.hotels} stay · {cardInfo[d.name]?.transports} transports</p>
-                      <p className="price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()} per traveler</p>
                       <p className="plan-muted">Best value · 2 travelers · 3 days</p>
                     </>
                   )}

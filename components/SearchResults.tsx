@@ -248,7 +248,11 @@ function FareCard({
           </div>
           <div className="fare-card-route">
             <span className="fare-card-duration">{offer.duration || '—'}</span>
-            <span className="fare-card-line" aria-hidden="true" />
+            <span className="fare-card-line" aria-hidden="true">
+              <span className="fare-card-plane">
+                <Icon name="plane" size={14} />
+              </span>
+            </span>
             <span className="fare-card-stops">
               {stopsLabel}
               {layoverLabel ? ` · ${layoverLabel}` : ''}

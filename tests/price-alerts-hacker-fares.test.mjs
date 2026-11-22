@@ -33,7 +33,13 @@ const alertArgs = {
   checkedAt: '2026-11-21T15:00:00.000Z',
 };
 
-const validAlert = createPriceAlert(alertArgs);
+const validAlert = {
+  ...createPriceAlert(alertArgs),
+  // The creator stamps the check time with "now" — pin the fixture to
+  // the fixed checkedAt above, or the "last checked" line rolls to
+  // tomorrow after midnight and this test fails (Nov 22, 2026).
+  lastCheckedAt: '2026-11-21T15:00:00.000Z',
+};
 assert.ok(validAlert, 'the fixture alert is created');
 
 test('alert key: one alert per trip — same trip, same key; a different trip is not', () => {

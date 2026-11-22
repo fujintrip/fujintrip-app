@@ -28,10 +28,10 @@ const duffelSrc = readFileSync(join(root, 'lib/duffel.ts'), 'utf8');
 
 test('round 2 P0-1: the hero is a photo with a scrim, one question, one line, AI as a quiet text link', () => {
   assert.ok(css.includes('.hero-photo{background-size:cover;background-position:center;position:relative}'), 'the photo hero is full-bleed');
-  assert.ok(css.includes('.hero-photo::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,14,35,.55)'), 'a scrim keeps the white text readable');
+  assert.ok(css.includes('.hero-photo::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,6,9,.62),rgba(74,63,75,.30) 45%,rgba(6,6,9,.72))}'), 'a plum dusk scrim keeps the white text readable');
   assert.ok(css.includes('.hero-photo .hero-booking-inner{position:relative;z-index:1;padding:72px 24px 64px}'), 'the photo hero has room to breathe');
   assert.ok(fujinAppSrc.includes("className={`hero-booking${heroPhoto ? ' hero-photo' : ''}`}"), 'the hero takes the photo class only when a photo exists');
-  assert.ok(fujinAppSrc.includes('backgroundImage: `url(${heroPhoto})`'), 'the hero photo is this week’s trip’s own lead photo');
+  assert.ok(fujinAppSrc.includes('backgroundImage: `url(${currentHeroPhoto.url})`'), 'the hero photo is this week’s trip’s own lead photo, cyclable to two sunset photos');
   assert.ok(fujinAppSrc.includes('Named for Fujin, Japan’s wind god — ride the wind, pay less.'), 'the eyebrow names the wind god');
   assert.ok(fujinAppSrc.includes('One trip, one price, one plan — flights, stay, car and activities included. All-in, no hidden fees.'), 'one line, one price, one plan');
   assert.ok(fujinAppSrc.includes('Not sure yet? <a href="/chat">Ask Fujin AI →</a>'), 'AI is a quiet text link, not a button');
@@ -46,7 +46,7 @@ test('round 2 P0-2: Plus Jakarta Sans display, one scale — hero 56–72, secti
   assert.ok(layout.includes('Plus_Jakarta_Sans'), 'the display face loads via next/font/google');
   assert.ok(!layout.includes('DM_Sans'), 'DM Sans is dropped');
   assert.ok(css.includes("--font-display:'Plus Jakarta Sans'"), 'the display token is Plus Jakarta Sans');
-  assert.ok(css.includes('.hero-booking-inner h1{color:var(--ink);font-size:clamp(40px,5.5vw,72px);font-weight:800'), 'the hero headline is 56–72px at weight 800');
+  assert.ok(css.includes('.hero-booking-inner h1{color:var(--ink);font-size:clamp(48px,6vw,84px);font-weight:300'), 'the hero headline is 48–84px at light weight 300');
   assert.ok(css.includes('.home-section h2{margin:0 0 6px;font-size:32px;font-weight:800}'), 'section titles are 32px/800');
   assert.ok(css.includes('.pkg-body h3{margin:10px 0 2px;font-size:20px'), 'card titles are 20px');
   assert.ok(css.includes('.card .body h3{font-size:20px'), 'destination card titles are 20px');
@@ -136,8 +136,8 @@ test('round 2 P0-6b: one photo per destination — Tokyo and Spain have their ow
   const data = readFileSync(join(root, 'lib/data.ts'), 'utf8');
   assert.ok(data.includes("Madrid: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Plaza_Mayor_de_Madrid_-_01.jpg/960px-Plaza_Mayor_de_Madrid_-_01.jpg'"), 'Madrid is in the pool (verified Nov 21: HTTP 200, JPEG)');
   assert.ok(data.includes("Tokyo: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c5/Tokyo_Shibuya_Scramble_Crossing_2018-10-09.jpg/960px-Tokyo_Shibuya_Scramble_Crossing_2018-10-09.jpg'"), 'the Shibuya second photo is in the pool (verified Nov 21: HTTP 200, JPEG)');
-  assert.ok(css.includes('.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--brand),#123a7d);color:#fff'), 'a fallback tile is a designed navy gradient, never a blank grey box');
-  assert.ok(css.includes('.pkg-photo-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:linear-gradient(135deg,var(--brand),#123a7d);color:#fff'), 'package fallbacks match');
+  assert.ok(css.includes('.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--brand),var(--terra));color:#fff'), 'a fallback tile is a designed plum-to-terracotta gradient, never a blank grey box');
+  assert.ok(css.includes('.pkg-photo-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:linear-gradient(135deg,var(--brand),var(--terra));color:#fff'), 'package fallbacks match');
 });
 
 test('round 2 P0-6c: per-destination best month — Kyoto and Tokyo bloom in April, Barcelona in May', () => {

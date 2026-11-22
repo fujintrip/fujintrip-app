@@ -456,7 +456,7 @@ export default function CheckoutFlow({ params }: { params: CheckoutParams }) {
           )}
           {formError && <p className="notice" role="alert">{formError}</p>}
           {clientSecret && stripePromise && breakdown ? (
-            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { variables: { colorPrimary: '#00255d' } } }}>
+            <Elements stripe={stripePromise} options={{ clientSecret, appearance: { variables: { colorPrimary: '#4a3f4b' } } }}>
               <PaymentForm
                 total={breakdown.total}
                 currency={breakdown.currency}

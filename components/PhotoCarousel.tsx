@@ -7,8 +7,12 @@
 // A failed photo falls back to the gradient, like SafeImg.
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
-export default function PhotoCarousel({ photos, alt }: { photos: string[]; alt: string }) {
+// The optional overlay renders inside the photo box, over the
+// gradient — the destination card's name + price, in the shot's
+// language (Dribbble makeover, Nov 21 2026).
+export default function PhotoCarousel({ photos, alt, overlay }: { photos: string[]; alt: string; overlay?: ReactNode }) {
   const [idx, setIdx] = useState(0);
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -26,8 +30,11 @@ export default function PhotoCarousel({ photos, alt }: { photos: string[]; alt: 
   }, []);
   if (photos.length === 0 || failed) {
     return (
-      <div className="img-fallback" role="img" aria-label={alt}>
-        <span>{alt}</span>
+      <div style={{ position: 'relative' }}>
+        <div className="img-fallback" role="img" aria-label={alt}>
+          <span>{alt}</span>
+        </div>
+        {overlay}
       </div>
     );
   }
@@ -47,6 +54,7 @@ export default function PhotoCarousel({ photos, alt }: { photos: string[]; alt: 
             image stays in flow at opacity 0; the shimmer overlays
             its box. .photocarousel-media is already position:relative. */}
         <img ref={imgRef} src={src} alt={alt} loading="lazy" style={loaded ? undefined : { opacity: 0 }} onError={() => setFailed(true)} onLoad={() => setLoaded(true)} />
+        {overlay}
         {photos.length > 1 && (
           <span className="photocarousel-count" aria-label={`Photo ${idx + 1} of ${photos.length}`}>
             {idx + 1} / {photos.length}
