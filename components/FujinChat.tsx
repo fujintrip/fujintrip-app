@@ -2362,8 +2362,8 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
             it is gone below 1200px so the chat keeps the whole width
             on a tablet or phone. */}
         {uiState === 'S0' && (
-          <figure className="hero-photo">
-            <SafeImg src={HERO_PHOTO} alt="Yasaka pagoda street at sunset, Kyoto" label="Kyoto" className="hero-photo-img" loading="eager" />
+          <figure className="s0-photo">
+            <SafeImg src={HERO_PHOTO} alt="Yasaka pagoda street at sunset, Kyoto" label="Kyoto" className="s0-photo-img" loading="eager" />
           </figure>
         )}
         {/* Live trip panel (app shell + interface round §5, M1): the

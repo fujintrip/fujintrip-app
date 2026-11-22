@@ -36,25 +36,29 @@ test('contrastRatio: white on black is 21:1', () => {
   assert.ok(Math.abs(contrastRatio('#000000', '#ffffff') - 21) < 0.01);
 });
 
-test('contrast: light theme — small text on accent uses accent-text, not the accent', () => {
-  // The accent itself is display-only: 4.15:1 on white fails 4.5:1.
-  assert.ok(contrastRatio('#c3603e', '#ffffff') < 4.5, 'accent #c3603e must NOT be used for small text');
-  assert.equal(meetsContrast('#c3603e', '#ffffff'), false);
-  // accent-text #9e4a2c is the small-text colour: 6.05:1.
-  assert.ok(meetsContrast('#9e4a2c', '#ffffff'));
-  assert.ok(contrastRatio('#9e4a2c', '#ffffff') > 5.1);
+test('contrast: light theme — the blue accent passes for small text', () => {
+  // The accent itself passes for small text: 5.57:1 on white.
+  assert.ok(meetsContrast('#0066cc', '#ffffff'));
+  assert.ok(contrastRatio('#0066cc', '#ffffff') > 5.5);
+  // accent-text #0052a3 is the small-text colour: 7.68:1.
+  assert.ok(meetsContrast('#0052a3', '#ffffff'));
+  assert.ok(contrastRatio('#0052a3', '#ffffff') > 7.6);
+  // accent-text on its soft background: 6.68:1.
+  assert.ok(meetsContrast('#0052a3', '#e8f0fb'));
   // Light-theme body and muted text pass on white.
-  assert.ok(meetsContrast('#060609', '#ffffff'));
-  assert.ok(meetsContrast('#6b6660', '#ffffff'), 'light muted #6b6660 on white');
+  assert.ok(meetsContrast('#191e3b', '#ffffff'));
+  assert.ok(meetsContrast('#5a6478', '#ffffff'), 'light muted #5a6478 on white');
 });
 
-test('contrast: dark theme — small text on accent uses the light accent-text', () => {
-  // Dark accent-text #f09357 on the dark page background.
-  assert.ok(meetsContrast('#f09357', '#060609'));
-  assert.ok(meetsContrast('#f09357', '#161214'), 'dark accent-text on dark surface');
+test('contrast: dark theme — small text uses the light link blue', () => {
+  // Dark accent-text #8db9f2 on the dark page background.
+  assert.ok(meetsContrast('#8db9f2', '#0f1726'));
+  assert.ok(meetsContrast('#8db9f2', '#0f1726'), 'dark accent-text on dark surface');
+  // Dark link blue on the dark background.
+  assert.ok(meetsContrast('#7db8ff', '#0f1726'), 'dark link #7db8ff on dark page');
   // Dark-theme body and muted text pass on the dark background.
-  assert.ok(meetsContrast('#f5f2ee', '#060609'));
-  assert.ok(meetsContrast('#afaaa5', '#060609'), 'dark muted #afaaa5 on dark page');
-  // A filled dark-theme accent button: near-black text on the accent.
-  assert.ok(meetsContrast('#060609', '#f09357'));
+  assert.ok(meetsContrast('#eef2f8', '#0f1726'));
+  assert.ok(meetsContrast('#9aa7bd', '#0f1726'), 'dark muted #9aa7bd on dark page');
+  // A filled dark-theme primary button: white text on the brand blue.
+  assert.ok(meetsContrast('#ffffff', '#0066cc'));
 });

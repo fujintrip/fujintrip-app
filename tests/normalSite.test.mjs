@@ -825,16 +825,15 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(page.includes('initialTab={homeTabIdFromQuery'), 'a ?tab= link still switches the widget tab');
   assert.ok(!app.includes('SHELF_COPY'), 'no shelf copy remains');
   assert.ok(!app.includes('shelfEntries'), 'no shelf entries remain');
-  // 2 — distinct section grammars: portrait destination cards with
-  // the name + price overlaid on the photo (Dribbble makeover, Nov
-  // 21, 2026 — reversing the audit-round gap-10 call that moved the
-  // price into the white body; the bottom gradient keeps the white
-  // text readable).
+  // 2 — distinct section grammars: destination cards with the
+  // name + price in the white body below the photo (Clean &
+  // trusted, Nov 22, 2026 — re-applying the audit-round gap-10
+  // call that the Dribbble makeover had reversed; white text on
+  // photos is the lowest-contrast element on the page).
   assert.ok(!app.includes('dest-card--photo'), 'destination cards no longer use the overlay variant');
-  assert.ok(app.includes('dest-overlay'), 'the name + from-price overlay the photo on the gradient');
-  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits on the photo in the frosted pill');
-  assert.ok(css.includes('.dest-overlay'), 'the overlay style exists');
-  assert.ok(css.includes('.dest-overlay .result-price{flex:0 0 auto;background:rgba(252,252,252,.16)'), 'the overlay price is a frosted pill');
+  assert.ok(!app.includes('dest-overlay'), 'no name + price overlay on the photo');
+  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the white body');
+  assert.ok(!css.includes('.dest-overlay'), 'no overlay style exists');
   assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
   assert.ok(!existsSync(new URL('../components/DealsSection.tsx', import.meta.url)), 'the deals component is deleted with the band');
   assert.ok(!css.includes('.deals-grid'), 'no deals-grid style remains');
@@ -908,12 +907,12 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
   assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
   assert.ok(results.includes('onClearSearch: () => void'), 'the clear callback is a declared prop');
-  // Tokens — Dribbble radius scale: cards 24px, buttons pill,
-  // inputs 12px; no 16px radius remains.
+  // Tokens — Clean & trusted radius scale: cards 12px, buttons
+  // pill, inputs 8px; no 16px radius remains.
   assert.ok(!css.includes('border-radius:16px'), 'no 16px radius remains in the stylesheet');
-  assert.ok(css.includes('--brand:#4a3f4b'), 'plum is the primary-action color');
-  assert.ok(css.includes('--ink:#060609'), 'ink is the near-black');
-  assert.ok(css.includes('--line:#e3ded9'), 'hairlines are the warm greige');
+  assert.ok(css.includes('--brand:#0066cc'), 'the blue is the primary-action color');
+  assert.ok(css.includes('--ink:#191e3b'), 'ink is the dark navy text');
+  assert.ok(css.includes('--line:#dfe0e4'), 'hairlines are the cool grey');
   // Tokens — section headings 24px, sections 48px apart.
   assert.ok(css.includes('section h2{font-size:24px'), 'section headings are 24px');
   assert.ok(css.includes('.home-section{padding:48px 0}'), 'sections sit 48px apart');
@@ -979,7 +978,7 @@ test('audit round Nov 17: one primary pill + one text link per card', () => {
   assert.ok(css.includes('.pkg-body h3{margin:10px 0 2px;font-size:20px;font-weight:600}'), 'package titles are 20px/600');
   assert.ok(css.includes('.card .body p{font-size:16px'), 'card body text is 16px');
   assert.ok(css.includes('.pkg-price{font-family:var(--font-display);font-size:24px;font-weight:700'), 'package prices are the 24px price-card');
-  // Pills are auto-width, never a full-width peach bar: a
+  // Pills are auto-width, never a full-width bar: a
   // flex-column body stretches its children, so the pill pins
   // itself to the start.
   assert.ok(css.includes('.card .body .pill,.pkg-body .pill{align-self:flex-start}'), 'tag pills are auto-width in flex-column bodies');

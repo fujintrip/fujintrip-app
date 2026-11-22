@@ -258,14 +258,13 @@ test('P2-4: media boxes reserve their space while loading, so cards never flash 
 // --- P2-5: accessibility and dark-mode pass ---------------------------
 
 test('P2-5: primary actions and pills meet 4.5:1 contrast in both themes', () => {
-  // Dark mode: white text on the dark brand plum (the plum system
-  // keeps its light-theme text on brand backgrounds — --on-ink is
-  // near-black in dark mode and fails at 3.15:1).
-  assert.ok(contrastRatio('#ffffff', '#6b5b6d') >= 4.5, `white on dark brand #6b5b6d must be ≥ 4.5:1, got ${contrastRatio('#ffffff', '#6b5b6d').toFixed(2)}`);
-  assert.ok(contrastRatio('#060609', '#6b5b6d') < 4.5, 'near-black on dark brand fails — that is why the override exists');
-  // Dark mode: pills read in the dusty link blue, not the brand plum.
-  assert.ok(contrastRatio('#93a9c6', '#161214') >= 4.5, `dark pill link on card must be ≥ 4.5:1, got ${contrastRatio('#93a9c6', '#161214').toFixed(2)}`);
-  assert.ok(contrastRatio('#6b5b6d', '#161214') < 4.5, 'dark brand plum as pill text fails — that is why pills use the link blue');
+  // The primary blue #0066cc is the same fill in both themes —
+  // white on it is 5.57:1, so primary buttons keep white text in
+  // dark mode too (the dark override exists to pin that).
+  assert.ok(contrastRatio('#ffffff', '#0066cc') >= 4.5, `white on brand #0066cc must be ≥ 4.5:1, got ${contrastRatio('#ffffff', '#0066cc').toFixed(2)}`);
+  // Dark mode: pills read in the light link blue, not the brand blue.
+  assert.ok(contrastRatio('#7db8ff', '#0f1726') >= 4.5, `dark pill link on card must be ≥ 4.5:1, got ${contrastRatio('#7db8ff', '#0f1726').toFixed(2)}`);
+  assert.ok(contrastRatio('#0066cc', '#0f1726') < 4.5, 'brand blue as pill text fails in dark mode — that is why pills use the link blue');
   // Light mode: the success green was darkened from #0c8a4a (4.42:1)
   // to #0b7f45 so success text passes on white and on its soft bg.
   assert.ok(contrastRatio('#0b7f45', '#ffffff') >= 4.5, `light success on white must be ≥ 4.5:1, got ${contrastRatio('#0b7f45', '#ffffff').toFixed(2)}`);
@@ -278,10 +277,10 @@ test('P2-5: the CSS carries the fixes — a.primary styling, dark overrides, foc
   assert.ok(css.includes('--success:#0b7f45'), 'light success token is the darkened #0b7f45');
   assert.ok(css.includes('button.primary,a.primary{'), '<a className="primary"> links get the primary button styling');
   assert.ok(css.includes('[data-theme="dark"] button.primary,[data-theme="dark"] a.primary,[data-theme="dark"] .hero-cta a{color:#fff}'), 'dark-mode primary actions use white text');
-  assert.ok(css.includes('[data-theme="dark"] .pill{color:var(--link)}'), 'dark-mode pills use the dusty link blue');
+  assert.ok(css.includes('[data-theme="dark"] .pill{color:var(--link)}'), 'dark-mode pills use the link blue');
   assert.ok(css.includes('a:focus-visible'), 'links get a visible focus ring');
   assert.ok(css.includes('textarea:focus-visible'), 'textareas get a visible focus ring');
-  assert.ok(css.includes('.sw-bar .sw-field:focus-within{background:rgba(252,252,252,.08);border-radius:var(--r-sm);outline:2px solid var(--peach);outline-offset:2px}'), 'focused search fields get a peach outline on the plum bar — the background change alone is invisible in dark mode');
+  assert.ok(css.includes('.sw-bar .sw-field:focus-within{background:var(--accent-soft);border-radius:var(--r-sm);outline:2px solid var(--brand);outline-offset:2px}'), 'focused search fields get a blue outline on the white bar');
   assert.ok(css.includes('.pkg-preview{'), 'the Trip-of-the-week preview list is styled');
   assert.ok(css.includes('.reel-trip-price{'), 'the reel trip-price line is styled');
 });

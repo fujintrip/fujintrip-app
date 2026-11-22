@@ -249,16 +249,16 @@ test('one-way form: the return field is hidden, not disabled-and-visible', () =>
   assert.ok(!/<(?:input|select)[^>]*\bdisabled\b/.test(src), 'no input or select in the widget is disabled');
 });
 
-test('modern form: Lucide icons inside the fields, a plum search button, 44px targets', () => {
+test('modern form: Lucide icons inside the fields, a blue search button, 44px targets', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
   const widget = readFileSync(new URL('../components/SearchWidget.tsx', import.meta.url), 'utf8');
   assert.ok(widget.includes("{tab === 'flights' && <TripTypeControl value={tripType} onChange={switchTripType} />}"), 'the trip-type control sits above the pill bar');
   assert.ok(css.includes('.sw-trip-type button{min-height:44px') || css.includes('min-height:44px;padding:0 16px'), 'trip-type segments are 44px targets');
-  assert.ok(css.includes('.sw-trip-type button.selected{background:var(--brand)'), 'the selected segment is filled in the brand plum');
+  assert.ok(css.includes('.sw-trip-type button.selected{background:var(--brand)'), 'the selected segment is filled in the brand blue');
   assert.ok(css.includes('.sw-field-icon{position:absolute'), 'field icons sit inside the control');
   assert.ok(css.includes('.sw-field-control input,.sw-field-control select{padding-left:38px}'), 'text clears the field icon');
   assert.ok(css.includes('button.primary.sw-search{'), 'the search button names the full selector chain');
-  assert.ok(css.includes('button.primary.sw-search{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand)'), 'the search button is the brand plum');
+  assert.ok(css.includes('button.primary.sw-search{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand)'), 'the search button is the brand blue');
   assert.ok(css.includes('min-height:56px'), 'the search button is large');
   assert.ok(css.includes('transition:transform 200ms ease,box-shadow 200ms ease'), 'the button micro-interaction is 150–300ms, transform only');
   assert.ok(css.includes('.flight-leg{border:1px solid var(--line)'), 'each multi-city leg is a card');

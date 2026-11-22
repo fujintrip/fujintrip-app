@@ -65,20 +65,17 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
-test('homepage: photo hero + search widget with 7 tabs, destinations, hero trust line, exactly one Plan with AI pill, no results before a search (UX direction round 2, Nov 21 2026 — P0-1/P0-4)', async () => {
+test('homepage: white hero + search widget with 7 tabs, destinations, hero trust line, exactly one Plan with AI pill, no results before a search (Clean & trusted, Nov 22 2026)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // Photographic hero (UX direction round 2, Nov 21 2026 — P0-1):
-  // this week's trip photo full-bleed behind the one question —
-  // no rotator, no dots. This week the trip is Thailand, so the
-  // photo is Wat Arun from the verified pool.
+  // White hero (Clean & trusted, Nov 22 2026): the search is the
+  // hero — no photo, no scrim, no rotator, no dots.
   assert.ok(html.includes('Where to?'), 'hero asks Where to?');
   assert.ok(!html.includes('hero-rotator'), 'no hero rotator');
   assert.ok(!html.includes('hero-dots'), 'no hero dot indicators');
-  assert.ok(html.includes('hero-photo'), 'the hero carries the photo class');
-  assert.ok(html.includes('background-image:url('), 'the hero photo is a background image');
-  assert.ok(html.includes('Templo_Wat_Arun'), 'the hero photo is this week’s trip (Thailand, Wat Arun)');
+  assert.ok(!html.includes('hero-photo'), 'the hero carries no photo class');
+  assert.ok(!html.includes('background-image:url('), 'no hero background image');
   assert.ok(html.includes('Named for Fujin'), 'the hero eyebrow renders');
   assert.ok(html.includes('One trip, one price, one plan'), 'the hero sub renders');
   // The search widget: 7 category tabs switch the SEARCH FORM.
@@ -138,16 +135,16 @@ test('homepage: photo hero + search widget with 7 tabs, destinations, hero trust
   assert.ok(html.includes('My Trips'), 'My Trips stays on the homepage');
 });
 
-test('homepage hero is a photo: this week’s trip behind the search, headline + sub + widget render (UX direction round 2, Nov 21 2026 — P0-1)', async () => {
+test('homepage hero is white: search is the hero, headline + sub + widget render (Clean & trusted, Nov 22 2026)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The hero is this week's trip photo with the search sitting on
-  // it — no rotation machinery in the HTML, and the scrim keeps the
-  // white text readable.
+  // The hero is the white canvas with the search on it — no photo,
+  // no scrim, no pills, no cycler.
   assert.ok(html.includes('hero-booking'), 'hero section renders');
-  assert.ok(html.includes('hero-photo'), 'the hero carries the photo class');
-  assert.ok(html.includes('background-image:url('), 'the hero photo is a background image');
-  assert.ok(html.includes('Templo_Wat_Arun'), 'the hero photo is this week’s trip (Thailand, Wat Arun)');
+  assert.ok(!html.includes('hero-photo'), 'the hero carries no photo class');
+  assert.ok(!html.includes('background-image:url('), 'no hero background image');
+  assert.ok(!html.includes('hero-pill'), 'no destination pills in the hero');
+  assert.ok(!html.includes('hero-arrow'), 'no photo controls in the hero');
   assert.ok(html.includes('Where to?'), 'hero headline renders');
   assert.ok(html.includes('One trip, one price, one plan'), 'hero sub renders');
   assert.ok(html.includes('Not sure yet?'), 'the quiet AI text link renders');
@@ -1179,10 +1176,10 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   assert.ok(html.includes('Tell me where. I’ll plan the rest.'), 'the S0 greeting is a short headline');
   assert.ok(!html.includes('I’ll gather flights, hotels, cars'), 'the old paragraph greeting is gone');
   assert.ok(!html.includes('Gathers everything into one plan'), 'the S0 tagline is gone from the first screen');
-  // One hero photo beside the chat (first-screen rebuild) — the
+  // One photo beside the chat (first-screen rebuild) — the
   // Kyoto torii gates, the template photo already in lib/data.ts.
-  assert.ok(html.includes('hero-photo'), 'the S0 hero photo renders');
-  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the hero photo is Kyoto');
+  assert.ok(html.includes('s0-photo'), 'the S0 photo renders');
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the S0 photo is Kyoto');
   // Chips fill, don't fire (item 5): the starter chips carry their full
   // prompt as data-fill, and the input is what receives it.
   assert.ok(html.includes('data-fill="Surprise me"'), 'Surprise me chip carries data-fill');
@@ -1276,13 +1273,12 @@ test('popular destinations (direction v3): 6 cards, no expander, per-traveler pr
   assert.ok(!popularHtml.includes('Japan'), 'Japan is not repeated in Popular');
   // A card carries the per-traveler Best value price line, never a
   // counts line or a guessed rate. Portugal is $2,900 for 2.
-  // (Dribbble makeover, Nov 21, 2026: the price sits ON the photo
-  // in the frosted pill — reversing the audit-round gap-10 call
-  // that moved it into the white body; the bottom gradient keeps
-  // the white text readable. "from $1,450" and "per traveler" sit
-  // in the one overlay line.)
+  // (Clean & trusted, Nov 22, 2026: the price sits in the white
+  // body below the photo — re-applying the audit-round gap-10 call
+  // that the Dribbble makeover had reversed. "from $1,450" and "per
+  // traveler" sit in the one price line in the body.)
   assert.ok(html.includes('from $1,450'), 'Portugal card carries the per-traveler price');
-  assert.ok(html.includes('class="result-price"'), 'the price is the price line on the photo overlay');
+  assert.ok(html.includes('class="result-price"'), 'the price is the price line in the card body');
   assert.ok(html.includes('Best value · 2 travelers'), 'the price line names the tier');
   assert.ok(!html.includes('Best value · 2 travelers · planning estimate'), 'no per-card planning-estimate label — the widget line covers the page');
   // The card action opens the trip — it never seeds the chat, and

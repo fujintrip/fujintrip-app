@@ -1,24 +1,24 @@
-/* FujinTrip — Dribbble makeover (Nov 21, 2026): the "Travel App —
-   Explore the World" design language, translated to the desktop web
-   app. Warm dusk palette: near-black #060609, dark plum-brown
-   #4A3F4B as the primary dark, burnt terracotta #C3603E and peach
-   #F09357 as warm accents, dusty slate blue #4F6C91 secondary, warm
-   greige #AFAAA5 neutrals, off-white #FCFCFC surfaces. Type: Plus
-   Jakarta Sans display, Inter body — self-hosted via
-   next/font/google, system stack fallback. Prices use the display
-   face with tabular-nums. Cards are 24px, pills and circular buttons
-   stay 999px/50%, hairline borders, soft shadows only — depth from
-   the dark backdrop, photo gradients and frosted glass, never hard
-   drop shadows. */
-:root{--ink:#060609;--muted:#6b6660;--line:#e3ded9;--line-soft:#efece8;--surface:#f7f4f1;--brand:#4a3f4b;--brand-hover:#3b323c;--brand-active:#2e272e;--link:#4f6c91;--accent:#c3603e;--accent-soft:#fbefe8;--card:#fcfcfc;--accent-text:#9e4a2c;--accent-ink:#7e3b22;--success:#0b7f45;--success-soft:#e9f5ee;--danger:#c81e34;--danger-soft:#fdecea;--font-display:'Plus Jakarta Sans';--font-body:'Inter';--on-ink:#fcfcfc;--on-ink-muted:#d8d2cc;--glass-bg:rgba(252,252,252,.92);--sticky-bg:rgba(252,252,252,.96);--warn-bg:#fff7e8;--warn-line:#ead9a8;--warn-ink:#5c4a12;--plum:#4a3f4b;--night:#060609;--terra:#c3603e;--peach:#f09357;--dusty:#4f6c91;--dusty-light:#7389a7;--greige:#afaaa5;--offwhite:#fcfcfc}
-/* Dribbble radius + shadow scale (Nov 21, 2026 makeover): one scale
-   for the whole site — 12px small boxes and fields, 16px medium
-   panels, 24px cards, 999px pills, 50% circles. Resting shadows
-   are barely there (0 1px 2px rgba(6,6,9,.05)); hover lifts to
-   0 10px 28px. Pills (buttons, chips, tabs) stay 999px — FujinTrip's
-   own shape. The container is 1200px with 24px gutters so wide
-   screens breathe. */
-:root{--r-sm:12px;--r-md:16px;--r-lg:24px;--gap:24px;--sh-card:0 1px 2px rgba(6,6,9,.05);--sh-lift:0 10px 28px rgba(6,6,9,.10);--wrap-max:1200px}
+/* FujinTrip — Clean & trusted (Nov 22, 2026): the Expedia /
+   Booking.com design language, design language only — never their
+   text, photos, logo or brand. A white marketplace canvas: white
+   #ffffff surfaces, dark navy ink #191e3b, one trustworthy blue
+   #0066cc as the primary (hover #0052a3, active #00438a), pale blue
+   #e8f0fb for soft accents, semantic green/red. Type: Plus Jakarta
+   Sans display, Inter body — self-hosted via next/font/google,
+   system stack fallback. Prices use the display face with
+   tabular-nums. Cards are 12px, inputs 8px, buttons pill; hairline
+   borders, navy-tinted shadows only — depth from whitespace and
+   one blue, never decoration. This replaces the Nov 21 Dribbble
+   dark-plum makeover (superseded by the user's choice, Nov 22). */
+:root{--ink:#191e3b;--muted:#5a6478;--line:#dfe0e4;--line-soft:#eceef1;--surface:#f5f7fa;--brand:#0066cc;--brand-hover:#0052a3;--brand-active:#00438a;--link:#0066cc;--accent:#0066cc;--accent-soft:#e8f0fb;--card:#ffffff;--accent-text:#0052a3;--accent-ink:#003d7a;--success:#0b7f45;--success-soft:#e9f5ee;--danger:#c81e34;--danger-soft:#fdecea;--font-display:'Plus Jakarta Sans';--font-body:'Inter';--on-ink:#ffffff;--on-ink-muted:#cfe0f5;--sticky-bg:#ffffff;--warn-bg:#fff8eb;--warn-line:#e8c87a;--warn-ink:#7a5a12}
+/* Clean radius scale (Nov 22, 2026): one scale for the whole site
+   — 8px inputs and small boxes, 12px cards and panels, 999px
+   pills, 50% circles. Resting shadows are barely there
+   (0 1px 2px rgba(13,16,35,.05)); hover lifts to 0 10px 28px.
+   Pills (buttons, chips, tabs) stay 999px — FujinTrip's own shape.
+   The container is 1200px with 24px gutters so wide screens
+   breathe. */
+:root{--r-sm:8px;--r-md:12px;--r-lg:12px;--gap:24px;--sh-card:0 1px 2px rgba(13,16,35,.05);--sh-lift:0 10px 28px rgba(13,16,35,.10);--wrap-max:1200px}
 /* Dark mode (interface round §6): tokens only — every component reads
    the tokens above, so this one block flips the whole page. Light is
    the default; a stored choice beats the OS preference (the pre-paint
@@ -26,31 +26,28 @@
    flips with it (--on-ink), so a "selected" pill stays legible in
    both themes. Small text on accent stays ≥ 4.5:1 in both themes —
    see tests/interface.test.mjs. */
-[data-theme="dark"]{--ink:#f5f2ee;--muted:#afaaa5;--line:#2e2a2d;--line-soft:#211e20;--surface:#171417;--brand:#6b5b6d;--brand-hover:#7d6e7f;--brand-active:#5a4c5c;--link:#93a9c6;--accent:#f09357;--accent-soft:#2a1d18;--card:#161214;--accent-text:#f09357;--accent-ink:#f5a76e;--success:#4ade80;--success-soft:#12291a;--danger:#f87171;--danger-soft:#2a1210;--on-ink:#060609;--on-ink-muted:#525252;--glass-bg:rgba(22,18,20,.92);--sticky-bg:rgba(22,18,20,.96);--warn-bg:#2a1a0e;--warn-line:#5c3a1a;--warn-ink:#fdba74;color-scheme:dark}
-[data-theme="dark"] body{background:#060609}
-[data-theme="dark"] .skeleton{background:linear-gradient(90deg,#211e20 25%,#2e2a2d 50%,#211e20 75%)}
-[data-theme="dark"] .img-fallback,[data-theme="dark"] .reel-media-fallback{background:linear-gradient(135deg,#211e20,#2e2a2d)}
+[data-theme="dark"]{--ink:#eef2f8;--muted:#9aa7bd;--line:#26324a;--line-soft:#1b2536;--surface:#121a2b;--brand:#0066cc;--brand-hover:#0052a3;--brand-active:#00438a;--link:#7db8ff;--accent:#4d9fff;--accent-soft:#16283f;--card:#0f1726;--accent-text:#8db9f2;--accent-ink:#a8ccff;--success:#4ade80;--success-soft:#12291a;--danger:#f87171;--danger-soft:#2a1210;--on-ink:#ffffff;--on-ink-muted:#cfe0f5;--sticky-bg:#0f1726;--warn-bg:#2a1f0e;--warn-line:#5c3a1a;--warn-ink:#fdba74;color-scheme:dark}
+[data-theme="dark"] body{background:#0f1726}
+[data-theme="dark"] .skeleton{background:linear-gradient(90deg,#1b2536 25%,#26324a 50%,#1b2536 75%)}
+[data-theme="dark"] .img-fallback,[data-theme="dark"] .reel-media-fallback{background:linear-gradient(135deg,#1b2536,#26324a)}
 /* Accessibility + dark-mode pass (UX direction, Nov 19 2026 —
-   P2-5; plum tokens, Nov 21 2026 makeover): the plum system keeps
-   its light-theme text color on brand backgrounds in dark mode —
-   --on-ink is near-black there (#060609 on #6b5b6d is 3.15:1, below
-   4.5:1), while white on the same plum is 6.28:1. The dark brand
-   plum itself (#6b5b6d vs the light #4a3f4b) is deliberate: the
-   light plum would be nearly invisible on a dark card. Pills in
-   dark mode read in the dusty link blue (#93a9c6 on #161214 is
-   7.72:1) instead of the brand plum (2.96:1). */
+   P2-5; blue tokens, Nov 22 2026 clean restart): the primary blue
+   #0066cc is the same fill in both themes — white on it is 5.57:1,
+   so primary buttons keep white text in dark mode too. Links and
+   small blue text in dark mode read in the light link blue
+   (#7db8ff on #0f1726 is 8.69:1) instead of the brand blue (2.2:1). */
 [data-theme="dark"] button.primary,[data-theme="dark"] a.primary,[data-theme="dark"] .hero-cta a{color:#fff}
 [data-theme="dark"] .pill{color:var(--link)}
-[data-theme="dark"] .leaflet-container{background:#060609}
-[data-theme="dark"] .leaflet-bar a{background:#161214;color:#f5f2ee;border-color:#2e2a2d}
-[data-theme="dark"] .leaflet-control-attribution{background:rgba(22,18,20,.8);color:#afaaa5}
-[data-theme="dark"] .leaflet-control-attribution a{color:#afaaa5}
-   /* Accent split by use: --accent (#c3603e) is display-only (logo dot, big
-      totals) — white on it is 4.15:1 and fails AA for small text. Small
-      text and filled tags use --accent-text (#9e4a2c): white on it is
-      6.05:1, and #9e4a2c on --accent-soft is 5.36:1. --accent-ink (#7e3b22)
-      is 8.28:1 on white (AAA). Retired: --faint #a1a1a1 (2.58:1, unused)
-      — never text. */
+[data-theme="dark"] .leaflet-container{background:#0f1726}
+[data-theme="dark"] .leaflet-bar a{background:#0f1726;color:#eef2f8;border-color:#26324a}
+[data-theme="dark"] .leaflet-control-attribution{background:rgba(15,23,38,.8);color:#9aa7bd}
+[data-theme="dark"] .leaflet-control-attribution a{color:#9aa7bd}
+   /* Accent split by use: --accent (#0066cc) is display-only
+      (logo dot, big totals) — white on it is 5.57:1 and passes AA
+      for small text too. --accent-text (#0052a3) is the small-text
+      blue: white on it is 7.68:1, and #0052a3 on --accent-soft is
+      6.68:1. --accent-ink (#003d7a) is 10.78:1 on white (AAA).
+      Retired: --faint #a1a1a1 (2.58:1, unused) — never text. */
 *{box-sizing:border-box}
 body{margin:0;background:var(--card);color:var(--ink);font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.6;transition:background-color var(--dur) var(--ease),color var(--dur) var(--ease)}
 h1,h2,h3{font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:700;line-height:1.15;margin:0;letter-spacing:-.02em}
@@ -83,24 +80,25 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
 /* The chat panel drops the bordered card — the chatmap itself is the
    frame (chat panel + map). */
 .chat-panel{padding:0;border:0;background:transparent;box-shadow:none;margin-bottom:24px}
-.fujin-portrait{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 2px 10px rgba(6,6,9,.15);margin:0 auto 18px;display:block}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:28px;margin-bottom:40px;box-shadow:0 2px 16px rgba(6,6,9,.04)}
+.fujin-portrait{width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid #fff;box-shadow:0 2px 10px rgba(13,16,35,.15);margin:0 auto 18px;display:block}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:28px;margin-bottom:40px;box-shadow:0 2px 16px rgba(13,16,35,.04)}
 .chat{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px;background:var(--card);min-height:120px;margin:12px 0}
 .msg{margin:10px 0;font-size:15px}
 .msg.user{text-align:right}
-.msg .bubble{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(6,6,9,.04)}
+.msg .bubble{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:11px 15px;text-align:left;max-width:88%;box-shadow:0 1px 3px rgba(13,16,35,.04)}
 /* S0 greeting headline (interface round §5): before the traveler has
    typed, the greeting is not a bubble — it is the headline, bare text
    in the display face, like Layla's hero line. Once the traveler
    replies it renders as a normal bubble again. */
 .msg .bubble.greeting{background:transparent;border:none;box-shadow:none;padding:0;max-width:100%;font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.02em}
 /* First screen (Nov 13): the S0 greeting is a short headline at
-   Layla scale — two lines, display face, much larger than body
-   text — not a paragraph. And on a wide screen the S0 chat column
-   and the messages box drop their card frames, so the headline sits
-   on the bare page and the input card below is the only box. On a
-   phone the column stays a card (bottom sheet). */
-.chatmap-s0 .msg .bubble.greeting{font-size:clamp(40px,4.6vw,60px);line-height:1.08}
+   a restrained scale — two lines, display face, larger than body
+   text but never a billboard — not a paragraph. And on a wide
+   screen the S0 chat column and the messages box drop their card
+   frames, so the headline sits on the bare page and the input card
+   below is the only box. On a phone the column stays a card
+   (bottom sheet). */
+.chatmap-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px);line-height:1.15;font-weight:700}
 @media (min-width:901px){
   .chatmap-s0 .chatcol{border:0;background:transparent;box-shadow:none}
   .chatmap-s0 .chat{border:0;background:transparent;box-shadow:none;padding:16px 0}
@@ -123,13 +121,13 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
    map scale on hover. */
 :root{--ease:cubic-bezier(.25,.1,.25,1);--dur:200ms}
 button{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),background-color var(--dur) var(--ease),border-color var(--dur) var(--ease),opacity var(--dur) var(--ease)}
-button.primary:hover,a.primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(6,6,9,.18)}
+button.primary:hover,a.primary:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(13,16,35,.18)}
 button.primary:active,a.primary:active{transform:translateY(1px);box-shadow:none}
 button.ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
 button.ghost:active{transform:translateY(1px)}
 button:disabled{opacity:.4;cursor:not-allowed}
 .card{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-.card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(6,6,9,.10)}
+.card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(13,16,35,.10)}
 .card img{transition:transform 300ms var(--ease)}
 .card:hover img{transform:scale(1.02)}
 .compare .box{transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease),transform var(--dur) var(--ease)}
@@ -144,14 +142,14 @@ button:disabled{opacity:.4;cursor:not-allowed}
 /* Typing indicator dots (design #2): three dots bounce in sequence while
    Fujin AI works. */
 .typing-dots{display:inline-flex;gap:4px;align-items:center;padding:4px 0}
-.typing-dots span{width:7px;height:7px;border-radius:50%;background:#afaaa5;animation:dot-bounce 1.2s infinite}
+.typing-dots span{width:7px;height:7px;border-radius:50%;background:#9aa7bd;animation:dot-bounce 1.2s infinite}
 .typing-dots span:nth-child(2){animation-delay:.15s}
 .typing-dots span:nth-child(3){animation-delay:.3s}
 @keyframes dot-bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
 /* Skeleton shimmer (design #9): warm gray pulse shaped like the content
    it replaces — never a full-page spinner. */
 @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
-.skeleton{background:linear-gradient(90deg,#f3efeb 25%,#eae5e0 50%,#f3efeb 75%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
+.skeleton{background:linear-gradient(90deg,#eef1f5 25%,#e2e8f0 50%,#eef1f5 75%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
 /* Price-tag entrance (interface round M5): a tag scales from 0.9 and
    fades in over 200ms, staggered 60ms per tag (inline
    animation-delay, max 10 tags) — only when the map first mounts.
@@ -188,7 +186,7 @@ button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
 .grid>.card{grid-column:span 4}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;display:flex;flex-direction:column;box-shadow:none}
-.card:hover{box-shadow:0 1px 2px rgba(6,6,9,.04),0 8px 24px rgba(6,6,9,.16);transform:translateY(-1px)}
+.card:hover{box-shadow:0 1px 2px rgba(13,16,35,.04),0 8px 24px rgba(13,16,35,.16);transform:translateY(-1px)}
 .card img{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block}
 .card .body{padding:20px;flex:1;display:flex;flex-direction:column}
 .card .body .ghost{margin-top:auto;align-self:flex-start}
@@ -201,15 +199,15 @@ button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink
 .details-heading{font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-weight:700;font-size:18px;line-height:1.15;letter-spacing:-.02em}
 /* Graceful image fallback: soft gray with the destination name instead
    of a broken-image icon. */
-.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--brand),var(--terra));color:#fff;font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;text-align:center;padding:16px}
+.img-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#e8eef5,#d3deeb);color:var(--ink);font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;text-align:center;padding:16px}
 .card .img-fallback{aspect-ratio:4/3;height:auto;width:100%}
-.img-fallback.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(6,6,9,.15);margin:0 auto 18px;font-size:26px}
+.img-fallback.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(13,16,35,.15);margin:0 auto 18px;font-size:26px}
 /* Loading state for images (design #9): a warm shimmer tile with the
    destination name, same size as the photo that will replace it, so
    nothing jumps when the image arrives (CLS < 0.1). */
 .img-loading{display:flex;align-items:center;justify-content:center;color:var(--ink);font-size:22px;font-weight:700;text-align:center;padding:16px}
 .card .img-loading{aspect-ratio:4/3;height:auto;width:100%}
-.img-loading.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(6,6,9,.15);margin:0 auto 18px;font-size:26px}
+.img-loading.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(13,16,35,.15);margin:0 auto 18px;font-size:26px}
 /* Map skeleton (design #9): the shape of the map while the Leaflet chunk
    loads — a shimmer block with a faint route line, not a blank area. */
 .map-skeleton{height:100%;min-height:320px;display:flex;flex-direction:column;gap:12px}
@@ -235,7 +233,7 @@ section .sub{color:var(--muted);margin:0 0 20px}
 .compare .box.tier:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .tier-check{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
 .tier-badge{display:inline-block;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
-.tier-price{font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:26px;margin:8px 0;font-weight:600;font-variant-numeric:tabular-nums}
+.tier-price{font-family:var(--font-body,'Inter'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:26px;margin:8px 0;font-weight:700;font-variant-numeric:tabular-nums}
 /* Plan card on the tokens (design §2.2): the plan markup bypassed the
    design system with dozens of inline font sizes, hex colors and
    margins. The repeated patterns now live here as classes — a value
@@ -259,7 +257,7 @@ footer{border-top:1px solid var(--line);padding:48px 0 32px;color:var(--muted);f
 .skip-link:focus{left:0}
 .hero-cta{margin-top:18px}
 .hero-cta a{display:inline-block;background:var(--brand);color:var(--on-ink);border-radius:999px;padding:12px 22px;font-size:15px;font-weight:600;text-decoration:none;transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-.hero-cta a:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(6,6,9,.18)}
+.hero-cta a:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(13,16,35,.18)}
 @media(max-width:640px){.compare{grid-template-columns:1fr}.panel{padding:18px}.hero{padding:48px 0 24px}.card .body .ghost{width:100%;text-align:center}.card .body .primary{width:100%;text-align:center}}
 /* Section spacing (interface round S5): 64px desktop, 40px mobile —
    each below-fold section breathes, separated by whitespace not rules. */
@@ -291,11 +289,11 @@ footer{border-top:1px solid var(--line);padding:48px 0 32px;color:var(--muted);f
    bottom-right. html scroll-padding-bottom keeps a focused element from
    ever hiding under it (the Airbnb sticky-bar lesson). */
 html{scroll-padding-bottom:96px}
-.stickybar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sticky-bg);border-top:1px solid var(--line);padding:10px 16px;box-shadow:0 -4px 20px rgba(6,6,9,.08)}
+.stickybar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--sticky-bg);border-top:1px solid var(--line);padding:10px 16px;box-shadow:0 -4px 20px rgba(13,16,35,.08)}
 .stickybar .total{font-size:14px;color:var(--muted)}
-.stickybar .total strong{font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:300;color:var(--ink);font-variant-numeric:tabular-nums}
+.stickybar .total strong{font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 .stickybar button{min-height:48px}
-@media(min-width:901px){.stickybar{left:auto;right:24px;bottom:24px;width:auto;border:1px solid var(--line);border-radius:999px;padding:8px 8px 8px 20px;box-shadow:0 8px 28px rgba(6,6,9,.14)}}
+@media(min-width:901px){.stickybar{left:auto;right:24px;bottom:24px;width:auto;border:1px solid var(--line);border-radius:999px;padding:8px 8px 8px 20px;box-shadow:0 8px 28px rgba(13,16,35,.14)}}
 
 /* Trip Summary card (design #14): the trip as a thing you can see and
    edit, pinned above the chat messages. A tapped line asks Fujin AI to
@@ -332,12 +330,12 @@ html{scroll-padding-bottom:96px}
 .appbar-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
 .appbar-trips{white-space:nowrap}
 .appbar-total{font-size:14px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
-.appbar-total strong{font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:300;color:var(--ink)}
+.appbar-total strong{font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;color:var(--ink)}
 .appbar-book{min-height:44px}
 .appbar-theme{min-height:44px;white-space:nowrap}
 .mytrips-menu{position:relative}
 .menu-backdrop{position:fixed;inset:0;background:transparent;border:none;cursor:default;z-index:59;padding:0}
-.mytrips-dropdown{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:280px;max-width:min(320px,calc(100vw - 48px));background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(6,6,9,.16);padding:6px}
+.mytrips-dropdown{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:280px;max-width:min(320px,calc(100vw - 48px));background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(13,16,35,.16);padding:6px}
 .mytrips-dropdown button{display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer;border-radius:var(--r-sm)}
 .mytrips-dropdown button:hover:not(:disabled){background:var(--surface)}
 .mytrips-dropdown button:disabled{cursor:default;opacity:.55}
@@ -372,14 +370,14 @@ html{scroll-padding-bottom:96px}
 .chatmap{position:relative;height:calc(100dvh - 84px);min-height:560px;display:flex;gap:16px}
 .chatmap-s0{justify-content:center}
 .chatmap-s0 .chatcol{width:min(720px,100%)}
-.chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 2px 16px rgba(6,6,9,.06);padding:16px}
-.trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 2px 16px rgba(6,6,9,.06);padding:16px;overflow-y:auto;min-height:0}
+.chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 2px 16px rgba(13,16,35,.06);padding:16px}
+.trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 2px 16px rgba(13,16,35,.06);padding:16px;overflow-y:auto;min-height:0}
 .chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
 .mapcol{position:relative;flex:1 1 auto;min-width:0;height:100%;z-index:0;display:flex;flex-direction:column}
-.legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 14px;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 28px rgba(6,6,9,.18)}
+.legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 14px;background:var(--card);box-shadow:0 8px 28px rgba(13,16,35,.18)}
 .legcard p{margin:6px 0}
 .maphints{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;gap:8px;max-width:340px}
-.maphint{font-size:13px;color:var(--muted);margin:0;background:var(--glass-bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 12px;box-shadow:0 2px 10px rgba(6,6,9,.08)}
+.maphint{font-size:13px;color:var(--muted);margin:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 12px;box-shadow:0 2px 10px rgba(13,16,35,.08)}
 /* Full-bleed map (modern-map build, Nov 13): the map fills its column
    edge-to-edge — the 16px boxed panel is gone. The canvas is
    absolutely positioned inside; the rail floats above it. */
@@ -391,7 +389,7 @@ html{scroll-padding-bottom:96px}
    itinerary, and the rail would collide with the zone switcher pill.
    The rail is plain React DOM, so it renders over the MapLibre map
    and over the Leaflet fallback alike. */
-.map-rail{position:absolute;left:16px;top:16px;z-index:3;width:236px;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 14px;box-shadow:0 8px 28px rgba(6,6,9,.18);display:none}
+.map-rail{position:absolute;left:16px;top:16px;z-index:3;width:236px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 14px;box-shadow:0 8px 28px rgba(13,16,35,.18);display:none}
 @media (min-width:1201px){.map-rail{display:block}}
 .map-rail-head{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px}
 .map-rail-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
@@ -404,7 +402,7 @@ html{scroll-padding-bottom:96px}
    leg card (top-right) and the map hints (bottom-right). */
 .zonebar{display:none}
 @media (max-width:1200px){
-  .zonebar{display:flex;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:4;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(6,6,9,.12)}
+  .zonebar{display:flex;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:4;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(13,16,35,.12)}
   .zonebar-btn{border:none;background:transparent;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;min-height:40px}
   .zonebar-btn.selected{background:var(--ink);color:var(--on-ink)}
   .chatcol{width:min(500px,45%)}
@@ -440,11 +438,11 @@ html{scroll-padding-bottom:96px}
    photo is decoration, never interactive. Below 1200px it is gone,
    so the chat keeps the whole width on a tablet or phone. The chat
    column narrows to make room; the pair stays centered. */
-.hero-photo{display:none;margin:0}
+.s0-photo{display:none;margin:0}
 @media (min-width:1201px){
   .chatmap-s0 .chatcol{width:min(700px,56%)}
-  .chatmap-s0 .hero-photo{display:block;flex:0 0 auto;width:min(520px,37%);border-radius:24px;overflow:hidden}
-  .chatmap-s0 .hero-photo img,.chatmap-s0 .hero-photo .img-fallback,.chatmap-s0 .hero-photo .img-loading{width:100%;height:100%;object-fit:cover;border-radius:24px}
+  .chatmap-s0 .s0-photo{display:block;flex:0 0 auto;width:min(520px,37%);border-radius:12px;overflow:hidden}
+  .chatmap-s0 .s0-photo img,.chatmap-s0 .s0-photo .img-fallback,.chatmap-s0 .s0-photo .img-loading{width:100%;height:100%;object-fit:cover;border-radius:12px}
 }
 
 /* Below-the-fold tools (first-screen rebuild, Nov 13): "Prefer
@@ -457,7 +455,7 @@ html{scroll-padding-bottom:96px}
    big soft card, not a pill row — taller field, larger type, a
    prominent Start action, like Layla's input card. At S1/S2 the
    chat is a narrow column and the input stays compact. */
-.chatmap-s0 .hero-input{flex-wrap:nowrap;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:8px;box-shadow:0 8px 28px rgba(6,6,9,.08)}
+.chatmap-s0 .hero-input{flex-wrap:nowrap;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:8px;box-shadow:0 8px 28px rgba(13,16,35,.08)}
 .chatmap-s0 .hero-input:focus-within{border-color:var(--ink)}
 .chatmap-s0 .hero-input input{flex:1 1 auto;min-width:0;min-height:56px;font-size:17px;border:0;background:transparent}
 .chatmap-s0 .hero-input .primary{min-height:56px;padding:0 28px;font-size:16px;border-radius:var(--r-sm);white-space:nowrap}
@@ -469,7 +467,7 @@ html{scroll-padding-bottom:96px}
 .trippanel-title{font-size:18px;margin:0}
 .trippanel-sub{font-size:13px;color:var(--muted);margin:4px 0 0}
 .trippanel-total{text-align:right;flex:0 0 auto}
-.trippanel-total strong{display:block;font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:300;font-variant-numeric:tabular-nums}
+.trippanel-total strong{display:block;font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
 .trippanel-total span{font-size:12px;color:var(--muted)}
 .panel-tier{display:flex;gap:6px;margin-bottom:12px}
 .panel-tier-btn{flex:1;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 4px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;min-height:40px}
@@ -538,14 +536,14 @@ html{scroll-padding-bottom:96px}
 .reels-strip{display:flex;gap:16px;overflow-x:auto;padding:4px 2px 12px;scrollbar-width:none}
 .reels-strip::-webkit-scrollbar{display:none}
 .reels-strip .reelcard{flex:0 0 280px}
-.reelcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:0 1px 2px rgba(6,6,9,.05);display:flex;flex-direction:column}
+.reelcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:0 1px 2px rgba(13,16,35,.05);display:flex;flex-direction:column}
 .reelcard.compact{flex:0 0 280px}
 /* P2-4: reserve the media box before the photo/video loads, so
    the card never flashes blank white on scroll — the muted
    background shows as the placeholder instead. */
 .reelcard img,.reelcard video{width:100%;aspect-ratio:4/3;max-height:320px;object-fit:cover;display:block;background:var(--line-soft)}
 .reelcard.compact img,.reelcard.compact video{max-height:200px}
-.reel-media-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f3efeb,#eae5e0);color:var(--ink);font-size:20px;font-weight:700;min-height:180px;text-align:center;padding:16px}
+.reel-media-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#e8eef5,#dfe7f0);color:var(--ink);font-size:20px;font-weight:700;min-height:180px;text-align:center;padding:16px}
 .reel-thumbs{display:flex;gap:6px;padding:8px 12px 0}
 .reel-thumbs button{border:1px solid var(--line);background:var(--card);border-radius:999px;min-width:32px;min-height:32px;font-size:12px;font-weight:700;cursor:pointer}
 .reel-thumbs button.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
@@ -633,7 +631,7 @@ html{scroll-padding-bottom:96px}
    must not depend on its ancestor to be fetchable — and the media box
    keeps its height before the image arrives, so nothing jumps. */
 .photocarousel img{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block}
-.photocarousel-count{position:absolute;right:8px;bottom:8px;background:rgba(6,6,9,.65);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;z-index:1}
+.photocarousel-count{position:absolute;right:8px;bottom:8px;background:rgba(13,16,35,.65);color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;z-index:1}
 .carousel-thumbs{display:flex;gap:6px;padding:8px 12px 0}
 .carousel-thumbs button{border:1px solid var(--line);background:var(--card);border-radius:999px;min-width:32px;min-height:32px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink);font-family:inherit}
 .carousel-thumbs button.selected{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
@@ -654,8 +652,8 @@ html{scroll-padding-bottom:96px}
 .sos-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;padding:10px 16px;border-radius:var(--r-sm);border:2px solid #b3261e;background:#b3261e;color:#fff;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
 .sos-btn-compact{width:auto;padding:8px 14px;font-size:14px}
 .sos-btn:hover{filter:brightness(1.1)}
-.sosdialog-backdrop{position:fixed;inset:0;z-index:200;background:rgba(6,6,9,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
-.sosdialog{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);max-width:560px;width:100%;padding:20px;box-shadow:0 8px 40px rgba(6,6,9,.3);margin:auto 0}
+.sosdialog-backdrop{position:fixed;inset:0;z-index:200;background:rgba(13,16,35,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+.sosdialog{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);max-width:560px;width:100%;padding:20px;box-shadow:0 8px 40px rgba(13,16,35,.3);margin:auto 0}
 .sosdialog-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
 .sosdialog-bar strong{font-size:18px}
 .sos-section-title{font-size:15px;margin:18px 0 8px}
@@ -690,7 +688,7 @@ html{scroll-padding-bottom:96px}
    it. All colors are theme tokens, so dark mode follows for free.
    The details region fades in 200ms (transform + opacity only) and
    is killed by the global prefers-reduced-motion rule. */
-.fare-card{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 20px;background:var(--card);margin:0 0 10px;list-style:none;box-shadow:0 1px 2px rgba(6,6,9,.05)}
+.fare-card{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 20px;background:var(--card);margin:0 0 10px;list-style:none;box-shadow:0 1px 2px rgba(13,16,35,.05)}
 .fare-card-main{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
 .fare-card-airline{display:flex;gap:10px;align-items:center;min-width:0;flex:0 1 180px}
 .fare-card-airline-name{min-width:0}
@@ -715,7 +713,7 @@ html{scroll-padding-bottom:96px}
 .fare-card-plane{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--accent-text)}
 .fare-card-stops{display:block;font-size:13px;color:var(--muted)}
 .fare-card-price{margin-left:auto;text-align:right;flex:0 0 auto}
-.fare-card-price strong{display:block;font-family:var(--font-display);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.fare-card-price strong{display:block;font-family:var(--font-display);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
 .fare-card-price span{display:block;font-size:13px;color:var(--muted)}
 /* The small source + freshness tag on each fare (Nov 15, 2026):
    discreet, muted, one line — "Duffel · test fare" / "Ignav · live,
@@ -786,7 +784,7 @@ html{scroll-padding-bottom:96px}
   .site-account-desktop{display:none}
   .site-link-desktop{display:none}
   .hamburger{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:18px}
-  .site-menu{display:block;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);padding:8px 24px 16px;box-shadow:0 12px 28px rgba(6,6,9,.12)}
+  .site-menu{display:block;position:absolute;top:100%;left:0;right:0;background:var(--card);border-bottom:1px solid var(--line);padding:8px 24px 16px;box-shadow:0 12px 28px rgba(13,16,35,.12)}
   .site-menu a{display:block;padding:11px 0;font-size:15px;font-weight:600;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line-soft)}
   .site-menu a:last-child{border-bottom:none}
   .site-menu .site-account-mobile{display:block;padding:12px 0 4px}
@@ -802,63 +800,43 @@ html{scroll-padding-bottom:96px}
    search widget, trust strip, category tiles, results list (sort
    above, filters left), footer columns. */
 
-/* White hero (Nov 15, 2026): the rotating photo background is gone —
-   the hero is the theme surface itself (white in light mode, the dark
-   surface in dark mode), with generous whitespace, a tight modern
-   headline, and the search card doing the visual work. No photo, no
-   scrim, no dots, no rotation. */
+/* White hero (Clean & trusted, Nov 22 2026): the search IS the
+   hero — white canvas, one question, one line, AI as a quiet text
+   link. No photo hero, no scrim, no frosted pills, no photo
+   cycler. The search widget does the visual work. */
 .hero-booking{background:var(--card)}
-/* Photographic hero (UX direction round 2, Nov 21 2026 — P0-1):
-   full-bleed photo of this week's trip with the pill search sitting
-   on it. The scrim keeps the white text readable in both themes;
-   no photo → the white hero above. */
-.hero-photo{background-size:cover;background-position:center;position:relative}
-.hero-photo::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,6,9,.62),rgba(74,63,75,.30) 45%,rgba(6,6,9,.72))}
-.hero-photo .hero-booking-inner{position:relative;z-index:1;padding:72px 24px 64px}
 .hero-booking-eyebrow{color:var(--muted);font-size:13px;font-weight:700;letter-spacing:.04em;margin:0 0 12px}
-.hero-photo .hero-booking-eyebrow{color:#fff}
-.hero-photo .hero-booking-inner h1{color:#fff;font-weight:300}
-.hero-photo .hero-booking-sub{color:rgba(255,255,255,.92)}
-.hero-ai-link{margin:16px 0 0;font-size:14px;color:#fff}
-.hero-ai-link a{color:#fff;text-decoration:underline}
-.hero-trust{margin:20px 0 0;font-size:13px;color:rgba(255,255,255,.85)}
-.hero-photo .sw-tab{color:#fff}
-.hero-photo .sw-tab.selected{background:#fff;color:var(--ink)}
-.hero-photo .sw-honest{color:rgba(255,255,255,.85)}
-.hero-photo .sw-honest a{color:#fff}
-.hero-photo .sw-trip-type{background:rgba(6,6,9,.45);border-color:rgba(255,255,255,.25)}
-.hero-photo .sw-trip-type button{color:#fff}
-.hero-photo .sw-trip-type button:hover{background:rgba(255,255,255,.14)}
-.hero-photo .sw-trip-type button.selected{background:#fcfcfc;color:var(--plum)}
+.hero-ai-link{margin:16px 0 0;font-size:14px;color:var(--muted)}
+.hero-ai-link a{color:var(--link);text-decoration:underline}
+.hero-trust{margin:20px 0 0;font-size:13px;color:var(--muted)}
 .hero-booking-inner{padding:40px 24px 32px}
-.hero-booking-inner h1{color:var(--ink);font-size:clamp(48px,6vw,84px);font-weight:300;letter-spacing:-.03em}
+.hero-booking-inner h1{color:var(--ink);font-size:40px;font-weight:700;letter-spacing:-.02em}
 .hero-booking-sub{color:var(--muted);font-size:16px;margin:8px 0 24px;max-width:640px}
 
-/* Search widget (Expedia rebuild, Nov 17, 2026): the tabs are text
-   links above ONE pill bar — the bar is the search. Each field is a
-   segment with a small caption label above a borderless control,
-   divided from the next by a hairline; the bar ends in a 56px
-   circular navy button, magnifier only (its label stays in the HTML,
-   visually hidden, and in aria-label). Multi-city keeps the stacked
-   leg editor with a full-width navy pill. The widget itself is
-   transparent — the bar carries the section. */
+/* Search widget (Clean & trusted, Nov 22 2026): the tabs are text
+   links above ONE white pill bar — the bar is the search. Each
+   field is a segment with a small caption label above a borderless
+   control, divided from the next by a hairline; the bar ends in a
+   56px circular blue button, magnifier only (its label stays in
+   the HTML, visually hidden, and in aria-label). Multi-city keeps
+   the stacked leg editor with a full-width blue pill. The widget
+   itself is transparent — the bar carries the section. */
 .search-widget{background:transparent;border:none;border-radius:0;padding:0;box-shadow:none}
-.sw-bar{display:flex;align-items:stretch;background:var(--brand);border:1px solid rgba(255,255,255,.14);border-radius:999px;box-shadow:0 2px 8px rgba(6,6,9,.06),0 12px 32px rgba(6,6,9,.18);padding:4px;color:#fcfcfc}
-.sw-bar .sw-field{flex:1 1 150px;min-width:150px;padding:6px 16px;border-left:1px solid rgba(255,255,255,.16);justify-content:center;color:#fcfcfc}
+.sw-bar{display:flex;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:999px;box-shadow:0 2px 8px rgba(13,16,35,.06),0 8px 24px rgba(13,16,35,.08);padding:4px;color:var(--ink)}
+.sw-bar .sw-field{flex:1 1 150px;min-width:150px;padding:6px 16px;border-left:1px solid var(--line);justify-content:center;color:var(--ink)}
 .sw-bar .sw-field--narrow{flex:1 1 120px;min-width:120px}
 .sw-bar .sw-field:first-child{border-left:none}
-.sw-bar .sw-field>span:first-child{text-transform:uppercase;font-size:11px;letter-spacing:.05em;font-weight:700;color:#d8d2cc}
-.sw-bar .sw-field input,.sw-bar .sw-field select{border:none;padding:0;background:transparent;font-size:15px;color:#fcfcfc}
-.sw-bar .sw-field input::placeholder{color:rgba(252,252,252,.55)}
-.sw-bar .sw-field-icon{color:rgba(252,252,252,.7)}
-.sw-bar .sw-check input{accent-color:var(--peach)}
-.sw-bar .sw-stepper button{background:rgba(252,252,252,.14);border-color:rgba(255,255,255,.28);color:#fcfcfc}
-.sw-bar .sw-stepper button:hover:not(:disabled){border-color:rgba(255,255,255,.6)}
+.sw-bar .sw-field>span:first-child{text-transform:uppercase;font-size:11px;letter-spacing:.05em;font-weight:700;color:var(--muted)}
+.sw-bar .sw-field input,.sw-bar .sw-field select{border:none;padding:0;background:transparent;font-size:15px;color:var(--ink)}
+.sw-bar .sw-field input::placeholder{color:var(--muted)}
+.sw-bar .sw-field-icon{color:var(--muted)}
+.sw-bar .sw-check input{accent-color:var(--brand)}
+.sw-bar .sw-stepper button{background:var(--card);border-color:var(--line);color:var(--ink)}
+.sw-bar .sw-stepper button:hover:not(:disabled){border-color:var(--ink)}
 .sw-bar .sw-field input:focus,.sw-bar .sw-field select:focus{outline:none;border-color:transparent}
-/* P2-5: the background change alone is invisible in dark mode
-   (--surface and --card are the same #161214 there), so a focused
-   search field also gets a visible brand outline in both themes. */
-.sw-bar .sw-field:focus-within{background:rgba(252,252,252,.08);border-radius:var(--r-sm);outline:2px solid var(--peach);outline-offset:2px}
+/* P2-5: a focused search field gets a visible brand outline in
+   both themes, on top of the pale-blue surface tint. */
+.sw-bar .sw-field:focus-within{background:var(--accent-soft);border-radius:var(--r-sm);outline:2px solid var(--brand);outline-offset:2px}
 .sw-bar .sw-field-icon{display:none}
 .sw-bar .sw-field-control input,.sw-bar .sw-field-control select{padding-left:0}
 .sw-bar .sw-stepper{min-height:36px}
@@ -926,9 +904,9 @@ html{scroll-padding-bottom:96px}
    press settles; transform + shadow only, 200ms. The button.primary
    selector beats a bare class, so this rule names the full chain. */
 button.primary.sw-search{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--brand);color:#fff;border-radius:999px;min-height:56px;padding:0 32px;font-size:17px;transition:transform 200ms ease,box-shadow 200ms ease}
-.sw-bar button.primary.sw-search{background:var(--offwhite);color:var(--plum)}
-.sw-bar button.primary.sw-search:hover{background:#fff;box-shadow:0 8px 20px rgba(6,6,9,.28)}
-button.primary.sw-search:hover{background:var(--brand-hover);transform:translateY(-1px);box-shadow:0 8px 20px rgba(6,6,9,.16)}
+.sw-bar button.primary.sw-search{background:var(--brand);color:#fff}
+.sw-bar button.primary.sw-search:hover{background:var(--brand-hover);box-shadow:0 8px 20px rgba(13,16,35,.28)}
+button.primary.sw-search:hover{background:var(--brand-hover);transform:translateY(-1px);box-shadow:0 8px 20px rgba(13,16,35,.16)}
 button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:none}
 .sw-search-icon{display:inline-flex;align-items:center}
 .sw-search-icon svg{display:block}
@@ -947,7 +925,7 @@ button.primary.sw-search:active{transform:translateY(0) scale(.99);box-shadow:no
    listbox drops below its field, above the hero and the sections
    under it (z-index 30 — below the sticky site header at 60, above
    page content). */
-.sw-suggestions{position:absolute;left:0;right:auto;top:calc(100% + 6px);z-index:30;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(6,6,9,.16);max-height:280px;overflow-y:auto;min-width:320px;max-width:min(420px,calc(100vw - 32px));width:max-content}
+.sw-suggestions{position:absolute;left:0;right:auto;top:calc(100% + 6px);z-index:30;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(13,16,35,.16);max-height:280px;overflow-y:auto;min-width:320px;max-width:min(420px,calc(100vw - 32px));width:max-content}
 .sw-suggestions ul{list-style:none;margin:0;padding:6px}
 .sw-suggestion{display:flex;flex-direction:column;gap:1px;padding:9px 12px;border-radius:var(--r-sm);cursor:pointer}
 .sw-suggestion.active{background:var(--accent-soft)}
@@ -1018,8 +996,8 @@ button.continue-card:hover{border-color:var(--ink)}
 .filters-open-row{display:none}
 .result-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--gap)}
 .result-cards--wide{grid-template-columns:1fr}
-.result-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(6,6,9,.05);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
-.result-card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(6,6,9,.10)}
+.result-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(13,16,35,.05);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.result-card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(13,16,35,.10)}
 .result-card.result-match{border-color:var(--accent-text);box-shadow:0 0 0 1px var(--accent-text)}
 .result-card .result-photo{height:160px;width:100%;object-fit:cover;display:block}
 /* Horizontal hotel rows (review round, Nov 17 2026 — gap 5):
@@ -1081,13 +1059,13 @@ button.continue-card:hover{border-color:var(--ink)}
    11): muted text + a shimmer bar, the same shimmer the image
    loading tiles use — never a bare "Checking…" line. */
 .results-loading{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:14px}
-.results-loading::after{content:"";flex:1;height:8px;border-radius:999px;background:linear-gradient(90deg,#f3efeb 25%,#eae5e0 50%,#f3efeb 75%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
+.results-loading::after{content:"";flex:1;height:8px;border-radius:999px;background:linear-gradient(90deg,#eef1f5 25%,#e2e8f0 50%,#eef1f5 75%);background-size:200% 100%;animation:shimmer 1.4s infinite linear}
 .flight-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr));gap:var(--gap);list-style:none;margin:0 0 16px;padding:0}
 .flight-card-grid > .fare-card{margin:0}
-.flight-option-card{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 20px;background:var(--card);list-style:none;box-shadow:0 1px 2px rgba(6,6,9,.05)}
+.flight-option-card{border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 20px;background:var(--card);list-style:none;box-shadow:0 1px 2px rgba(13,16,35,.05)}
 .flight-option-card .ignav-itinerary{border:0;padding:0;margin:0;background:transparent}
 .flight-option-price{margin:0 0 2px;font-size:15px}
-.flight-option-price strong{font-family:var(--font-display);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.flight-option-price strong{font-family:var(--font-display);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
 /* Breakdown line (UX direction round 2, Nov 21 2026 — P0-7): the
    per-traveler figure and the service fee, after the legs and
    before the actions. The fee is never hidden and never folded
@@ -1108,7 +1086,7 @@ button.continue-card:hover{border-color:var(--ink)}
   .results-layout{grid-template-columns:1fr}
   .results-filters{display:none}
   .filters-open-row{display:block;margin:0 0 12px}
-  .filters-sheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:80;background:var(--card);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:16px 20px 28px;max-height:70vh;overflow-y:auto;box-shadow:0 -8px 32px rgba(6,6,9,.18)}
+  .filters-sheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:80;background:var(--card);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:16px 20px 28px;max-height:70vh;overflow-y:auto;box-shadow:0 -8px 32px rgba(13,16,35,.18)}
   .filters-sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
   .footer-cols{grid-template-columns:1fr 1fr}
 }
@@ -1117,13 +1095,12 @@ button.continue-card:hover{border-color:var(--ink)}
      a tall empty band above the headline — the search card starts
      near the top instead. */
   .hero-booking-inner{padding:32px 16px 28px}
-  .hero-photo .hero-booking-inner{padding:36px 16px 32px}
   .sw-fields{grid-template-columns:1fr}
   /* The pill bar stacks on a phone: segments become full-width rows
      with hairlines between them, and the circular button becomes a
      full-width navy pill with its label shown again. */
   .sw-bar{flex-direction:column;border-radius:var(--r-lg);padding:8px}
-  .sw-bar .sw-field{border-left:none;border-bottom:1px solid rgba(255,255,255,.16);padding:10px 12px}
+  .sw-bar .sw-field{border-left:none;border-bottom:1px solid var(--line);padding:10px 12px}
   .sw-bar .sw-field:last-of-type{border-bottom:none}
   .sw-bar .sw-search{width:100%;height:48px;min-height:48px;border-radius:999px;margin:8px 0 0}
   .sw-bar .sw-search-text{display:inline}
@@ -1244,13 +1221,13 @@ button.continue-card:hover{border-color:var(--ink)}
    P0-4): same section, same card, same grid — not its own band. */
 .gems-row{margin-top:36px}
 .gems-row h3{font-size:20px;margin:0 0 6px}
-.pkg-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(6,6,9,.05);transition:transform 200ms ease}
-.pkg-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(6,6,9,.10)}
+.pkg-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(13,16,35,.05);transition:transform 200ms ease}
+.pkg-card:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(13,16,35,.10)}
 .pkg-card:hover .pkg-photo{transform:scale(1.02)}
 /* Horizontal package rows (review round, Nov 17 2026 — gap 2): the
    deals shelf renders the same card as a wide row, photo left. */
 .pkg-photo{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block;transition:transform 200ms ease}
-.pkg-photo-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:linear-gradient(135deg,var(--brand),var(--terra));color:#fff;font-family:var(--font-display);font-size:20px;font-weight:800;padding:16px;text-align:center}
+.pkg-photo-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:linear-gradient(135deg,#e8eef5,#d3deeb);color:var(--ink);font-family:var(--font-display);font-size:20px;font-weight:800;padding:16px;text-align:center}
 .pkg-body{padding:20px;display:flex;flex-direction:column;flex:1}
 .pkg-body h3{margin:10px 0 2px;font-size:20px;font-weight:600}
 .pkg-route{margin:0 0 6px;font-size:13px;color:var(--muted)}
@@ -1313,66 +1290,27 @@ button.continue-card:hover{border-color:var(--ink)}
   .checkout-wrap{margin:20px auto 48px}
 }
 
-/* --- Dribbble makeover (Nov 21, 2026) ---------------------------------- */
-/* Hero destination pills: frosted-glass pills over the photo, the
-   shot's "World / Europe / America / Asia" row — ours name real
-   destinations and prefill the search widget. */
-.hero-pills{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:20px 0 4px}
-.hero-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.35);background:rgba(252,252,252,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;border-radius:999px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;min-height:44px}
-.hero-pill:hover{background:rgba(252,252,252,.28)}
-.hero-pill:focus-visible{outline:2px solid var(--peach);outline-offset:2px}
-/* Hero photo controls: the shot's circular arrow buttons with small
-   chevrons between them on a faint translucent track — they cycle
-   the hero photo through the week's trip and two sunset photos from
-   the verified pool. The caption names the photo on display. */
-.hero-arrows{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:28px}
-.hero-arrow{width:56px;height:56px;border-radius:50%;background:#fcfcfc;color:var(--plum);border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
-.hero-arrow:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(6,6,9,.28)}
-.hero-arrow:active{transform:translateY(1px)}
-.hero-arrow:focus-visible{outline:2px solid var(--peach);outline-offset:2px}
-.hero-arrows-chevrons{color:rgba(255,255,255,.85);font-size:16px;letter-spacing:.2em}
-.hero-photo-label{position:absolute;right:24px;bottom:16px;z-index:1;font-size:12px;font-weight:600;color:rgba(255,255,255,.75)}
-/* Destination cards: tall portrait photos, bottom gradient, white
-   text + pin bottom-left — the shot's destination carousel, on the
-   web. The name and the from-price sit ON the photo (the gradient
-   keeps them readable); the body below keeps the tag, the tier line
-   and the actions. One price per card — the overlay price IS the
-   card's price, styled by its ancestor, so the .result-price class
-   the tests pin stays exactly that class. */
-.dest-card .photocarousel img{aspect-ratio:3/4}
-.dest-card .photocarousel-media::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,6,9,0) 45%,rgba(6,6,9,.72));pointer-events:none}
-.dest-card .photocarousel-count{top:8px;bottom:auto}
-.dest-card .img-fallback{aspect-ratio:3/4}
-.dest-card .dest-photo{position:relative;overflow:hidden}
-.dest-card .dest-photo img{aspect-ratio:3/4;height:100%;width:100%;object-fit:cover;display:block}
-.dest-card .dest-photo .img-fallback{aspect-ratio:3/4;height:100%}
-.dest-card .dest-photo .img-loading{aspect-ratio:3/4;height:100%}
-.dest-card .dest-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,6,9,0) 45%,rgba(6,6,9,.72));pointer-events:none}
-.dest-overlay{position:absolute;left:16px;right:16px;bottom:14px;z-index:1;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;color:#fff}
-.dest-name{display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.15;min-width:0}
-.dest-overlay .result-price{flex:0 0 auto;background:rgba(252,252,252,.16);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-.dest-overlay .result-price .plan-muted{color:rgba(255,255,255,.85)}
-.dest-card .dest-photo .safeimg{position:relative}
-/* Trip overview (My Trips): the shot's Trip Overview screen — a
-   dark plum budget card with the segmented "barcode" bar, then a
-   2×2 grid of white overview cards with thin circular icons and
-   large thin numbers. Every figure comes from this device's saved
-   trips, alerts and watches; the barcode is one segment per saved
-   trip, filled when booked. */
+/* --- Clean & trusted (Nov 22, 2026) ---------------------------------- */
+/* Destination cards: 4:3 photos, name + price in the white body
+   below — never overlaid on the photo. One price per card. */
+/* Trip overview (My Trips): a clean white budget card with a
+   simple progress bar, then a 2×2 grid of white overview cards
+   with thin circular icons and bold numbers. Every figure comes
+   from this device's saved trips, alerts and watches; the bar
+   fills with the share of trips booked. */
 .trip-overview{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);margin:20px 0 28px}
-.budget-card{background:var(--plum);color:#fcfcfc;border:1px solid rgba(255,255,255,.14);border-radius:var(--r-lg);padding:24px;display:flex;flex-direction:column;gap:16px}
+.budget-card{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;display:flex;flex-direction:column;gap:16px}
 .budget-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.budget-label{font-size:13px;color:#d8d2cc;margin:0 0 4px}
-.budget-total{font-family:var(--font-display);font-size:40px;font-weight:300;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:0;line-height:1.1}
-.budget-sub{font-size:13px;color:#d8d2cc;margin:6px 0 0}
-.budget-icon{flex:0 0 auto;width:44px;height:44px;border-radius:50%;background:rgba(252,252,252,.14);border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;color:#fcfcfc}
-.barcode{display:flex;gap:3px}
-.barcode-seg{flex:1;height:28px;border:1px solid rgba(255,255,255,.45);border-radius:2px}
-.barcode-seg.filled{background:#fcfcfc;border-color:#fcfcfc}
-.budget-foot{font-size:13px;color:#d8d2cc;margin:0}
+.budget-label{font-size:13px;color:var(--muted);margin:0 0 4px}
+.budget-total{font-family:var(--font-display);font-size:32px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:0;line-height:1.1}
+.budget-sub{font-size:13px;color:var(--muted);margin:6px 0 0}
+.budget-icon{flex:0 0 auto;width:44px;height:44px;border-radius:50%;background:var(--accent-soft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--brand)}
+.progress{height:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.progress-fill{height:100%;background:var(--brand);border-radius:999px}
+.budget-foot{font-size:13px;color:var(--muted);margin:0}
 .overview-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
 .overview-card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;display:flex;flex-direction:column;gap:4px}
 .overview-icon{position:absolute;top:16px;right:16px;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .overview-label{font-size:13px;color:var(--muted);margin:24px 0 0}
-.overview-num{font-family:var(--font-display);font-size:32px;font-weight:300;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:0;line-height:1.1}
+.overview-num{font-family:var(--font-display);font-size:32px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:0;line-height:1.1}
 @media(max-width:900px){.trip-overview{grid-template-columns:1fr}}
