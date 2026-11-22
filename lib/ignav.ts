@@ -39,7 +39,13 @@ import {
 import type { RowSort } from './searchPlaces';
 
 const IGNAV_API = 'https://ignav.com/api';
-const FETCH_TIMEOUT_MS = 10000;
+// 15s per attempt (Nov 22, 2026): a cold upstream call occasionally
+// exceeds 10s — a cold JFK→LHR round-trip took >10s and failed on
+// first load while the very next call took 3.1s — so 10s was marginal
+// for a cold call. Normal cold calls measure 2–3.5s.
+const FETCH_TIMEOUT_MS = 15000;
+// Exactly one retry on a transient throw — see postIgnav.
+const POSTIGNAV_MAX_ATTEMPTS = 2;
 // Inside Ignav's 30-minute reuse window: a repeat search for the
 // same trip within 10 minutes costs nothing and stays fresh.
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -619,20 +625,34 @@ async function postIgnav(
   body: Record<string, unknown>
 ): Promise<{ ok: boolean; status: number; json: unknown }> {
   const apiKey = process.env.IGNAV_API_KEY ?? '';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${IGNAV_API}${path}`, {
-      method: 'POST',
-      headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    const json = (await res.json().catch(() => ({}))) as unknown;
-    return { ok: res.ok, status: res.status, json };
-  } finally {
-    clearTimeout(timeout);
+  // One bounded retry on a transient throw only (a network error or
+  // the abort above): a cold upstream call occasionally exceeds the
+  // timeout (observed Nov 22, 2026 — a cold JFK→LHR round-trip took
+  // >10s and failed, the very next call 3.1s), and the retry lands
+  // once Ignav has warmed up. An HTTP error status is NEVER retried
+  // — a 401/402/429/424 has a reason to show, and retrying a 429
+  // is wrong. Exactly one retry, never a loop; a still-failing
+  // second attempt throws and the caller reports the honest error.
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < POSTIGNAV_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${IGNAV_API}${path}`, {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const json = (await res.json().catch(() => ({}))) as unknown;
+      return { ok: res.ok, status: res.status, json };
+    } catch (e) {
+      lastError = e;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  throw lastError;
 }
 
 function errorCodeOf(json: unknown): string | undefined {
@@ -751,7 +771,8 @@ export async function searchIgnavFares(input: IgnavSearchInput): Promise<IgnavSe
     result = { ...result, reason: 'no_offers' };
   }
   // Only a real HTTP 200 answer is cached — an error never poisons
-  // the cache, and a failed request is never retried in a loop.
+  // the cache. A transient throw gets exactly one retry inside
+  // postIgnav (never a loop); an HTTP error status is never retried.
   searchCache.set(key, { ts: Date.now(), result });
   return result;
 }

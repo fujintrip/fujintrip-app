@@ -333,7 +333,7 @@ export default function CheckoutFlow({ params }: { params: CheckoutParams }) {
     return (
       <div className="card" style={{ padding: 24 }}>
         <h2 style={{ marginTop: 0 }}>Checkout</h2>
-        <p>No flight was selected for checkout. Pick a fare from the flight results first — the Duffel cards link here with the fare.</p>
+        <p>No flight was selected for checkout. Pick a live, bookable fare from the flight results first — its card carries a “Continue to checkout” link. Test fares are for planning only and don’t link here.</p>
         <a className="primary" href="/?tab=flights">Search flights</a>
       </div>
     );

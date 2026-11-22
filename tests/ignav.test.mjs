@@ -518,6 +518,45 @@ test('errors: 401/402/network map to honest reasons, never a retry loop', async 
   }
 });
 
+test('retry: a transient throw is retried once and the search goes live', async () => {
+  clearIgnavCache();
+  setKey();
+  let calls = 0;
+  stubFetch(async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('upstream slow — aborted');
+    return okJson(ONEWAY_SAMPLE);
+  });
+  try {
+    const res = await searchIgnavFares({ tripType: 'oneway', origin: 'JFK', destination: 'LHR', departDate: '2027-01-15', travelers: 1 });
+    assert.equal(res.live, true, 'the retry recovers the live fares');
+    assert.equal(res.itineraries.length, 2);
+    assert.equal(calls, 2, 'exactly one retry, never a loop');
+  } finally {
+    restoreFetch();
+    restoreKey();
+  }
+});
+
+test('retry: a persistent throw still fails honestly after one retry', async () => {
+  clearIgnavCache();
+  setKey();
+  let calls = 0;
+  stubFetch(async () => {
+    calls += 1;
+    throw new Error('network down');
+  });
+  try {
+    const res = await searchIgnavFares({ tripType: 'oneway', origin: 'JFK', destination: 'LHR', departDate: '2027-01-16', travelers: 1 });
+    assert.equal(res.live, false);
+    assert.equal(res.reason, 'error');
+    assert.equal(calls, 2, 'one attempt plus one retry, then the honest error');
+  } finally {
+    restoreFetch();
+    restoreKey();
+  }
+});
+
 test('freshness label: observed_at becomes a checked time, null stays generic', () => {
   assert.ok(ignavFreshnessLabel('2026-11-15T18:00:00Z').startsWith('Live · checked'), 'a timestamp labels the check');
   assert.ok(ignavFreshnessLabel('2026-11-15T18:00:00Z').includes('Nov 15'), 'the check date is visible');
