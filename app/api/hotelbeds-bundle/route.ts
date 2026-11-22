@@ -13,9 +13,12 @@ import {
 
 /**
  * /api/hotelbeds-bundle — the Hotelbeds Bundle product (Nov 16,
- * 2026). Wired, toggle OFF in lib/hotelbeds.ts until the user
- * switches it on. NO planner rebuild: the planner already builds
- * packages from its own legs and never reads this route.
+ * 2026). Wired, toggle ON in lib/hotelbeds.ts (activated Nov 17,
+ * 2026; the Bundle key is live in DigitalOcean). The planner still
+ * builds packages from its own legs — Bundle does not rebuild it:
+ * the package price's hotel leg can come from a Bundle fare (see
+ * collectLivePackageFares in lib/packages.ts), and this route stays
+ * the standalone dated packaging search.
  *
  * GET — status only: { enabled, configured, active,
  * source:'hotelbeds-bundle', sandbox:true, note }.

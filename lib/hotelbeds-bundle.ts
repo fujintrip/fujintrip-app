@@ -1,7 +1,10 @@
 // Hotelbeds Bundle (Nov 16, 2026) — the fourth Hotelbeds product
-// key, wired minimally and activatable, with NO planner rebuild:
-// our planner already builds packages from its own legs, and the
-// brief is explicit that Bundle must not change that.
+// key, wired and ON (activated Nov 17, 2026; the Bundle key is live
+// in DigitalOcean). No planner rebuild: our planner already builds
+// packages from its own legs, and Bundle must not change that — the
+// package price's hotel leg can come from a Bundle fare (see
+// collectLivePackageFares in lib/packages.ts), but the legs, tiers
+// and totals stay the planner's.
 //
 // What "Bundle" is, from Hotelbeds' own material: there is no
 // separate Bundle API product in Hotelbeds' public API specs (the
@@ -15,11 +18,10 @@
 // availability search against the Hotel BookingAPI host, with the
 // BUNDLE key/secret — and nothing else.
 //
-// The toggle in lib/hotelbeds.ts is OFF: the route answers status
-// only until the user switches it on. When on, the route returns
-// packaging availability (hotels with packaged rates, parsed by
-// the same mapper as the Hotel product) — the planner never reads
-// it, and no tab renders it.
+// The toggle in lib/hotelbeds.ts is ON: the route runs the packaging
+// search and returns packaging availability (hotels with packaged
+// rates, parsed by the same mapper as the Hotel product). SANDBOX:
+// every price is test data from the evaluation account.
 import {
   hotelbedsAuthHeaders,
   hotelbedsErrorReason,
@@ -80,7 +82,7 @@ export type HotelbedsBundleInput = {
 };
 
 export const HOTELBEDS_BUNDLE_NOTE =
-  'Bundle is wired but switched off — the planner already builds packages from its own legs. Flip the bundle toggle in lib/hotelbeds.ts to activate the packaging search (Hotel BookingAPI with packaging + hotelPackage, under the Bundle key).';
+  'Bundle is on: the packaging search runs under the Bundle key (Hotel BookingAPI with packaging + hotelPackage), and package prices read its fares — sandbox test data, labeled as such. The planner still builds packages from its own legs.';
 
 export function hotelbedsBundleNote(): string {
   return HOTELBEDS_BUNDLE_NOTE;

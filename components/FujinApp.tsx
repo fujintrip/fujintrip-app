@@ -27,7 +27,7 @@ import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
 import PackagesSection, { TripOfTheWeekFeature } from './PackagesSection';
 import { ContinueBar, ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
-import { featuredPackages, tripOfTheWeek, type Package } from '../lib/packages';
+import { featuredPackages, tripOfTheWeek, type LivePackageFare, type Package } from '../lib/packages';
 import { isSavedDetail, packageSavedKey, savedDetailLine, tripSavedKey, type SavedDetail } from '../lib/savedTrips';
 import { alertIsDrop, evaluatePriceAlert, isPriceAlert, priceAlertLine, PRICE_ALERTS_STORAGE_KEY, type PriceAlert } from '../lib/priceAlerts';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
@@ -348,6 +348,29 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // first reel still works from My Trips ("Share how it went") and
   // from the chat.
   const [reelsCount, setReelsCount] = useState<number | null>(null);
+  // Hotelbeds Bundle package fares (Nov 21, 2026): the homepage's
+  // ready-made trips read their fares from GET /api/packages once on
+  // mount — the Bundle packaging search behind it (sandbox test
+  // data, labeled as such on the card). The fetch never blocks the
+  // first render: cards show the planner estimate until the fares
+  // arrive, and a failed fetch leaves the estimates in place. The
+  // server caches Bundle searches for 6h, so repeat loads cost no
+  // upstream calls.
+  const [packageFares, setPackageFares] = useState<LivePackageFare[] | null>(null);
+  useEffect(() => {
+    if (variant !== 'home') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/packages');
+        const j = (await r.json()) as { liveFares?: unknown };
+        if (!cancelled && Array.isArray(j.liveFares)) setPackageFares(j.liveFares as LivePackageFare[]);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [variant]);
   // Direction v3 search (Nov 14, 2026): the hero search widget owns
   // the tab; a submitted search renders results below the hero; a
   // destination card prefills the widget. The homepage no longer
@@ -1040,9 +1063,9 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             /account now, not on the homepage. */}
         {!search && (
         <>
-        <TripOfTheWeekFeature photo={homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? null} savedKeys={savedKeys} onSavePackage={savePackageDetail} />
+        <TripOfTheWeekFeature photo={homepagePhotos.get(`pkg:${weekTrip.id}`)?.[0] ?? null} savedKeys={savedKeys} onSavePackage={savePackageDetail} liveFares={packageFares} />
 
-        <PackagesSection photosById={homepagePhotos} savedKeys={savedKeys} onSavePackage={savePackageDetail} />
+        <PackagesSection photosById={homepagePhotos} savedKeys={savedKeys} onSavePackage={savePackageDetail} liveFares={packageFares} />
 
         <section id="destinations" className="home-section">
           <p className="eyebrow">Where to go</p>

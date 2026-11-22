@@ -129,13 +129,12 @@ export type HotelbedsSearchInput = {
 
 // --- Products ------------------------------------------------------
 // Per-product on/off, in ONE place (Nov 16, 2026 — user: wire all
-// four Hotelbeds products now, activate what we need in code).
-// Hotel is on first; Activities, Transfers and Bundle are wired
-// and ready to switch on by flipping one boolean each. A product
-// that is off renders nothing and never calls its API, whatever
-// its keys. Each product has its OWN evaluation key (50 req/day
-// each) — the env var names are the ones the user is adding to
-// DigitalOcean.
+// four Hotelbeds products now, activate what we need in code). All
+// four are ON since Nov 17, 2026 (Bundle activated that day — the
+// Bundle key is live in DigitalOcean). A product that is off renders
+// nothing and never calls its API, whatever its keys. Each product
+// has its OWN evaluation key (50 req/day each) — the env var names
+// are the ones the user is adding to DigitalOcean.
 export type HotelbedsProduct = 'hotel' | 'activities' | 'transfers' | 'bundle';
 
 export const HOTELBEDS_PRODUCTS: Record<HotelbedsProduct, boolean> = {

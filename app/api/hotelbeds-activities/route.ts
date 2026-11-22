@@ -12,8 +12,8 @@ import {
 
 /**
  * POST /api/hotelbeds-activities — the Attractions tab's Hotelbeds
- * sandbox column (Nov 16, 2026). Wired, toggle OFF in
- * lib/hotelbeds.ts until the user switches it on.
+ * sandbox column (Nov 16, 2026). Wired, toggle ON in
+ * lib/hotelbeds.ts (all four products on since Nov 17, 2026).
  *
  * Search body: { destination, from, to?, travelers? }
  * - destination: a CITY NAME (resolved via CITY_INFO lat/lng for

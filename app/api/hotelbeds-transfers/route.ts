@@ -15,7 +15,7 @@ import {
 /**
  * POST /api/hotelbeds-transfers — the Taxis tab's Hotelbeds
  * sandbox airport-transfer column (Nov 16, 2026). Wired, toggle
- * OFF in lib/hotelbeds.ts until the user switches it on.
+ * ON in lib/hotelbeds.ts (all four products on since Nov 17, 2026).
  *
  * Search body: { from, to, depart, pickupTime?, travelers? }
  * - from/to: CITY NAMES. Each side resolves to an IATA airport

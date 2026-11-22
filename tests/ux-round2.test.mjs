@@ -90,7 +90,7 @@ test('round 2 P0-4: Trip of the week, then Ready-made (6, week trip never repeat
   assert.ok(packagesSectionSrc.includes('export function TripOfTheWeekFeature'), 'the week’s trip is a feature row in its own band');
   assert.ok(fujinAppSrc.includes('<TripOfTheWeekFeature'), 'the homepage renders the feature row');
   assert.ok(fujinAppSrc.indexOf('<TripOfTheWeekFeature') < fujinAppSrc.indexOf('<PackagesSection'), 'the feature row precedes Ready-made');
-  assert.ok(fujinAppSrc.includes('<PackagesSection photosById={homepagePhotos} savedKeys={savedKeys} onSavePackage={savePackageDetail} />'), 'Ready-made renders after the feature row');
+  assert.ok(fujinAppSrc.includes('<PackagesSection photosById={homepagePhotos} savedKeys={savedKeys} onSavePackage={savePackageDetail} liveFares={packageFares} />'), 'Ready-made renders after the feature row');
   assert.ok(fujinAppSrc.includes('className="gems-row"'), 'hidden gems are a labelled row inside Destinations');
   assert.ok(fujinAppSrc.includes('<p className="eyebrow">Hidden gems</p>'), 'the gems row is labeled');
   assert.ok(!fujinAppSrc.includes('Show more destinations'), 'no destinations expander');

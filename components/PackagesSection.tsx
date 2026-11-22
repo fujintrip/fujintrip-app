@@ -9,10 +9,11 @@
 // traveler — and one action, "View trip", which opens the package
 // detail page where the Cheapest / Best value / Premium tiers and
 // the cost breakdown live. Every price is the planner's own math
-// (lib/packages.ts) — planning estimate until a live supplier
-// connects. Never "Book now" — checkout is not built.
+// (lib/packages.ts) — planning estimate until a Hotelbeds Bundle fare
+// (sandbox test data, labeled as such) or a live supplier fare
+// replaces it. Never "Book now" — checkout is not built.
 'use client';
-import { packagePrice, readyMadePackages, tripOfTheWeek, tripOfTheWeekPreview, type LivePackageFare, type Package } from '../lib/packages';
+import { bundleHotelLabel, packagePrice, readyMadePackages, tripOfTheWeek, tripOfTheWeekPreview, type LivePackageFare, type Package } from '../lib/packages';
 import { packageSavedKey } from '../lib/savedTrips';
 import { shareTextFor } from '../lib/share';
 import { Icon } from './icons';
@@ -66,7 +67,7 @@ export function PackageCard({
               picks, never by FujinTrip. */}
           <ShareMenu
             url="/#packages"
-            text={shareTextFor('package', pkg.destination, `from $${price.perTraveler.toLocaleString()} per traveler · planning estimate`)}
+            text={shareTextFor('package', pkg.destination, `from $${price.perTraveler.toLocaleString()} per traveler · ${price.label}`)}
             buttonClassName="linklike"
           />
         </div>
@@ -82,11 +83,18 @@ export function PackageCard({
         {/* The estimate label is gone from the card (UX direction,
             Nov 19 2026 — P1-3): one honesty line per page — the
             widget line under the search — covers it. A LIVE fare
-            keeps its label + source, because that is the quote. */}
+            keeps its label + source, because that is the quote. A
+            Bundle fare keeps its sandbox label + source the same
+            way, and a packaged hotel that could not compose into
+            the total (its currency is not USD) is shown in its own
+            currency, test data labeled. */}
         {price.source && (
           <p className="plan-muted">
             {price.label} · {price.source}
           </p>
+        )}
+        {price.bundleHotel && (
+          <p className="plan-muted">{bundleHotelLabel(price.bundleHotel)}</p>
         )}
         <div className="pkg-actions">
           <a className="primary" href={`/destination/${encodeURIComponent(pkg.destination)}`}>View trip</a>
@@ -141,7 +149,7 @@ export function TripOfTheWeekFeature({
             <span className="pill">{weekTrip.tag}</span>
             <ShareMenu
               url="/#trip-of-the-week"
-              text={shareTextFor('package', weekTrip.destination, `from $${price.perTraveler.toLocaleString()} per traveler · planning estimate`)}
+              text={shareTextFor('package', weekTrip.destination, `from $${price.perTraveler.toLocaleString()} per traveler · ${price.label}`)}
               buttonClassName="linklike"
             />
           </div>
@@ -166,6 +174,9 @@ export function TripOfTheWeekFeature({
             <p className="plan-muted">
               {price.label} · {price.source}
             </p>
+          )}
+          {price.bundleHotel && (
+            <p className="plan-muted">{bundleHotelLabel(price.bundleHotel)}</p>
           )}
           <div className="pkg-actions">
             <a className="primary" href={`/destination/${encodeURIComponent(weekTrip.destination)}`}>View trip</a>
