@@ -717,7 +717,7 @@ export default function SearchWidget({
                   label="Flying to"
                   value={place}
                   onChange={setPlace}
-                  placeholder="Destination"
+                  placeholder="Where to?"
                   // "Everywhere" inspiration search (roadmap, Nov 21
                   // 2026 — F2, Skyscanner model): pinned at the top
                   // of the listbox, so a destination-less search is

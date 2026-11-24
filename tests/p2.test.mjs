@@ -263,8 +263,8 @@ test('P2-5: primary actions and pills meet 4.5:1 contrast in both themes', () =>
   // dark mode too (the dark override exists to pin that).
   assert.ok(contrastRatio('#ffffff', '#0066cc') >= 4.5, `white on brand #0066cc must be ≥ 4.5:1, got ${contrastRatio('#ffffff', '#0066cc').toFixed(2)}`);
   // Dark mode: pills read in the light link blue, not the brand blue.
-  assert.ok(contrastRatio('#7db8ff', '#0f1726') >= 4.5, `dark pill link on card must be ≥ 4.5:1, got ${contrastRatio('#7db8ff', '#0f1726').toFixed(2)}`);
-  assert.ok(contrastRatio('#0066cc', '#0f1726') < 4.5, 'brand blue as pill text fails in dark mode — that is why pills use the link blue');
+  assert.ok(contrastRatio('#7db8ff', '#221d15') >= 4.5, `dark pill link on card must be ≥ 4.5:1, got ${contrastRatio('#7db8ff', '#221d15').toFixed(2)}`);
+  assert.ok(contrastRatio('#0066cc', '#221d15') < 4.5, 'brand blue as pill text fails in dark mode — that is why pills use the link blue');
   // Light mode: the success green was darkened from #0c8a4a (4.42:1)
   // to #0b7f45 so success text passes on white and on its soft bg.
   assert.ok(contrastRatio('#0b7f45', '#ffffff') >= 4.5, `light success on white must be ≥ 4.5:1, got ${contrastRatio('#0b7f45', '#ffffff').toFixed(2)}`);

@@ -51,14 +51,14 @@ test('contrast: light theme — the blue accent passes for small text', () => {
 });
 
 test('contrast: dark theme — small text uses the light link blue', () => {
-  // Dark accent-text #8db9f2 on the dark page background.
-  assert.ok(meetsContrast('#8db9f2', '#0f1726'));
-  assert.ok(meetsContrast('#8db9f2', '#0f1726'), 'dark accent-text on dark surface');
+  // Dark accent-text #8db9f2 on the dark card (warm charcoal).
+  assert.ok(meetsContrast('#8db9f2', '#221d15'));
+  assert.ok(meetsContrast('#8db9f2', '#221d15'), 'dark accent-text on dark surface');
   // Dark link blue on the dark background.
-  assert.ok(meetsContrast('#7db8ff', '#0f1726'), 'dark link #7db8ff on dark page');
+  assert.ok(meetsContrast('#7db8ff', '#221d15'), 'dark link #7db8ff on dark page');
   // Dark-theme body and muted text pass on the dark background.
-  assert.ok(meetsContrast('#eef2f8', '#0f1726'));
-  assert.ok(meetsContrast('#9aa7bd', '#0f1726'), 'dark muted #9aa7bd on dark page');
+  assert.ok(meetsContrast('#f2ede4', '#221d15'));
+  assert.ok(meetsContrast('#a89f8c', '#221d15'), 'dark muted #a89f8c on dark page');
   // A filled dark-theme primary button: white text on the brand blue.
   assert.ok(meetsContrast('#ffffff', '#0066cc'));
 });

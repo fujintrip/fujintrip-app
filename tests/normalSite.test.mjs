@@ -381,11 +381,12 @@ test('searchRequestLabel: traveler count pluralizes — "1 traveler", "2 travele
 // right value, not a rendered screenshot (no browser here resizes
 // to 390px; the rendered phone check runs on the user's phone).
 
-test('mobile: the hero is tight on a phone (defect, Nov 15 2026)', () => {
+test('mobile: the photo hero keeps its air on a phone (Wind & wander, Nov 24 2026)', () => {
   const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
-  const pads = [...css.matchAll(/\.hero-booking-inner\{padding:(\d+)px \d+px \d+px\}/g)].map((m) => Number(m[1]));
+  const pads = [...css.matchAll(/\.hero-booking-inner\{[^}]*?padding:(\d+)px \d+px \d+px\}/g)].map((m) => Number(m[1]));
   assert.ok(pads.length >= 2, 'hero padding is declared for desktop and phone');
-  assert.ok(pads[pads.length - 1] <= 36, `phone hero top padding is tight, got ${pads[pads.length - 1]}px`);
+  assert.ok(pads[pads.length - 1] >= 40 && pads[pads.length - 1] <= 64, `phone hero top padding keeps the air, got ${pads[pads.length - 1]}px`);
+  assert.ok(pads[pads.length - 1] < pads[0], 'the phone hero is tighter than desktop, but not tight');
 });
 
 test('mobile: the results bar is static, so it never overlaps the header (UX direction round 2, Nov 21 2026 — P0-5)', () => {
@@ -826,14 +827,13 @@ test('review round Nov 17: the 12 interface fixes are in place', () => {
   assert.ok(!app.includes('SHELF_COPY'), 'no shelf copy remains');
   assert.ok(!app.includes('shelfEntries'), 'no shelf entries remain');
   // 2 — distinct section grammars: destination cards with the
-  // name + price in the white body below the photo (Clean &
-  // trusted, Nov 22, 2026 — re-applying the audit-round gap-10
-  // call that the Dribbble makeover had reversed; white text on
-  // photos is the lowest-contrast element on the page).
-  assert.ok(!app.includes('dest-card--photo'), 'destination cards no longer use the overlay variant');
-  assert.ok(!app.includes('dest-overlay'), 'no name + price overlay on the photo');
-  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the white body');
-  assert.ok(!css.includes('.dest-overlay'), 'no overlay style exists');
+  // name + price overlaid on the photo's bottom scrim (Wind &
+  // wander, Nov 24, 2026 — the Clean & trusted white-body call is
+  // reversed; the overlay is a real gradient, not text straight on
+  // the photo, so the white name + price stay legible).
+  assert.ok(app.includes('dest-overlay'), 'name + price overlaid on the photo');
+  assert.ok(app.includes('<p className="result-price">from $'), 'the from-price sits in the overlay');
+  assert.ok(css.includes('.dest-overlay{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:56px 20px 16px;background:linear-gradient(180deg,rgba(8,12,22,0),rgba(8,12,22,.78));color:#fff}'), 'the overlay is a real bottom gradient');
   assert.ok(!css.includes('.pkg-card--row{'), 'the row-card style is gone');
   assert.ok(!existsSync(new URL('../components/DealsSection.tsx', import.meta.url)), 'the deals component is deleted with the band');
   assert.ok(!css.includes('.deals-grid'), 'no deals-grid style remains');
@@ -907,12 +907,12 @@ test('audit round Nov 17: results-only page, Expedia tokens, one flight-card for
   assert.ok(app.includes('onClearSearch={() => setSearch(null)}'), 'clearing the search restores the browse page');
   assert.ok(results.includes('Clear search'), 'the results bar offers a way back to browse');
   assert.ok(results.includes('onClearSearch: () => void'), 'the clear callback is a declared prop');
-  // Tokens — Clean & trusted radius scale: cards 12px, buttons
-  // pill, inputs 8px; no 16px radius remains.
+  // Tokens — Wind & wander radius scale: cards 20px, panels 16px,
+  // inputs 10px, buttons pill; no literal 16px radius remains.
   assert.ok(!css.includes('border-radius:16px'), 'no 16px radius remains in the stylesheet');
   assert.ok(css.includes('--brand:#0066cc'), 'the blue is the primary-action color');
   assert.ok(css.includes('--ink:#191e3b'), 'ink is the dark navy text');
-  assert.ok(css.includes('--line:#dfe0e4'), 'hairlines are the cool grey');
+  assert.ok(css.includes('--line:#e4ded2'), 'hairlines are warm');
   // Tokens — section headings 24px, sections 48px apart.
   assert.ok(css.includes('section h2{font-size:24px'), 'section headings are 24px');
   assert.ok(css.includes('.home-section{padding:48px 0}'), 'sections sit 48px apart');

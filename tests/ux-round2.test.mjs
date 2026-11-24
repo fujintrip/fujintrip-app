@@ -24,15 +24,22 @@ const searchResultsSrc = readFileSync(join(root, 'components/SearchResults.tsx')
 const homeSectionsSrc = readFileSync(join(root, 'components/HomeSections.tsx'), 'utf8');
 const duffelSrc = readFileSync(join(root, 'lib/duffel.ts'), 'utf8');
 
-// --- P0-1: white hero -----------------------------------------------------
+// --- P0-1: photo hero -----------------------------------------------------
+// Wind & wander (Nov 24, 2026): the white hero is gone — the hero is
+// a full-bleed photo with a scrim, the brand line as the headline,
+// and the search floating over it. The round-2 structure (one
+// headline, one line, AI as a quiet text link, trust line inside
+// the hero) stays; only the canvas changes.
 
-test('round 2 P0-1: the hero is white, one question, one line, AI as a quiet text link', () => {
-  assert.ok(css.includes('.hero-booking{background:var(--card)}'), 'the hero is the white canvas');
-  assert.ok(!css.includes('.hero-photo'), 'no photo-hero style remains');
-  assert.ok(css.includes('.hero-booking-inner h1{color:var(--ink);font-size:40px;font-weight:700'), 'the hero headline is 40px at weight 700');
-  assert.ok(fujinAppSrc.includes('className="hero-booking"'), 'the hero is the plain white section');
-  assert.ok(!fujinAppSrc.includes('hero-photo'), 'the hero carries no photo class');
-  assert.ok(!fujinAppSrc.includes('backgroundImage: `url('), 'no hero background image');
+test('round 2 P0-1: the hero is a photo, one headline, one line, AI as a quiet text link', () => {
+  assert.ok(css.includes('.hero-booking{position:relative;overflow:hidden;background:#0e1622}'), 'the hero is a photo stage');
+  assert.ok(css.includes('.hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}'), 'the photo fills the hero');
+  assert.ok(css.includes('.hero-scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,12,22,.62) 0%,rgba(8,12,22,.30) 42%,rgba(8,12,22,.60) 100%)}'), 'a real scrim carries the white text');
+  assert.ok(css.includes('.hero-booking-inner h1{color:#fff;font-size:clamp(38px,8.5vw,72px);font-weight:800'), 'the hero headline is big white display type');
+  assert.ok(fujinAppSrc.includes('className="hero-booking"'), 'the hero section renders');
+  assert.ok(fujinAppSrc.includes('className="hero-photo"'), 'the hero carries the photo');
+  assert.ok(fujinAppSrc.includes('<h1>Travel globally.<br />Act locally.</h1>'), 'the headline is the brand line');
+  assert.ok(!fujinAppSrc.includes('backgroundImage: `url('), 'no hero background image — the photo is an <img>');
   assert.ok(fujinAppSrc.includes('Named for Fujin, Japan’s wind god — ride the wind, pay less.'), 'the eyebrow names the wind god');
   assert.ok(fujinAppSrc.includes('One trip, one price, one plan — flights, stay, car and activities included. All-in, no hidden fees.'), 'one line, one price, one plan');
   assert.ok(fujinAppSrc.includes('Not sure yet? <a href="/chat">Ask Fujin AI →</a>'), 'AI is a quiet text link, not a button');
@@ -42,12 +49,12 @@ test('round 2 P0-1: the hero is white, one question, one line, AI as a quiet tex
 
 // --- P0-2: typography -----------------------------------------------------
 
-test('round 2 P0-2: Plus Jakarta Sans display, one scale — hero 40, sections 32, cards 20, prices 24, body 16', () => {
+test('round 2 P0-2: Plus Jakarta Sans display, one scale — hero 38–72, sections 32, cards 20, prices 24, body 16', () => {
   const layout = readFileSync(join(root, 'app/layout.tsx'), 'utf8');
   assert.ok(layout.includes('Plus_Jakarta_Sans'), 'the display face loads via next/font/google');
   assert.ok(!layout.includes('DM_Sans'), 'DM Sans is dropped');
   assert.ok(css.includes("--font-display:'Plus Jakarta Sans'"), 'the display token is Plus Jakarta Sans');
-  assert.ok(css.includes('.hero-booking-inner h1{color:var(--ink);font-size:40px;font-weight:700'), 'the hero headline is 40px at weight 700');
+  assert.ok(css.includes('.hero-booking-inner h1{color:#fff;font-size:clamp(38px,8.5vw,72px);font-weight:800'), 'the hero headline scales 38–72px at weight 800');
   assert.ok(css.includes('.home-section h2{margin:0 0 6px;font-size:32px;font-weight:800}'), 'section titles are 32px/800');
   assert.ok(css.includes('.pkg-body h3{margin:10px 0 2px;font-size:20px'), 'card titles are 20px');
   assert.ok(css.includes('.card .body h3{font-size:20px'), 'destination card titles are 20px');
@@ -222,8 +229,8 @@ test('round 2 P1: 390px — grids stack, the bar stacks, inputs stay 16px, no ho
   assert.ok(mobile.includes('body{overflow-x:clip}'), 'no horizontal scroll on a phone');
   assert.ok(css.includes('.sw-bar{flex-direction:column'), 'the pill bar stacks on a phone');
   assert.ok(css.includes('.sw-suggestions{left:0;right:0;width:auto;min-width:0}'), 'the dropdown goes full-width on a phone');
-  assert.ok(css.includes('.grid>.card{grid-column:span 12}'), 'destination cards are full-width at ≤640px');
+  assert.ok(css.includes('.row-scroll>.card{flex:0 0 min(340px,86vw);scroll-snap-align:start}'), 'destination cards are 86vw scroll cards on a phone');
   assert.ok(css.includes('.pkg-card{grid-column:span 12}'), 'package cards are full-width at ≤640px');
   assert.ok(css.includes('.feature-photo{grid-column:span 12;min-height:240px}'), 'the feature photo stacks above its body');
-  assert.ok(css.includes('.hero-booking-inner{padding:32px 16px 28px}'), 'the white hero stays tight on a phone');
+  assert.ok(css.includes('.hero-booking-inner{padding:56px 16px 40px}'), 'the photo hero keeps its air on a phone');
 });

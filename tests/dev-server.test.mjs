@@ -65,17 +65,23 @@ test('chat page 200 and renders the chat panel', async () => {
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
 });
 
-test('homepage: white hero + search widget with 7 tabs, destinations, hero trust line, exactly one Plan with AI pill, no results before a search (Clean & trusted, Nov 22 2026)', async () => {
+test('homepage: photo hero + search widget with 7 tabs, destinations, hero trust line, exactly one Plan with AI pill, no results before a search (Wind & wander, Nov 24 2026)', async () => {
   const r = await fetch(`${BASE}/`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // White hero (Clean & trusted, Nov 22 2026): the search is the
-  // hero — no photo, no scrim, no rotator, no dots.
-  assert.ok(html.includes('Where to?'), 'hero asks Where to?');
+  // Photo hero (Wind & wander, Nov 24 2026): a full-bleed photo
+  // with a scrim, the brand line as the headline, the search
+  // floating over it — no rotator, no dots. "Where to?" lives on
+  // as the search field's placeholder.
+  assert.ok(html.includes('Travel globally.'), 'hero headline names the brand line');
+  assert.ok(html.includes('Act locally.'), 'hero headline carries the second line');
+  assert.ok(html.includes('Where to?'), 'the search field asks Where to?');
   assert.ok(!html.includes('hero-rotator'), 'no hero rotator');
   assert.ok(!html.includes('hero-dots'), 'no hero dot indicators');
-  assert.ok(!html.includes('hero-photo'), 'the hero carries no photo class');
-  assert.ok(!html.includes('background-image:url('), 'no hero background image');
+  assert.ok(html.includes('hero-photo'), 'the hero carries the photo');
+  assert.ok(html.includes('photo-1514282401047-d79a71a590e8'), 'the hero photo is the Maldives, from the verified pool');
+  assert.ok(html.includes('hero-scrim'), 'the hero carries the scrim');
+  assert.ok(!html.includes('background-image:url('), 'no hero background image — the photo is an <img>');
   assert.ok(html.includes('Named for Fujin'), 'the hero eyebrow renders');
   assert.ok(html.includes('One trip, one price, one plan'), 'the hero sub renders');
   // The search widget: 7 category tabs switch the SEARCH FORM.
@@ -135,17 +141,20 @@ test('homepage: white hero + search widget with 7 tabs, destinations, hero trust
   assert.ok(html.includes('My Trips'), 'My Trips stays on the homepage');
 });
 
-test('homepage hero is white: search is the hero, headline + sub + widget render (Clean & trusted, Nov 22 2026)', async () => {
+test('homepage hero is a photo: the photo, headline + sub + widget render (Wind & wander, Nov 24 2026)', async () => {
   const r = await fetch(`${BASE}/`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-  // The hero is the white canvas with the search on it — no photo,
-  // no scrim, no pills, no cycler.
+  // The hero is a full-bleed photo with a scrim — the search floats
+  // over it. No pills, no cycler, no rotator, no dots.
   assert.ok(html.includes('hero-booking'), 'hero section renders');
-  assert.ok(!html.includes('hero-photo'), 'the hero carries no photo class');
-  assert.ok(!html.includes('background-image:url('), 'no hero background image');
+  assert.ok(html.includes('hero-photo'), 'the hero carries the photo');
+  assert.ok(html.includes('hero-scrim'), 'the hero carries the scrim');
+  assert.ok(!html.includes('background-image:url('), 'no hero background image — the photo is an <img>');
   assert.ok(!html.includes('hero-pill'), 'no destination pills in the hero');
   assert.ok(!html.includes('hero-arrow'), 'no photo controls in the hero');
-  assert.ok(html.includes('Where to?'), 'hero headline renders');
+  assert.ok(html.includes('Travel globally.'), 'hero headline renders');
+  assert.ok(html.includes('Act locally.'), 'hero headline second line renders');
+  assert.ok(html.includes('Where to?'), 'the search field asks Where to?');
   assert.ok(html.includes('One trip, one price, one plan'), 'hero sub renders');
   assert.ok(html.includes('Not sure yet?'), 'the quiet AI text link renders');
   assert.ok(html.includes('All-in prices · No hidden fees'), 'the hero trust line renders');
@@ -156,7 +165,8 @@ test('homepage hero is white: search is the hero, headline + sub + widget render
   assert.ok(!html.includes('aria-label="Show Kyoto photo"'), 'no Kyoto dot');
   assert.ok(!html.includes('aria-label="Show Prague photo"'), 'no Prague dot');
   // The Kyoto photo still renders on the homepage — but only as the
-  // Kyoto destination card, not as a hero background.
+  // Kyoto destination card, not as the hero photo (photo hero,
+  // Nov 24, 2026).
   assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto card photo still renders');
 });
 
@@ -1273,12 +1283,11 @@ test('popular destinations (direction v3): 6 cards, no expander, per-traveler pr
   assert.ok(!popularHtml.includes('Japan'), 'Japan is not repeated in Popular');
   // A card carries the per-traveler Best value price line, never a
   // counts line or a guessed rate. Portugal is $2,900 for 2.
-  // (Clean & trusted, Nov 22, 2026: the price sits in the white
-  // body below the photo — re-applying the audit-round gap-10 call
-  // that the Dribbble makeover had reversed. "from $1,450" and "per
-  // traveler" sit in the one price line in the body.)
+  // (Wind & wander, Nov 24, 2026: the price sits in the overlay on
+  // the photo's bottom scrim. "from $1,450" and "per traveler" sit
+  // in the one price line in the overlay.)
   assert.ok(html.includes('from $1,450'), 'Portugal card carries the per-traveler price');
-  assert.ok(html.includes('class="result-price"'), 'the price is the price line in the card body');
+  assert.ok(html.includes('class="result-price"'), 'the price is the price line in the overlay');
   assert.ok(html.includes('Best value · 2 travelers'), 'the price line names the tier');
   assert.ok(!html.includes('Best value · 2 travelers · planning estimate'), 'no per-card planning-estimate label — the widget line covers the page');
   // The card action opens the trip — it never seeds the chat, and
@@ -1424,9 +1433,10 @@ test('search widget: place fields are combobox type-aheads, the datalist is gone
 });
 
 test('hero alt: the chat hero photo describes the Yasaka pagoda street, never torii gates', async () => {
-  // The homepage hero is white now (Nov 15, 2026) — the Kyoto photo
-  // lives on /chat, where its alt must still describe the actual
-  // photo: the Yasaka pagoda street at sunset, not torii gates.
+  // The homepage hero is the Maldives now (Wind & wander,
+  // Nov 24, 2026) — the Kyoto photo lives on /chat, where its alt
+  // must still describe the actual photo: the Yasaka pagoda street
+  // at sunset, not torii gates.
   const r = await fetch(`${BASE}/chat`);
   const html = (await r.text()).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
   assert.ok(html.includes('Yasaka pagoda street at sunset, Kyoto'), 'hero alt describes the actual photo');
@@ -1637,8 +1647,8 @@ test('images: no img on / or /chat is display:none — the lazy + display:none d
       assert.ok(!/display\s*:\s*none/i.test(tag), `${path}: no img is display:none — ${tag.slice(0, 120)}`);
     }
     // The Kyoto photo URL is still present on the homepage — as the
-    // Kyoto destination card, not a hero background (white hero,
-    // Nov 15, 2026).
+    // Kyoto destination card, not the hero photo (photo hero,
+    // Nov 24, 2026).
     if (path === '/') {
       assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'Kyoto card photo renders on the homepage');
     }

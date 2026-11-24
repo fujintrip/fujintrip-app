@@ -41,6 +41,12 @@ import { Icon } from './icons';
 const CHAT_SEED_KEY = 'fujintrip-chat-seed';
 const PENDING_MESSAGE_KEY = 'fujintrip-pending-message';
 
+// Wind & wander (Nov 24, 2026): the hero photo is the Maldives
+// from the verified pool in lib/data.ts — the one global
+// destination no homepage card uses, so the hero never repeats a
+// card photo. Rendered as an <img>, never a CSS background.
+const HERO_PHOTO = GLOBAL_DESTINATIONS.find((d) => d.name === 'Maldives')?.image ?? null;
+
 // UX direction, Nov 19 2026 — P1-1, section plan rebuilt Nov 21
 // (round 2, P0-4): the homepage is six bands (header, hero + search,
 // Trip of the week, Ready-made trips, Destinations with the hidden
@@ -648,9 +654,9 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // switches the widget tab, nothing more.
   const popularEntries = libraryEntries;
   const visibleEntries = popularEntries.slice(0, 6);
-  // This week's trip (Clean & trusted, Nov 22 2026): the white
-  // hero carries no photo — the search is the hero. The week's
-  // trip photo fronts the Trip-of-the-week feature row below.
+  // This week's trip (Wind & wander, Nov 24 2026): the hero photo
+  // is the Maldives. The week's trip photo fronts the
+  // Trip-of-the-week feature row below.
   const weekTrip = tripOfTheWeek();
   // The reels composer panel — opened from the trip-card strip, the
   // feed, or a booked trip in My Trips. It lives in both variants:
@@ -660,7 +666,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
       <ReelComposer trips={trips} prefillDestination={composerDest} onPosted={() => {}} onClose={() => setComposerOpen(false)} />
     </div>
   );
-  // Trip overview figures (Clean & trusted, Nov 22 2026): sums and
+  // Trip overview figures (Wind & wander, Nov 24 2026): sums and
   // counts from this device's saved trips only — a trip without a
   // saved total contributes nothing, never a guess. The progress
   // bar fills with the share of saved trips booked. An empty My
@@ -676,7 +682,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // <details> anymore.
   const myTripsBody = (
     <>
-          {/* Trip overview (Clean & trusted, Nov 22 2026): a clean
+          {/* Trip overview (Wind & wander, Nov 24 2026): a clean
               white budget card with a simple progress bar, then a
               2×2 grid of white overview cards with thin circular
               icons and bold numbers. */}
@@ -934,16 +940,20 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           myTripsHref="/account"
         />
       )}
-      {/* White hero (Clean & trusted, Nov 22 2026): the search IS
-          the hero — white canvas, one question, one line, and AI as
-          a quiet text link, not a button. The trust line lives
-          inside the hero now, not as a standalone strip. No photo,
-          no scrim, no pills, no cycler. */}
+      {/* Photo hero (Wind & wander, Nov 24 2026): a full-bleed
+          destination photo with a real scrim — the headline sits on
+          the photo in white, and the search bar floats over it as a
+          white card. "Where to?" lives on as the search field's
+          placeholder. No rotator, no dots, no pills, no cycler. */}
       {variant === 'home' && (
         <section className="hero-booking">
+          {HERO_PHOTO ? (
+            <img className="hero-photo" src={HERO_PHOTO} alt="Maldives — turquoise lagoon and white sand" />
+          ) : null}
+          <div className="hero-scrim" aria-hidden="true" />
           <div className="wrap hero-booking-inner">
             <p className="hero-booking-eyebrow">Named for Fujin, Japan’s wind god — ride the wind, pay less.</p>
-            <h1>Where to?</h1>
+            <h1>Travel globally.<br />Act locally.</h1>
             <p className="hero-booking-sub">One trip, one price, one plan — flights, stay, car and activities included. All-in, no hidden fees.</p>
             <SearchWidget
               tab={widgetTab}
@@ -1008,7 +1018,7 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
           <p className="eyebrow">Where to go</p>
           <h2>Popular destinations</h2>
           <p className="sub">Open a trip to see the plan — Best value per traveler.</p>
-          <div className="grid">
+          <div className="row-scroll">
             {visibleEntries.map((e) => {
               // Saved trips & fares (roadmap, Nov 21 2026 — F1): the
               // total is captured in a const so the narrowing survives
@@ -1018,15 +1028,18 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               const saved = perTraveler !== null && savedKeys.has(tripSavedKey(e.name, perTraveler));
               return (
               <article className="card dest-card" key={e.key}>
-                <PhotoCarousel photos={e.photos} alt={e.name} />
+                <PhotoCarousel photos={e.photos} alt={e.name} overlay={(
+                  <div className="dest-overlay">
+                    {/* Wind & wander (Nov 24, 2026): name + price
+                        overlaid on the photo's bottom scrim — one
+                        price per card, shown once, on the photo. */}
+                    <h3><Icon name="pin" size={18} /> {e.name}{e.country ? `, ${e.country}` : ''}</h3>
+                    {total !== null && (
+                      <p className="result-price">from ${Math.round(total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
+                    )}
+                  </div>
+                )} />
                 <div className="body">
-                  {/* Clean & trusted (Nov 22, 2026): the name + from-price
-                      sit in the white body below the photo — never
-                      overlaid on it. One price per card. */}
-                  <h3><Icon name="pin" size={18} /> {e.name}{e.country ? `, ${e.country}` : ''}</h3>
-                  {total !== null && (
-                    <p className="result-price">from ${Math.round(total / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
-                  )}
                   <div className="card-top">
                     <span className="pill">{e.tag}</span>
                     <ShareMenu url={sharePathFor('destination', e.name)} text={shareTextFor('destination', e.name)} buttonClassName="linklike" />
@@ -1061,12 +1074,12 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
             <p className="eyebrow">Hidden gems</p>
             <h3>Three US places worth the detour</h3>
             <p className="sub">Explored properly, with a full plan, not just a photo.</p>
-            <div className="grid">
+            <div className="row-scroll">
               {HIDDEN_GEMS.map((d) => {
               const gemPhoto = homepagePhotos.get(`gem:${d.name}`)?.[0] ?? null;
               return (
               <article className="card dest-card" key={d.name}>
-                <div>
+                <div className="dest-photo">
                   {gemPhoto ? (
                     <SafeImg src={gemPhoto} alt={d.name} label={d.name} />
                   ) : (
@@ -1074,14 +1087,16 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
                       <span>{d.name}</span>
                     </div>
                   )}
+                  {/* Wind & wander (Nov 24, 2026): name + price
+                      overlaid on the photo's bottom scrim. */}
+                  <div className="dest-overlay">
+                    <h3><Icon name="pin" size={18} /> {d.name}, {d.country}</h3>
+                    {cardInfo[d.name]?.total !== undefined && cardInfo[d.name]?.total !== null && (
+                      <p className="result-price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
+                    )}
+                  </div>
                 </div>
                 <div className="body">
-                  {/* Clean & trusted (Nov 22, 2026): name + price in
-                      the white body, never overlaid on the photo. */}
-                  <h3><Icon name="pin" size={18} /> {d.name}, {d.country}</h3>
-                  {cardInfo[d.name]?.total !== undefined && cardInfo[d.name]?.total !== null && (
-                    <p className="result-price">from ${Math.round((cardInfo[d.name]?.total ?? 0) / 2).toLocaleString()} <span className="plan-muted">per traveler</span></p>
-                  )}
                   <div className="card-top">
                     <span className="pill">{d.tag}</span>
                     <ShareMenu url={sharePathFor('destination', d.name)} text={shareTextFor('destination', d.name)} buttonClassName="linklike" />

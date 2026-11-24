@@ -232,7 +232,7 @@ export function LocalVoicesTeaser({
           const photo = photoByPlace ? photoByPlace.get(p) ?? null : voicePhoto(p);
           return (
             <article className="card dest-card" key={p}>
-              <div>
+              <div className="dest-photo">
                 {photo ? (
                   <SafeImg src={photo} alt={p} label={p} />
                 ) : (
@@ -240,11 +240,13 @@ export function LocalVoicesTeaser({
                     <span>{p}</span>
                   </div>
                 )}
+                {/* Wind & wander (Nov 24, 2026): the name overlaid
+                    on the photo's bottom scrim. */}
+                <div className="dest-overlay">
+                  <h3><Icon name="pin" size={18} /> {p}</h3>
+                </div>
               </div>
               <div className="body">
-                {/* Clean & trusted (Nov 22, 2026): the name sits in
-                    the white body below the photo, never overlaid. */}
-                <h3><Icon name="pin" size={18} /> {p}</h3>
                 <span className="pill">Local voices</span>
                 <p className="plan-muted">{bestTimeLine(p)}</p>
                 {guide ? (

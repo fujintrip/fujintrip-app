@@ -133,7 +133,6 @@ export function TripOfTheWeekFeature({
   const shownPhoto = photo === undefined ? weekTrip.photo : photo;
   return (
     <section className="home-section" id="trip-of-the-week" aria-label="Trip of the week">
-      <p className="eyebrow">Trip of the week</p>
       <div className="feature-row">
         <div className="feature-photo">
           {shownPhoto ? (
@@ -143,6 +142,16 @@ export function TripOfTheWeekFeature({
               <span>{weekTrip.destination}</span>
             </div>
           )}
+          {/* Wind & wander (Nov 24, 2026): the week's trip rides on
+              the photo — eyebrow, destination and price overlaid on
+              the bottom scrim, editorial style. */}
+          <div className="feature-overlay">
+            <p className="feature-eyebrow">Trip of the week</p>
+            <h2>{weekTrip.destination}</h2>
+            <p className="pkg-price">
+              from ${price.perTraveler.toLocaleString()} <span>per traveler</span>
+            </p>
+          </div>
         </div>
         <div className="feature-body">
           <div className="card-top">
@@ -153,7 +162,6 @@ export function TripOfTheWeekFeature({
               buttonClassName="linklike"
             />
           </div>
-          <h2>{weekTrip.destination}</h2>
           <p className="pkg-route">{weekTrip.stops.join(' → ')}</p>
           <p className="pkg-meta">
             <Icon name="calendar" size={15} /> {weekTrip.nights} nights · {weekTrip.stops.length}{' '}
@@ -167,9 +175,6 @@ export function TripOfTheWeekFeature({
               </li>
             ))}
           </ol>
-          <p className="pkg-price">
-            from ${price.perTraveler.toLocaleString()} <span>per traveler</span>
-          </p>
           {price.source && (
             <p className="plan-muted">
               {price.label} · {price.source}
