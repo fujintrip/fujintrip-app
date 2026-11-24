@@ -6,10 +6,13 @@
 // cause was SafeImg/PhotoCarousel hiding lazy images with
 // display:none, which never fetches. This test pins the URLs so a
 // dead photo cannot hide behind that fix.)
-// The Kyoto photo (HERO_PHOTO) is the /chat hero now — the homepage
-// hero went white on Nov 15, 2026 — but the same photo ID also
-// backs the Kyoto destination card, so it still renders on both
-// pages and stays in this list.
+// The Kyoto photo is the /chat S0 canvas photo — the homepage hero
+// went white on Nov 15, 2026 — but the same photo ID also backs the
+// Kyoto destination card, so it still renders on both pages and stays
+// in this list. Chat rebuild (Nov 24, 2026): the photo comes from the
+// verified pool in lib/data.ts — the chat no longer defines its own
+// hardcoded HERO_PHOTO const (the old S0 hero's Unsplash URL must not
+// survive).
 // Run: node --no-warnings --import ./tests/register-loader.mjs --test tests/images.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,14 +23,15 @@ import { discoveryDestinations } from '../lib/discovery.ts';
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
-// The hero photo lives in components/FujinChat.tsx (HERO_PHOTO) — read
-// it from source so the test checks the exact URL the page renders
-// without importing the whole Chat component.
-function heroPhotoUrl() {
+// The S0 canvas photo is the Kyoto pool photo — the chat reads it from
+// GLOBAL_DESTINATIONS, never from its own hardcoded URL.
+function chatPhotoUrl() {
+  const kyoto = GLOBAL_DESTINATIONS.find((d) => d.name === 'Kyoto');
+  assert.ok(kyoto?.image, 'the Kyoto pool photo exists in lib/data.ts');
   const src = readFileSync(new URL('../components/FujinChat.tsx', import.meta.url), 'utf8');
-  const m = src.match(/HERO_PHOTO = '(https:\/\/[^']+)'/);
-  assert.ok(m, 'HERO_PHOTO is defined in FujinChat.tsx');
-  return m[1];
+  assert.ok(!src.includes('HERO_PHOTO'), 'the chat no longer defines a hardcoded HERO_PHOTO');
+  assert.ok(src.includes("GLOBAL_DESTINATIONS.find((d) => d.name === 'Kyoto')"), 'the S0 canvas photo comes from the verified pool');
+  return kyoto.image;
 }
 
 async function fetchImage(url) {
@@ -40,14 +44,19 @@ async function fetchImage(url) {
   return buf;
 }
 
-test('site photos: chat hero + every destination card image returns real image bytes', async () => {
+test('site photos: chat S0 canvas photo + every destination card image returns real image bytes', async () => {
+  // The chat canvas photo IS the Kyoto pool photo, so it appears twice
+  // in the list — dedupe before fetching, or the distinct-bytes check
+  // below would flag the same photo fetched twice as a placeholder.
   const urls = [
-    heroPhotoUrl(),
-    ...GLOBAL_DESTINATIONS.map((d) => d.image),
-    ...HIDDEN_GEMS.map((d) => d.image),
-    ...Object.values(CITY_PHOTOS),
+    ...new Set([
+      chatPhotoUrl(),
+      ...GLOBAL_DESTINATIONS.map((d) => d.image),
+      ...HIDDEN_GEMS.map((d) => d.image),
+      ...Object.values(CITY_PHOTOS),
+    ]),
   ];
-  assert.ok(urls.length >= 21, `expected the chat hero + destination + city photos, got ${urls.length}`);
+  assert.ok(urls.length >= 21, `expected the chat canvas photo + destination + city photos, got ${urls.length}`);
   const bufs = [];
   for (const url of urls) bufs.push(await fetchImage(url));
   // No two photos are byte-identical — a placeholder or error image

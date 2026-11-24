@@ -406,7 +406,7 @@ test('mobile: phone rules — no zoom, no horizontal scroll, wrapping bar, fitti
   assert.ok(mobile.includes('.results-bar{flex-wrap:wrap'), 'the results bar wraps on a phone');
   assert.ok(mobile.includes('#results{scroll-margin-top:76px}'), 'the scroll target clears the sticky header (the bar is static now)');
   assert.ok(mobile.includes('.site-theme{padding:10px 12px}'), 'the header fits a 360px phone');
-  assert.ok(mobile.includes('.chatmap-s0 .hero-input{flex-wrap:wrap}'), 'the S0 input stacks on a narrow phone');
+  assert.ok(mobile.includes('.chat-s0 .hero-input{flex-wrap:wrap}'), 'the S0 input stacks on a narrow phone');
 });
 
 test('mobile: the filter checkbox still sits next to its label (defect, Nov 15 2026)', () => {

@@ -211,19 +211,26 @@ test('(c) Edit search restores the current query and its tab, then focuses the f
 
 // --- (d) + (h) the chat form -----------------------------------------------
 
-test('(d) the chat form’s date fields are wide enough for the full year', () => {
-  const wide = fujinChatSrc.match(/style=\{\{ minWidth: 180 \}\}/g) ?? [];
-  assert.ok(wide.length >= 2, `both date fields (SearchForm + Check my flight) carry minWidth 180, found ${wide.length}`);
+test('(d) the chat has no date fields anymore — the form left the chat, so the cramped chat date fields are gone', () => {
+  // Chat rebuild (Nov 24, 2026): the chat is text-only now; the
+  // 7-category SearchForm lives on the homepage/search, not inside
+  // the chat. The rendered-check defect (date fields too narrow for
+  // the full year) cannot recur in the chat — and the homepage pill
+  // bar's date fields sit in flexible fields, never squeezed.
+  assert.ok(!fujinChatSrc.includes('type="date"'), 'no date input survives in the chat');
+  assert.ok(!fujinChatSrc.includes('minWidth: 180'), 'no minWidth-180 date-field fix survives in the chat');
+  assert.ok(searchWidgetSrc.includes('function DateField'), 'the homepage pill bar still has its date fields');
+  assert.ok(css.includes('.sw-bar .sw-field{flex:1 1 150px;min-width:150px'), 'the pill-bar fields flex wide enough for a full date');
 });
 
-test('(h) the chat form’s From/To are PlaceFields with suggestions, like the pill bar', () => {
-  assert.ok(fujinChatSrc.includes("import PlaceField from '../components/PlaceField';"), 'the chat imports PlaceField');
-  const searchForm = fujinChatSrc.slice(fujinChatSrc.indexOf('export function SearchForm'));
-  assert.ok(searchForm.includes('<PlaceField'), 'SearchForm renders PlaceField fields');
-  assert.ok(searchForm.includes('id="chat-from" label="From"'), 'the From field keeps its label');
-  assert.ok(searchForm.includes('id="chat-to" label="Destination"'), 'the To field keeps its label');
-  assert.ok(searchForm.includes('placeholder="To / destination"'), 'the To field keeps its placeholder');
-  assert.ok(searchForm.includes('CITY_IATA[from] ?? from'), 'a picked city name resolves to its IATA code before the API call — "New York" must not arrive as "NEW"');
-  assert.ok(searchForm.includes('CITY_IATA[to] ?? to'), 'the destination resolves the same way');
+test('(h) the search form’s From/To are PlaceFields with suggestions — in the pill bar, not the chat', () => {
+  // Chat rebuild (Nov 24, 2026): SearchForm left the chat; the
+  // From/To PlaceFields live in the homepage SearchWidget (the pill
+  // bar) and nowhere else.
+  assert.ok(!fujinChatSrc.includes('PlaceField'), 'the chat no longer imports PlaceField');
+  assert.ok(searchWidgetSrc.includes("import PlaceField from './PlaceField';"), 'the pill bar imports PlaceField');
+  assert.ok(searchWidgetSrc.includes('<PlaceField'), 'the pill bar renders PlaceField fields');
+  assert.ok(searchWidgetSrc.includes('id="flights-from" label="Flying from"'), 'the From field keeps its label');
+  assert.ok(searchWidgetSrc.includes('label="Flying to"'), 'the To field keeps its label');
   assert.ok(css.includes('.chat-place-wrap{position:relative;flex:1 1 160px;min-width:160px}'), 'the dropdown anchors to a positioned wrapper');
 });

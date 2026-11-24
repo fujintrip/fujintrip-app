@@ -142,7 +142,7 @@ test('wind trip overview: a white budget card with a simple progress bar', () =>
 test('wind type: restrained sizes, bold totals, no thin light headlines', () => {
   assert.ok(!css.includes('font-weight:300'), 'no thin 300-weight type remains');
   assert.ok(css.includes('clamp(38px,8.5vw,72px)'), 'the hero headline scales 38–72px');
-  assert.ok(css.includes('.chatmap-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px)'), 'the S0 greeting is restrained at 32–40px');
+  assert.ok(css.includes('.chat-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px)'), 'the S0 greeting is restrained at 32–40px');
   assert.ok(css.includes('.trippanel-total strong{display:block;'), 'the trip panel total exists');
   assert.ok(css.includes('font-size:28px;font-weight:700'), 'running totals are bold');
 });

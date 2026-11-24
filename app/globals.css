@@ -1368,3 +1368,89 @@ button.continue-card:hover{border-color:var(--ink)}
 .overview-label{font-size:13px;color:var(--muted);margin:24px 0 0}
 .overview-num{font-family:var(--font-display);font-size:32px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:0;line-height:1.1}
 @media(max-width:900px){.trip-overview{grid-template-columns:1fr}}
+
+/* Fujin AI chat — rebuilt from scratch (Nov 24, 2026). Split screen:
+   chat column left, visual canvas right. The chat column is ONLY a
+   chat; the canvas carries the trip (summary, then the plan artefact).
+   On a phone the canvas stacks below the chat — no zone switcher, no
+   hidden content. The old .chatmap rules above stay for now (dead CSS
+   from the previous layout) and are not referenced by the new chat. */
+.chat-split{position:relative;display:grid;grid-template-columns:minmax(360px,420px) minmax(0,1fr);gap:16px;height:calc(100dvh - 84px);min-height:560px}
+.chat-split .chatcol{display:flex;flex-direction:column;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
+.chat-split .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
+.chat-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px);line-height:1.15;font-weight:700}
+.chat-split .msg{margin-bottom:12px}
+.chat-split .bubble{border-radius:var(--r-md);padding:10px 14px;line-height:1.55}
+.chat-split .bubble.user{background:var(--accent-soft);margin-left:32px}
+.chat-split .bubble.ai{background:var(--surface);border:1px solid var(--line)}
+.chat-split .bubble.greeting{background:transparent;border:0;padding:0}
+.chat-split .bubble.streaming{background:var(--surface);border:1px solid var(--line)}
+.chat-split .msg-tips p{font-size:13px;color:var(--muted);margin:4px 0 0}
+.chat-split .thinking-status{font-size:13px;color:var(--muted);margin:0 0 12px}
+.chat-split .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.chat-split .chips .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer}
+.chat-split .chips .chip:hover{border-color:var(--brand)}
+.chat-split .chips .chip:disabled{opacity:.5;cursor:default}
+.chat-split .hero-input{display:flex;gap:8px;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:8px;box-shadow:0 8px 28px rgba(13,16,35,.08)}
+.chat-split .hero-input:focus-within{border-color:var(--ink)}
+.chat-split .hero-input input{flex:1 1 auto;min-width:0;min-height:56px;font-size:17px;border:0;background:transparent}
+.chat-split .hero-input .primary{min-height:56px;padding:0 28px;font-size:16px;border-radius:var(--r-sm);white-space:nowrap}
+.chat-split .chat-hint{font-size:13px;color:var(--muted);margin:10px 0 0}
+.chat-split .canvas{overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:16px;padding-right:4px}
+.chat-split .canvas-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+.chat-split .canvas-welcome h2{font-family:var(--font-display);font-size:28px;font-weight:700;margin:16px 0 8px}
+.chat-split .canvas-welcome p{color:var(--muted);line-height:1.6;margin:0}
+.chat-split .s0-photo{border-radius:var(--r-lg);overflow:hidden;aspect-ratio:4/3}
+.chat-split .s0-photo img,.chat-split .s0-photo .img-fallback,.chat-split .s0-photo .img-loading{width:100%;height:100%;object-fit:cover;border-radius:var(--r-lg)}
+.chat-split .summary-photo{aspect-ratio:16/9;overflow:hidden}
+.chat-split .summary-photo img,.chat-split .summary-photo .img-fallback,.chat-split .summary-photo .img-loading{width:100%;height:100%;object-fit:cover}
+.chat-split .summary-card h2,.chat-split .plan-head h2{font-family:var(--font-display);font-size:24px;font-weight:700;margin:16px 16px 8px}
+.chat-split .summary-rows{display:flex;flex-direction:column}
+.chat-split .summary-line{display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line-soft);padding:12px 16px;cursor:pointer;font-size:15px}
+.chat-split .summary-line:hover{background:var(--surface)}
+.chat-split .summary-line:disabled{cursor:default}
+.chat-split .summary-key{color:var(--muted);flex:none}
+.chat-split .summary-val{font-weight:600;text-align:right}
+.chat-split .summary-missing{font-size:13px;color:var(--muted);margin:0;padding:12px 16px;border-top:1px solid var(--line-soft)}
+.chat-split .confirm-card{padding:16px}
+.chat-split .confirm-card h3{font-size:18px;font-weight:700;margin:0 0 6px}
+.chat-split .confirm-card p{color:var(--muted);margin:0 0 14px;line-height:1.5}
+.chat-split .confirm-actions{display:flex;flex-wrap:wrap;gap:8px}
+.chat-split .map-card{min-height:320px}
+.chat-split .map-card .map-skeleton{height:320px}
+.chat-split .plan-card{padding:16px}
+.chat-split .plan-head h2{margin:0 0 4px}
+.chat-split .plan-route{color:var(--muted);margin:0 0 8px}
+.chat-split .plan-total{font-size:18px;margin:0 0 4px}
+.chat-split .fare-label{font-size:13px;color:var(--muted);margin:0 0 4px}
+.chat-split .plan-dates{font-size:13px;color:var(--muted);margin:0 0 12px}
+.chat-split .compare{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 16px}
+.chat-split .compare .box{display:flex;flex-direction:column;gap:4px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px;cursor:pointer}
+.chat-split .compare .box.chosen{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand)}
+.chat-split .compare .box strong{font-size:15px}
+.chat-split .compare .box span{font-size:15px;font-weight:700}
+.chat-split .compare .box .box-note{font-size:12px;font-weight:400;color:var(--muted);line-height:1.4}
+.chat-split .timeline h3,.chat-split .stay-cards h3,.chat-split .flight-block h3,.chat-split .move-list h3{font-size:16px;font-weight:700;margin:16px 0 8px}
+.chat-split .timeline-stop{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line-soft);padding:10px 0;font-size:14px;line-height:1.5}
+.chat-split .timeline-stop span{color:var(--muted)}
+.chat-split .timeline-return{font-size:14px;color:var(--muted);margin:8px 0 0}
+.chat-split .day-strip{display:flex;flex-wrap:wrap;gap:6px;margin:16px 0 0}
+.chat-split .day-btn{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chat-split .day-btn.chosen{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.chat-split .day-detail{border-top:1px solid var(--line-soft);margin-top:12px;padding-top:12px}
+.chat-split .day-detail h3{font-size:16px;font-weight:700;margin:0 0 8px}
+.chat-split .day-detail p{font-size:14px;line-height:1.6;margin:0 0 8px}
+.chat-split .flight-block p,.chat-split .move-list p{font-size:14px;line-height:1.6;margin:0 0 6px}
+.chat-split .stay-card{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line-soft);padding:10px 0;font-size:14px;line-height:1.5}
+.chat-split .stay-card span{color:var(--muted)}
+.chat-split .comparison-line{font-size:14px;font-weight:600;margin:16px 0 0}
+.chat-split .plan-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.chat-split .pdf-notice,.chat-split .action-msg{font-size:14px;line-height:1.5;margin:12px 0 0}
+@media(max-width:900px){
+  .chat-split{grid-template-columns:1fr;height:auto;min-height:0}
+  .chat-split .chatcol{min-height:70dvh}
+  .chat-split .canvas{overflow:visible}
+  .chat-s0 .hero-input{flex-wrap:wrap}
+  .chat-s0 .hero-input .primary{width:100%}
+  .chat-split .compare{grid-template-columns:1fr}
+}

@@ -709,12 +709,15 @@ test('tabs: ?tab=hotels still lands on Stays — deep links override the Flights
   assert.ok(!html.includes('Search flights'), 'the Flights form waits for its tab');
 });
 
-test('chat page: renders the chat panel and exactly one Plan with AI pill', async () => {
+test('chat page: renders the chat panel and no Plan with AI pill — you are already on the chat', async () => {
+  // Chat rebuild (Nov 24, 2026): the duplicated pill left the chat —
+  // the pill is the homepage/site-header entry point, and on /chat it
+  // would link to the page you are already on.
   const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = await r.text();
   assert.ok(html.includes('fujin-chat'), 'chat page renders the chat panel');
-  assert.equal((html.match(/Plan with AI/g) || []).length, 1, 'exactly one Plan with AI pill on /chat');
+  assert.equal((html.match(/Plan with AI/g) || []).length, 0, 'no Plan with AI pill on /chat');
 });
 
 test('tabs: price-check without a key is honestly empty (the API the Flights tab calls)', async () => {
@@ -1138,7 +1141,10 @@ test('chat-first layout: full-bleed shell, app bar, wrapped chips, short placeho
   assert.ok(!html.includes('Family of 4, $2,000'), 'the fourth starter chip is gone');
   // Short placeholders — the old ones were cut off by the Send button.
   assert.ok(html.includes('Try: Bali, 2 travelers, surf and food'), 'the chat placeholder is short');
-  assert.ok(html.includes('Paste a link or article text'), 'the link placeholder is short');
+  // Link import is gone (chat rebuild, Nov 24 2026) — no link card, no
+  // link placeholder anywhere on the chat page.
+  assert.ok(!html.includes('Paste a link or article text'), 'the link placeholder is gone with link import');
+  assert.ok(!html.includes('Start from a link'), 'no Start from a link section on the chat page');
   assert.ok(!html.includes('next spring, $2,000'), 'the old long placeholder is gone');
   // The empty map placeholder is gone (interface round M1) — at S0 the
   // map simply does not render, so there is no "Your trip map" heading.
@@ -1153,13 +1159,16 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  // The chat zone renders, centered (chatmap-s0) — it is the only zone.
+  // The chat column renders in the split layout (chat-s0) — the chat
+  // is the left column, the canvas the right; no zones, no switcher.
   assert.ok(html.includes('chatcol'), 'the chat zone renders');
-  assert.ok(html.includes('chatmap-s0'), 'the S0 chat is centered at max 720px');
-  assert.ok(html.includes('data-zone="chat"'), 'the chat zone is the default');
+  assert.ok(html.includes('chat-split'), 'the split layout renders');
+  assert.ok(html.includes('chat-s0'), 'the S0 split carries the S0 state');
+  assert.ok(!html.includes('data-zone='), 'no zone switcher state in the rebuilt chat');
   // Nothing else renders before its data exists: no trip panel (and no
   // "No trip yet" empty state), no map column, no zone switcher — at S0
-  // there is only one zone, so there is nothing to switch between.
+  // the canvas is only the welcome visual, so there is nothing to
+  // switch between.
   assert.ok(!html.includes('trippanel'), 'the trip panel does not render before a plan exists');
   assert.ok(!html.includes('No trip yet'), 'the panel empty state is gone');
   assert.ok(!html.includes('mapcol'), 'the map zone does not render before a route exists');
@@ -1174,10 +1183,11 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
   // is the chat, not a price.
   assert.ok(!html.includes('appbar-book'), 'the app bar Book action does not render before a plan exists');
   assert.ok(!html.includes('appbar-total'), 'the app bar total does not render before a trip exists');
-  // The 8-tab bar is gone (M2) — one quiet "Prefer forms?" disclosure
-  // under the chat input instead.
+  // The 8-tab bar is gone (M2) — and so is the "Prefer forms?"
+  // disclosure (chat rebuild, Nov 24 2026): the search forms live on
+  // the homepage/search, not inside the chat.
   assert.ok(!html.includes('class="tabs"'), 'the 8-tab bar is gone');
-  assert.ok(html.includes('Prefer forms?'), 'the Prefer forms disclosure renders');
+  assert.ok(!html.includes('Prefer forms?'), 'the Prefer forms disclosure is gone with the chat rebuild');
   // The greeting is a headline, not a bubble (S0) — and since the
   // first-screen rebuild it is a SHORT headline: two lines of promise,
   // not a paragraph explaining the product, and the tiers leave the
@@ -1200,37 +1210,33 @@ test('interface round S0: only the chat renders — panel, map, zonebar, Book al
 });
 
 test('interface round S0 busy budget: at most 10 interactive elements in the first viewport', async () => {
-  // The budget (§4) is counted in the SSR HTML, not by eye: the first
-  // viewport is the chat shell up to the below-the-fold tools — the
-  // app bar + chat column + hero photo. "Prefer forms?" and "Start
-  // from a link" moved below the fold (first-screen rebuild, Nov 13),
-  // so the first viewport is now theme toggle, My Trips, input, Start
-  // planning, 3 chips = 6. "Build my plan" is not counted — it appears
-  // after the first message.
+  // The budget (§4) is counted in the SSR HTML, not by eye. The
+  // rebuilt chat (Nov 24, 2026) has no below-the-fold tools at all —
+  // the whole /chat SSR at S0 IS the first viewport: skip link, app
+  // bar (theme toggle, My Trips), chat column (input, Start planning,
+  // 3 chips) and the S0 canvas (photo + text, no interactive
+  // elements). The footer is gated off on /chat and the composer is
+  // closed, so the whole-page count is the first-viewport count:
+  // skip link + theme + My Trips + input + Start planning + 3 chips
+  // = 8. "Build my plan" is not counted — it appears when the slots
+  // are filled, in the canvas.
   const r = await fetch(`${BASE}/chat`);
   assert.equal(r.status, 200);
   const html = (await r.text()).replace(/<!-- -->/g, '');
-  const shellStart = html.indexOf('chat-shell');
-  const foldStart = html.indexOf('below-fold-tools', shellStart);
-  assert.ok(shellStart !== -1 && foldStart !== -1, 'the chat shell precedes the below-fold tools');
-  const shell = html.slice(shellStart, foldStart);
-  const interactive = shell.match(/<(button|input|select|textarea|a)([\s>])/g) || [];
+  const interactive = html.match(/<(button|input|select|textarea|a)([\s>])/g) || [];
   assert.ok(interactive.length <= 10, `S0 first viewport has ${interactive.length} interactive elements (budget 10): ${interactive.join(' ')}`);
   // And the one that must be there is.
-  assert.ok(shell.includes('Start planning'), 'the Start planning action is in the first viewport');
-  // "Prefer forms?" and "Start from a link" are NOT in the first
-  // viewport — they live below the fold now — but they still exist on
-  // the page, one scroll down.
-  assert.ok(!shell.includes('Prefer forms?'), 'the forms disclosure is below the fold, not in the first viewport');
-  assert.ok(!shell.includes('Start from a link'), 'the link card is below the fold, not in the first viewport');
-  assert.ok(!shell.includes('Start from this'), 'the link action is below the fold, not in the first viewport');
-  assert.ok(html.includes('Prefer forms?'), 'the forms disclosure still renders below the fold');
-  assert.ok(html.includes('Start from a link'), 'the link card still renders below the fold');
-  // "Build my plan" is NOT in the first viewport — it appears after
-  // the first message, when there is a trip to build (progressive
-  // reveal); with no trip yet it would build a Kyoto default nobody
-  // asked for.
-  assert.ok(!shell.includes('Build my plan'), 'Build my plan waits for the first message');
+  assert.ok(html.includes('Start planning'), 'the Start planning action is in the first viewport');
+  // "Prefer forms?" and "Start from a link" are gone entirely (chat
+  // rebuild, Nov 24 2026) — forms live on the homepage/search, link
+  // import left the chat.
+  assert.ok(!html.includes('Prefer forms?'), 'the forms disclosure is gone, not below the fold');
+  assert.ok(!html.includes('Start from a link'), 'the link card is gone, not below the fold');
+  assert.ok(!html.includes('Start from this'), 'the link action is gone');
+  // "Build my plan" is NOT in the first viewport — it appears in the
+  // canvas when the slots are filled (progressive reveal); with no
+  // trip yet it would build a Kyoto default nobody asked for.
+  assert.ok(!html.includes('Build my plan'), 'Build my plan waits for the slots to fill');
 });
 
 test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exist with a trip', async () => {
@@ -1256,6 +1262,47 @@ test('SOS: no SOS markup at S0 (minimal-first) — the button and sheet only exi
   assert.ok(css.includes('.sos-btn'), 'stylesheet has the SOS button styles');
   assert.ok(css.includes('.sosdialog'), 'stylesheet has the emergency sheet styles');
   assert.ok(css.includes('.sos-missed'), 'stylesheet has the missed check-in banner');
+});
+
+test('chat rebuild (Nov 24, 2026): split layout — chat column + canvas, one next step, nothing else at S0', async () => {
+  // SSR-visible markers only — the canvas fills in client-side, so the
+  // S0 SSR is the chat column plus the welcome canvas.
+  const r = await fetch(`${BASE}/chat`);
+  assert.equal(r.status, 200);
+  const html = (await r.text()).replace(/<!-- -->/g, '');
+  // Split screen: chat column left, canvas right, S0 state.
+  assert.ok(html.includes('chat-split'), 'the split layout renders');
+  assert.ok(html.includes('chat-s0'), 'the S0 split carries the S0 state');
+  assert.ok(html.includes('chatcol'), 'the chat column renders');
+  assert.ok(html.includes('canvas'), 'the canvas renders');
+  assert.ok(html.includes('Your trip will appear here.'), 'the S0 canvas welcomes the trip');
+  // The S0 photo is the Kyoto pool photo — never a hardcoded URL.
+  assert.ok(html.includes('s0-photo'), 'the S0 canvas photo renders');
+  assert.ok(html.includes('photo-1493976040374-85c8e12f0c0e'), 'the S0 photo is Kyoto from the pool');
+  // The chat column is only a chat: greeting, input, one chip row.
+  assert.ok(html.includes('bubble greeting'), 'the greeting renders as a headline');
+  assert.ok(html.includes('Tell me where. I’ll plan the rest.'), 'the greeting is the short headline');
+  assert.ok(html.includes('Start planning'), 'the S0 send action reads Start planning');
+  assert.ok(html.includes('data-fill="Surprise me"'), 'the starter chips fill the input');
+  // Nothing else at S0: no summary (no trip yet), no plan, no map, no
+  // panel, no zone switcher, no app-bar total or Book, no duplicated
+  // AI pill, no SOS, no forms, no link import.
+  assert.ok(!html.includes('summary-card'), 'no Trip Summary before a trip exists');
+  assert.ok(!html.includes('plan-card'), 'no plan artefact before a plan exists');
+  assert.ok(!html.includes('Does this look right?'), 'no confirm card before the slots fill');
+  assert.ok(!html.includes('Build my plan'), 'no build action before the slots fill');
+  assert.ok(!html.includes('trippanel'), 'no trip panel in the rebuilt chat');
+  assert.ok(!html.includes('mapcol'), 'no map column at S0');
+  assert.ok(!html.includes('zonebar'), 'no zone switcher in the rebuilt chat');
+  assert.ok(!html.includes('appbar-total'), 'no app-bar total in the rebuilt chat');
+  assert.ok(!html.includes('appbar-book'), 'no app-bar Book in the rebuilt chat');
+  assert.ok(!html.includes('ai-pill'), 'no duplicated Plan with AI pill in the rebuilt chat');
+  assert.ok(!html.includes('sos-btn'), 'no SOS button in the rebuilt chat');
+  assert.ok(!html.includes('Prefer forms?'), 'no forms disclosure in the rebuilt chat');
+  assert.ok(!html.includes('Start from a link'), 'no link-import card in the rebuilt chat');
+  assert.ok(!html.includes('Your trip map'), 'no empty map placeholder at S0');
+  assert.ok(!html.includes('map-placeholder'), 'no map placeholder markup at S0');
+  assert.ok(!html.includes('No trip yet'), 'no panel empty state in the rebuilt chat');
 });
 
 test('popular destinations (direction v3): 6 cards, no expander, per-traveler price lines, no filter pills, no pagination (UX direction round 2, Nov 21 2026 — P0-4)', async () => {
