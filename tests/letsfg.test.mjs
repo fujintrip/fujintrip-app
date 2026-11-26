@@ -603,7 +603,7 @@ test('wiring: merge interleaves LetsFG trips; route guards multi-city', () => {
   const route = readFileSync(new URL('../app/api/letsfg-fares/route.ts', import.meta.url), 'utf8');
   assert.ok(route.includes('searchLetsfgFares'), 'the route calls the LetsFG client');
   assert.ok(route.includes('unsupported_trip_type'), 'multi-city is guarded, never searched');
-  assert.ok(route.includes('CITY_IATA'), 'city names resolve to IATA codes, never guessed');
+  assert.ok(route.includes('resolveAirportCode'), 'city names resolve to IATA codes, never guessed');
   const lib = readFileSync(new URL('../lib/letsfg.ts', import.meta.url), 'utf8');
   assert.ok(lib.includes('process.env.LETSFG_API_KEY'), 'the key is read from the environment');
   assert.ok(!lib.includes('letsfg_'), 'no key value is hardcoded in the client');

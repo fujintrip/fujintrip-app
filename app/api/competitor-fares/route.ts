@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveAirportCode } from '../../../lib/airportCodes';
+import { ROUTE_STOPS, routeKeyForDestination } from '../../../lib/planner';
 import { fetchCompetitorFares } from '../../../lib/travelpayouts';
 
 /**
@@ -10,6 +12,11 @@ import { fetchCompetitorFares } from '../../../lib/travelpayouts';
  *   &depart=2027-01-04&return=2027-01-17&travelers=2
  * - origin: the traveler's departure city (chat). destination: a route
  *   display name ("Central Europe") or a city ("Kyoto").
+ * - originIata / destIata (optional): the picker's IATA codes when
+ *   captured — preferred over name resolution, never guessed. The
+ *   fare is looked up for the route's first city, so a passed
+ *   destination code only applies when the destination already is
+ *   that city.
  * - depart/return: the trip card's start/end dates (YYYY-MM-DD).
  * - Server-side only: TRAVELPAYOUTS_TOKEN never leaves the server.
  *
@@ -49,6 +56,19 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const result = await fetchCompetitorFares({ origin, destination, departDate: depart, returnDate: ret, travelers });
+  // The fare is looked up for the route's first city; a passed
+  // destination code only applies when the destination already is
+  // that city (a route name like "Central Europe" carries no code).
+  const destKey = destination ? routeKeyForDestination(destination) : '';
+  const fareDestCity = destKey ? ROUTE_STOPS[destKey][0].city : destination;
+  const result = await fetchCompetitorFares({
+    origin,
+    destination,
+    departDate: depart,
+    returnDate: ret,
+    travelers,
+    originIata: resolveAirportCode(origin, q.get('originIata')) ?? undefined,
+    destIata: resolveAirportCode(fareDestCity, destination === fareDestCity ? q.get('destIata') : undefined) ?? undefined,
+  });
   return NextResponse.json(result);
 }

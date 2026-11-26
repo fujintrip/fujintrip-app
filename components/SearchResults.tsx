@@ -1097,7 +1097,7 @@ function FlightResults({
   const fetchedKeyRef = useRef('');
   const tripType = query.tripType ?? 'roundtrip';
   const queryLegs = useMemo(() => flightLegsFromSearch(query), [query]);
-  const ctxKey = `${tripType}|${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}|${ctx.cabin}|${queryLegs.map((l) => `${l.from}>${l.to}@${l.depart}`).join(',')}`;
+  const ctxKey = `${tripType}|${ctx.origin}|${ctx.destination}|${query.travelers}|${ctx.month}|${ctx.durationDays}|${ctx.depart}|${ctx.return}|${ctx.cabin}|${ctx.originIata ?? ''}|${ctx.destIata ?? ''}|${queryLegs.map((l) => `${l.from}>${l.to}@${l.depart}:${l.fromIata ?? ''}>${l.toIata ?? ''}`).join(',')}`;
 
   useEffect(() => {
     if (fetchedKeyRef.current === ctxKey) return;
@@ -1111,6 +1111,17 @@ function FlightResults({
     setHackerOneWays({ out: null, back: null });
     onLiveOptions(null);
     let cancelled = false;
+    // The picker's codes when the search captured them — preferred
+    // over name resolution by every fare API below, and by the
+    // server-side resolver when a name still needs resolving.
+    const fareCodes = {
+      ...(ctx.originIata ? { originIata: ctx.originIata } : {}),
+      ...(ctx.destIata ? { destinationIata: ctx.destIata } : {}),
+    };
+    const legCodes = (l: { fromIata?: string; toIata?: string }) => ({
+      ...(l.fromIata ? { originIata: l.fromIata } : {}),
+      ...(l.toIata ? { destinationIata: l.toIata } : {}),
+    });
     // Ignav fires in parallel with the Duffel price-check — one
     // Ignav request per search, never per keystroke. The promise
     // resolves on its own time; the column renders when it lands.
@@ -1118,7 +1129,7 @@ function FlightResults({
       tripType === 'multicity'
         ? {
             tripType: 'multicity',
-            legs: queryLegs.map((l) => ({ origin: l.from, destination: l.to, date: l.depart })),
+            legs: queryLegs.map((l) => ({ origin: l.from, destination: l.to, date: l.depart, ...legCodes(l) })),
             travelers: query.travelers,
             cabin: ctx.cabin,
           }
@@ -1130,6 +1141,7 @@ function FlightResults({
               travelers: query.travelers,
               depart: ctx.depart,
               cabin: ctx.cabin,
+              ...fareCodes,
             }
           : {
               origin: ctx.origin,
@@ -1138,6 +1150,7 @@ function FlightResults({
               depart: ctx.depart,
               return: ctx.return,
               cabin: ctx.cabin,
+              ...fareCodes,
             };
     const ignavPromise = (async (): Promise<IgnavFaresResponse | null> => {
       try {
@@ -1162,22 +1175,37 @@ function FlightResults({
     // comparison only exists when all three searches return live
     // fares, and a missing leg is an honest absence, never a card.
     if (tripType === 'roundtrip') {
-      const fetchOneWay = async (origin: string, destination: string, depart: string): Promise<IgnavFaresResponse | null> => {
+      const fetchOneWay = async (
+        origin: string,
+        destination: string,
+        depart: string,
+        originIata?: string,
+        destinationIata?: string
+      ): Promise<IgnavFaresResponse | null> => {
         try {
           const r = await fetch('/api/ignav-fares', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tripType: 'oneway', origin, destination, travelers: query.travelers, depart, cabin: ctx.cabin }),
+            body: JSON.stringify({
+              tripType: 'oneway',
+              origin,
+              destination,
+              travelers: query.travelers,
+              depart,
+              cabin: ctx.cabin,
+              ...(originIata ? { originIata } : {}),
+              ...(destinationIata ? { destinationIata } : {}),
+            }),
           });
           return (await r.json()) as IgnavFaresResponse;
         } catch {
           return null;
         }
       };
-      fetchOneWay(ctx.origin, ctx.destination, ctx.depart).then((o) => {
+      fetchOneWay(ctx.origin, ctx.destination, ctx.depart, ctx.originIata, ctx.destIata).then((o) => {
         if (!cancelled) setHackerOneWays((s) => ({ ...s, out: o }));
       });
-      fetchOneWay(ctx.destination, ctx.origin, ctx.return).then((b) => {
+      fetchOneWay(ctx.destination, ctx.origin, ctx.return, ctx.destIata, ctx.originIata).then((b) => {
         if (!cancelled) setHackerOneWays((s) => ({ ...s, back: b }));
       });
     }
@@ -1196,6 +1224,7 @@ function FlightResults({
               travelers: query.travelers,
               depart: ctx.depart,
               cabin: ctx.cabin,
+              ...fareCodes,
             }
           : {
               origin: ctx.origin,
@@ -1204,6 +1233,7 @@ function FlightResults({
               depart: ctx.depart,
               return: ctx.return,
               cabin: ctx.cabin,
+              ...fareCodes,
             };
       (async () => {
         try {
@@ -1230,7 +1260,7 @@ function FlightResults({
           tripType === 'multicity'
             ? {
                 tripType: 'multicity',
-                legs: queryLegs.map((l) => ({ origin: l.from, destination: l.to, date: l.depart })),
+                legs: queryLegs.map((l) => ({ origin: l.from, destination: l.to, date: l.depart, ...legCodes(l) })),
                 travelers: query.travelers,
                 cabin: ctx.cabin,
               }
@@ -1244,6 +1274,7 @@ function FlightResults({
                   durationDays: ctx.durationDays,
                   depart: ctx.depart,
                   cabin: ctx.cabin,
+                  ...fareCodes,
                 }
               : {
                   origin: ctx.origin,
@@ -1254,6 +1285,7 @@ function FlightResults({
                   depart: ctx.depart,
                   return: ctx.return,
                   cabin: ctx.cabin,
+                  ...fareCodes,
                 };
         const r = await fetch('/api/price-check', {
           method: 'POST',
@@ -1273,7 +1305,7 @@ function FlightResults({
         setCompetitor({ status: 'loading', data: null });
         try {
           const cr = await fetch(
-            `/api/competitor-fares?origin=${encodeURIComponent(ctx.origin)}&destination=${encodeURIComponent(ctx.destination)}&depart=${pc.departDate}&return=${pc.returnDate}&travelers=${query.travelers}`
+            `/api/competitor-fares?origin=${encodeURIComponent(ctx.origin)}&destination=${encodeURIComponent(ctx.destination)}&depart=${pc.departDate}&return=${pc.returnDate}&travelers=${query.travelers}${ctx.originIata ? `&originIata=${ctx.originIata}` : ''}${ctx.destIata ? `&destIata=${ctx.destIata}` : ''}`
           );
           const cj = (await cr.json()) as CompetitorFares;
           if (!cancelled) setCompetitor({ status: 'done', data: cj });

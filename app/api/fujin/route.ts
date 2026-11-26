@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveAirportCode } from '../../../lib/airportCodes';
 import { askFujin, buildPlan, comparisonFor, distributeNights, distributeNightsForStops, findMonth, findOrigin, isDisruptionMessage, isOffTopicMessage, KNOWN_DESTINATIONS, lastPlaceMentioned, MONTH_NAMES, optionsLine, parseDuration, parseFlightIdent, routeKeyForDestination, ROUTE_STOPS, soloLine, stopsForRoute, type RouteOverride } from '../../../lib/planner';
 import { fetchLocalVoices, fetchLocalVoicesForCities, formatCityVoices, type CityVoices, type LocalVoices } from '../../../lib/localVoices';
 import { appendObservation, fetchLiveFares, faresPromptBlock, faresSummaryLine, priceCheck, trendLine, type LiveFares, type TrendObservation } from '../../../lib/duffel';
@@ -587,6 +588,12 @@ export async function POST(req: NextRequest) {
           departDate: departDate.toISOString().slice(0, 10),
           returnDate: returnDate.toISOString().slice(0, 10),
           travelers: stateTravelers || 2,
+          // The chat parses city names from natural language — no
+          // picker code exists here — so the server-side resolver
+          // (hand map, then the generated city dataset) covers the
+          // route; a place with no airport still gets no fare.
+          originIata: resolveAirportCode(stateOrigin) ?? undefined,
+          destIata: resolveAirportCode(fareDestCity) ?? undefined,
         }).catch(() => null)
       : Promise.resolve(null);
   // The food fetch (round 2 #4): the city the traveler is in — the city

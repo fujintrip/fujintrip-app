@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveAirportCode } from '../../../lib/airportCodes';
 import { appendObservation, cabinClassFor, duffelMode, fetchLiveFares, fetchOneWayFares, priceCheck, trendLine, type TrendObservation } from '../../../lib/duffel';
 import { comparisonFor, ROUTE_STOPS, routeKeyForDestination } from '../../../lib/planner';
 import { suggestedStart } from '../../../lib/tripCard';
@@ -74,6 +75,10 @@ export async function POST(req: NextRequest) {
   // Offer Request is asked for this cabin, never silently economy.
   // Junk falls back to economy.
   const cabin = cabinClassFor(raw.cabin);
+  // The picker's IATA codes when the caller captured them (SearchWidget
+  // / SearchResults) — preferred over name resolution, never guessed.
+  const originIataRaw = typeof raw.originIata === 'string' ? raw.originIata : undefined;
+  const destinationIataRaw = typeof raw.destinationIata === 'string' ? raw.destinationIata : undefined;
   // The trip type (Nov 15, 2026): junk falls back to round-trip, so
   // every caller that never heard of trip types — the chat included —
   // keeps the round-trip behavior it already had.
@@ -90,9 +95,21 @@ export async function POST(req: NextRequest) {
           const oFrom = typeof o.origin === 'string' ? o.origin.trim() : '';
           const oTo = typeof o.destination === 'string' ? o.destination.trim() : '';
           const oDate = typeof o.date === 'string' ? o.date.trim() : '';
-          return oFrom && oTo && validIso(oDate) ? { origin: oFrom, destination: oTo, date: oDate } : null;
+          const oFromIata = typeof o.originIata === 'string' ? o.originIata : undefined;
+          const oToIata = typeof o.destinationIata === 'string' ? o.destinationIata : undefined;
+          return oFrom && oTo && validIso(oDate)
+            ? {
+                origin: oFrom,
+                destination: oTo,
+                date: oDate,
+                ...(oFromIata ? { originIata: oFromIata } : {}),
+                ...(oToIata ? { destinationIata: oToIata } : {}),
+              }
+            : null;
         })
-        .filter((l): l is { origin: string; destination: string; date: string } => !!l)
+        .filter(
+          (l): l is { origin: string; destination: string; date: string; originIata?: string; destinationIata?: string } => !!l
+        )
         .slice(0, 4)
     : [];
 
@@ -149,6 +166,11 @@ export async function POST(req: NextRequest) {
           departDate: leg.date,
           travelers,
           cabinClass: cabin,
+          // The fare is searched for the route's first city, so a
+          // passed code only applies when the leg named that city
+          // itself — otherwise the first city resolves by name.
+          originIata: resolveAirportCode(leg.origin, leg.originIata) ?? undefined,
+          destIata: resolveAirportCode(destCity, leg.destination === destCity ? leg.destinationIata : undefined) ?? undefined,
         }).catch(() => null);
         return {
           origin: leg.origin,
@@ -226,6 +248,8 @@ export async function POST(req: NextRequest) {
       departDate: departDate.toISOString().slice(0, 10),
       travelers,
       cabinClass: cabin,
+      originIata: resolveAirportCode(origin, originIataRaw) ?? undefined,
+      destIata: resolveAirportCode(fareDestCity, destination === fareDestCity ? destinationIataRaw : undefined) ?? undefined,
     }).catch(() => null);
     const liveTotal = liveFares?.live && liveFares.out.length ? Math.min(...liveFares.out.map((o) => o.price)) : 0;
     return NextResponse.json({
@@ -297,6 +321,8 @@ export async function POST(req: NextRequest) {
     returnDate: returnDate.toISOString().slice(0, 10),
     travelers,
     cabinClass: cabin,
+    originIata: resolveAirportCode(origin, originIataRaw) ?? undefined,
+    destIata: resolveAirportCode(fareDestCity, destination === fareDestCity ? destinationIataRaw : undefined) ?? undefined,
   }).catch(() => null);
   const check = liveFares ? priceCheck(liveFares, plannerFlight) : { live: false, liveTotal: 0, plannerFlight, diff: 0, verdict: 'no_fare' as const, line: '' };
   // The trend reads the watch's own past checks plus today's fresh

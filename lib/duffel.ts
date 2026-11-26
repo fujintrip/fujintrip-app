@@ -337,6 +337,15 @@ export const CITY_IATA: Record<string, string> = {
   Oaxaca: 'OAX',
 };
 
+// A 3-letter IATA code, trimmed and uppercased — anything else is
+// junk and never trusted as a code. Client-safe (no dataset import);
+// the server-side resolver (lib/airportCodes.ts) uses the same rule.
+export function cleanIataCode(code: unknown): string | null {
+  if (typeof code !== 'string') return null;
+  const c = code.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(c) ? c : null;
+}
+
 // The optional time/minute fields on an offer, when present, must be
 // the right shape — a malformed time never reaches a fare card.
 function okOptionalOfferFields(o: unknown): boolean {
@@ -628,6 +637,11 @@ export async function fetchLiveFares(opts: {
   returnDate: string;
   travelers: number;
   cabinClass?: DuffelCabinClass;
+  // A caller-resolved code (the place picker's, or the server-side
+  // resolver's in lib/airportCodes.ts) — preferred over the hand
+  // map below, never guessed.
+  originIata?: string;
+  destIata?: string;
 }): Promise<LiveFares> {
   const base: LiveFares = {
     live: false,
@@ -642,8 +656,12 @@ export async function fetchLiveFares(opts: {
   };
   const apiKey = process.env.DUFFEL_API_KEY;
   if (!apiKey) return { ...base, reason: 'no_key' };
-  const from = CITY_IATA[opts.origin];
-  const to = CITY_IATA[opts.destCity];
+  // A caller-passed code wins; otherwise the hand map, exactly as
+  // before. The generated map lives in the server-side resolver
+  // (lib/airportCodes.ts) — callers that need it resolve first and
+  // pass the code in, so this module stays client-safe.
+  const from = cleanIataCode(opts.originIata) ?? CITY_IATA[opts.origin];
+  const to = cleanIataCode(opts.destIata) ?? CITY_IATA[opts.destCity];
   if (!from || !to) return { ...base, reason: 'no_airport_code' };
   const cabin = opts.cabinClass ?? 'economy';
   const key = `${from}-${to}-${opts.departDate}-${opts.returnDate}-${opts.travelers}-${cabin}`;
@@ -673,6 +691,9 @@ export async function fetchOneWayFares(opts: {
   departDate: string;
   travelers: number;
   cabinClass?: DuffelCabinClass;
+  // A caller-resolved code — preferred over the hand map, never guessed.
+  originIata?: string;
+  destIata?: string;
 }): Promise<LiveFares> {
   const base: LiveFares = {
     live: false,
@@ -687,8 +708,11 @@ export async function fetchOneWayFares(opts: {
   };
   const apiKey = process.env.DUFFEL_API_KEY;
   if (!apiKey) return { ...base, reason: 'no_key' };
-  const from = CITY_IATA[opts.origin];
-  const to = CITY_IATA[opts.destCity];
+  // A caller-passed code wins; otherwise the hand map, exactly as
+  // before (see fetchLiveFares — the generated map is resolved by
+  // the caller, never here).
+  const from = cleanIataCode(opts.originIata) ?? CITY_IATA[opts.origin];
+  const to = cleanIataCode(opts.destIata) ?? CITY_IATA[opts.destCity];
   if (!from || !to) return { ...base, reason: 'no_airport_code' };
   const cabin = opts.cabinClass ?? 'economy';
   const key = `oneway-${from}-${to}-${opts.departDate}-${opts.travelers}-${cabin}`;

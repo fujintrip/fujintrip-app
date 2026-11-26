@@ -40,6 +40,7 @@ export default function PlaceField({
   label,
   value,
   onChange,
+  onPick,
   placeholder,
   pinned,
 }: {
@@ -47,6 +48,12 @@ export default function PlaceField({
   label: string;
   value: string;
   onChange: (v: string) => void;
+  // Fired when a suggestion is picked, with the whole suggestion —
+  // the caller stores the IATA code (when the source provided one)
+  // so fare searches can use it instead of re-resolving the name.
+  // Typing only ever calls onChange, so a hand-edited field carries
+  // no stale code.
+  onPick?: (s: PlaceSuggestion) => void;
   placeholder?: string;
   // Pinned suggestions (roadmap, Nov 21 2026 — F2): always shown at
   // the top of the listbox, ahead of the fetched suggestions, even
@@ -126,6 +133,7 @@ export default function PlaceField({
     typedRef.current = false;
     if (timerRef.current) clearTimeout(timerRef.current);
     onChange(s.value);
+    onPick?.(s);
     setOpen(false);
     setActive(-1);
     setSuggestions([]);

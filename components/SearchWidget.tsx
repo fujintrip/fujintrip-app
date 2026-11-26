@@ -226,6 +226,12 @@ export default function SearchWidget({
   // tabs keeps the destination if it applies, resets nothing else).
   const [place, setPlace] = useState(initialSearch?.dest || initialSearch?.to || '');
   const [from, setFrom] = useState(initialSearch?.from || '');
+  // The picker's IATA codes for the flights from/to (set on
+  // selection, cleared on any typing — a fare search never uses a
+  // stale code for an edited name). They ride in the submitted
+  // query, never in the URL.
+  const [fromIata, setFromIata] = useState(initialSearch?.fromIata ?? '');
+  const [toIata, setToIata] = useState(initialSearch?.toIata ?? '');
   const [depart, setDepart] = useState(initialSearch?.depart || '');
   const [ret, setRet] = useState(initialSearch?.ret || '');
   const [travelers, setTravelers] = useState(initialSearch?.travelers ?? 2);
@@ -279,6 +285,8 @@ export default function SearchWidget({
       from: q?.from || '',
       to: q?.to || '',
       depart: q?.depart || '',
+      ...(q?.fromIata ? { fromIata: q.fromIata } : {}),
+      ...(q?.toIata ? { toIata: q.toIata } : {}),
     };
     return [
       first,
@@ -288,19 +296,31 @@ export default function SearchWidget({
 
   // One leg's edit — leg 1 also writes the shared from/place/depart
   // state, so the form, the deep link and the results all read the
-  // same first hop.
+  // same first hop. The picker's codes mirror the same way.
   const updateLeg = (i: number, patch: Partial<FlightLeg>) => {
     setLegs(legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
     if (i === 0) {
       if (patch.from !== undefined) setFrom(patch.from);
       if (patch.to !== undefined) setPlace(patch.to);
       if (patch.depart !== undefined) setDepart(patch.depart);
+      if (patch.fromIata !== undefined) setFromIata(patch.fromIata);
+      if (patch.toIata !== undefined) setToIata(patch.toIata);
     }
   };
 
   const switchTripType = (t: FlightTripType) => {
     setTripType(t);
-    if (t === 'multicity') setLegs((prev) => padLegs(prev, { ...emptySearchQuery('flights'), from, to: place, depart }));
+    if (t === 'multicity')
+      setLegs((prev) =>
+        padLegs(prev, {
+          ...emptySearchQuery('flights'),
+          from,
+          to: place,
+          depart,
+          ...(fromIata ? { fromIata } : {}),
+          ...(toIata ? { toIata } : {}),
+        })
+      );
     setNote(null);
   };
   // Today's date for the date pickers' min attribute — set after
@@ -319,6 +339,10 @@ export default function SearchWidget({
   const applyFormValues = (v: ReturnType<typeof formValuesFromQuery>, q: SearchQuery | null | undefined) => {
     setPlace(v.place);
     setFrom(v.from);
+    // A whole-query restore ("Edit search") carries the picker's
+    // codes when the search captured them; a deep link carries none.
+    setFromIata(q?.fromIata ?? '');
+    setToIata(q?.toIata ?? '');
     setDepart(v.depart);
     setRet(v.ret);
     setTravelers(v.travelers);
@@ -586,8 +610,18 @@ export default function SearchWidget({
       tripType: tab === 'flights' ? tripType : 'roundtrip',
       legs:
         tab === 'flights' && tripType === 'multicity'
-          ? legs.map((l) => ({ from: l.from.trim(), to: l.to.trim(), depart: l.depart }))
+          ? legs.map((l) => ({
+              from: l.from.trim(),
+              to: l.to.trim(),
+              depart: l.depart,
+              ...(l.fromIata ? { fromIata: l.fromIata } : {}),
+              ...(l.toIata ? { toIata: l.toIata } : {}),
+            }))
           : [],
+      // Flights only: the picker's codes ride in state to the fare
+      // calls — never in the URL (see searchQueryToParams).
+      ...(tab === 'flights' && fromIata ? { fromIata } : {}),
+      ...(tab === 'flights' && toIata ? { toIata } : {}),
       stayTier: tab === 'hotels' ? stayTier : 'best',
       carTier: tab === 'cars' ? carTier : 'best',
       tourTier: tab === 'tours' ? tourTier : 'best',
@@ -601,6 +635,8 @@ export default function SearchWidget({
       q.to = legs[0].to.trim();
       q.depart = legs[0].depart;
       q.ret = '';
+      q.fromIata = legs[0].fromIata;
+      q.toIata = legs[0].toIata;
     }
     try {
       router.replace(`/?${searchQueryToParams(q)}`, { scroll: false });
@@ -650,10 +686,24 @@ export default function SearchWidget({
                 </div>
                 <div className="sw-fields">
                   <Field label="From" icon="pin">
-                    <PlaceField id={`flights-leg${i + 1}-from`} label={`Leg ${i + 1} flying from`} value={leg.from} onChange={(v) => updateLeg(i, { from: v })} placeholder="Departure city" />
+                    <PlaceField
+                      id={`flights-leg${i + 1}-from`}
+                      label={`Leg ${i + 1} flying from`}
+                      value={leg.from}
+                      onChange={(v) => updateLeg(i, { from: v, fromIata: '' })}
+                      onPick={(s) => updateLeg(i, { from: s.value, fromIata: s.iata ?? '' })}
+                      placeholder="Departure city"
+                    />
                   </Field>
                   <Field label="To" icon="pin">
-                    <PlaceField id={`flights-leg${i + 1}-to`} label={`Leg ${i + 1} flying to`} value={leg.to} onChange={(v) => updateLeg(i, { to: v })} placeholder="Destination" />
+                    <PlaceField
+                      id={`flights-leg${i + 1}-to`}
+                      label={`Leg ${i + 1} flying to`}
+                      value={leg.to}
+                      onChange={(v) => updateLeg(i, { to: v, toIata: '' })}
+                      onPick={(s) => updateLeg(i, { to: s.value, toIata: s.iata ?? '' })}
+                      placeholder="Destination"
+                    />
                   </Field>
                   <Field label="Date" icon="calendar">
                     <DateField min={today || undefined} value={leg.depart} onChange={(v) => updateLeg(i, { depart: v })} ariaLabel={`Leg ${i + 1} date`} />
@@ -709,14 +759,33 @@ export default function SearchWidget({
           {tab === 'flights' && (
             <>
               <Field label="From" icon="pin">
-                <PlaceField id="flights-from" label="Flying from" value={from} onChange={setFrom} placeholder="Departure city" />
+                <PlaceField
+                  id="flights-from" label="Flying from"
+                  value={from}
+                  onChange={(v) => {
+                    setFrom(v);
+                    setFromIata('');
+                  }}
+                  onPick={(s) => {
+                    setFrom(s.value);
+                    setFromIata(s.iata ?? '');
+                  }}
+                  placeholder="Departure city"
+                />
               </Field>
               <Field label="To" icon="pin">
                 <PlaceField
                   id="flights-to"
                   label="Flying to"
                   value={place}
-                  onChange={setPlace}
+                  onChange={(v) => {
+                    setPlace(v);
+                    setToIata('');
+                  }}
+                  onPick={(s) => {
+                    setPlace(s.value);
+                    setToIata(s.iata ?? '');
+                  }}
                   placeholder="Where to?"
                   // "Everywhere" inspiration search (roadmap, Nov 21
                   // 2026 — F2, Skyscanner model): pinned at the top

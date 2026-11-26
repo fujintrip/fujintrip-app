@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CITY_IATA, cabinClassFor } from '../../../lib/duffel';
+import { resolveAirportCode } from '../../../lib/airportCodes';
+import { cabinClassFor } from '../../../lib/duffel';
 import {
   fetchIgnavBookingLinks,
   ignavConfigured,
@@ -17,8 +18,11 @@ import { ROUTE_STOPS, routeKeyForDestination } from '../../../lib/planner';
  * Search body (same trip shape the Flights search already builds):
  * { tripType?, origin, destination, depart?, return?, legs?, travelers?, cabin? }
  * - tripType 'roundtrip' (default) / 'oneway' / 'multicity'.
- * - origin/destination/legs carry CITY NAMES (resolved via CITY_IATA,
- *   like /api/price-check) — codes are never guessed.
+ * - origin/destination/legs carry CITY NAMES — plus the picker's
+ *   IATA code when one was captured (originIata / destinationIata,
+ *   per leg too). A passed code is preferred; otherwise the name
+ *   resolves through the server-side resolver (hand map, then the
+ *   generated city dataset) — codes are never guessed.
  * - depart/return are YYYY-MM-DD; return must be >= depart.
  * - Multi-city legs: [{ origin, destination, date }] (2–4).
  * Returns { live, configured, source:'ignav', observedAt, tripType,
@@ -114,9 +118,21 @@ export async function POST(req: NextRequest) {
             const oFrom = typeof o.origin === 'string' ? o.origin.trim() : '';
             const oTo = typeof o.destination === 'string' ? o.destination.trim() : '';
             const oDate = typeof o.date === 'string' ? o.date.trim() : '';
-            return oFrom && oTo && validIso(oDate) ? { origin: oFrom, destination: oTo, date: oDate } : null;
+            const oFromIata = typeof o.originIata === 'string' ? o.originIata : undefined;
+            const oToIata = typeof o.destinationIata === 'string' ? o.destinationIata : undefined;
+            return oFrom && oTo && validIso(oDate)
+              ? {
+                  origin: oFrom,
+                  destination: oTo,
+                  date: oDate,
+                  ...(oFromIata ? { originIata: oFromIata } : {}),
+                  ...(oToIata ? { destinationIata: oToIata } : {}),
+                }
+              : null;
           })
-          .filter((l): l is { origin: string; destination: string; date: string } => !!l)
+          .filter(
+            (l): l is { origin: string; destination: string; date: string; originIata?: string; destinationIata?: string } => !!l
+          )
           .slice(0, 4)
       : [];
     if (cleanLegs.length < 2) {
@@ -131,8 +147,8 @@ export async function POST(req: NextRequest) {
     }
     const resolved = cleanLegs.map((l) => ({
       ...l,
-      fromIata: CITY_IATA[l.origin] ?? null,
-      toIata: CITY_IATA[l.destination] ?? null,
+      fromIata: resolveAirportCode(l.origin, l.originIata),
+      toIata: resolveAirportCode(l.destination, l.destinationIata),
     }));
     const first = cleanLegs[0];
     const last = cleanLegs[cleanLegs.length - 1];
@@ -211,8 +227,8 @@ export async function POST(req: NextRequest) {
   if (!origin || !destination || !departOk || !returnOk) {
     return NextResponse.json(empty('missing_slots'));
   }
-  const fromIata = CITY_IATA[origin];
-  const toIata = CITY_IATA[destination];
+  const fromIata = resolveAirportCode(origin, typeof raw.originIata === 'string' ? raw.originIata : undefined);
+  const toIata = resolveAirportCode(destination, typeof raw.destinationIata === 'string' ? raw.destinationIata : undefined);
   if (!fromIata || !toIata) {
     return NextResponse.json(empty('no_airport_code'));
   }

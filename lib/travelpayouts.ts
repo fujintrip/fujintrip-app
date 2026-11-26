@@ -23,7 +23,7 @@
 //   airline and stops only.
 
 import { fetchCachedFares } from './booking';
-import { CITY_IATA } from './duffel';
+import { CITY_IATA, cleanIataCode } from './duffel';
 import { ROUTE_STOPS, routeKeyForDestination } from './planner';
 
 export type CompetitorFares = {
@@ -72,17 +72,21 @@ const EMPTY_LABEL =
 
 // Origin city → IATA, destination (route display name or city) → the
 // IATA of the route's FIRST city (the fare destination — the trip's
-// first stop, the same city the Duffel live fares use). Returns nulls
-// when a city has no code; the caller then shows an honest empty column.
+// first stop, the same city the Duffel live fares use). A caller-passed
+// code (the picker's, or the server-side resolver's) is preferred when
+// clean; otherwise the hand map. Returns nulls when a city has no
+// code; the caller then shows an honest empty column.
 export function resolveTripAirports(
   origin: string,
-  destination: string
+  destination: string,
+  originIata?: string,
+  destIata?: string
 ): { originIata: string | null; destIata: string | null; destCity: string } {
   const routeKey = destination ? routeKeyForDestination(destination) : '';
   const destCity = routeKey ? ROUTE_STOPS[routeKey][0].city : destination;
   return {
-    originIata: CITY_IATA[origin] ?? null,
-    destIata: destCity ? (CITY_IATA[destCity] ?? null) : null,
+    originIata: cleanIataCode(originIata) ?? CITY_IATA[origin] ?? null,
+    destIata: destCity ? (cleanIataCode(destIata) ?? CITY_IATA[destCity] ?? null) : null,
     destCity,
   };
 }
@@ -104,6 +108,10 @@ export async function fetchCompetitorFares(opts: {
   departDate: string | Date;
   returnDate: string | Date;
   travelers?: number;
+  // A caller-resolved code (the picker's, or the server-side
+  // resolver's) — preferred over the hand map, never guessed.
+  originIata?: string;
+  destIata?: string;
 }): Promise<CompetitorFares> {
   const travelers = Math.min(9, Math.max(1, Math.floor(opts.travelers ?? 2) || 2));
   const departDate = isoDate(opts.departDate);
@@ -127,7 +135,7 @@ export async function fetchCompetitorFares(opts: {
   if (!departDate || !returnDate) {
     return { ...base, available: false, label: 'No trip dates yet — competitor fares need the trip’s start and end dates.', reason: 'no-cached-fare' };
   }
-  const { originIata, destIata, destCity } = resolveTripAirports(opts.origin, opts.destination);
+  const { originIata, destIata, destCity } = resolveTripAirports(opts.origin, opts.destination, opts.originIata, opts.destIata);
   if (!originIata || !destIata) {
     const missing = [!originIata ? opts.origin : '', !destIata ? destCity : ''].filter(Boolean).join(' / ');
     return {

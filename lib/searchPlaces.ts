@@ -12,7 +12,7 @@ import { addDays, CITY_INFO, suggestedStart } from './tripCard';
 import { bestTimeFor } from './bestTime';
 import { MONTH_NAMES, buildPlan } from './planner';
 import { HOME_TABS, homeTabIdFromQuery, type HomeTabId, type TabRow } from './homeTabs';
-import { cabinClassFor, canonicalAirlineName, perTravelerPrice, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
+import { cabinClassFor, canonicalAirlineName, cleanIataCode, perTravelerPrice, TIME_BUCKETS, timeBucketFor, type DuffelCabinClass, type DuffelFareOffer } from './duffel';
 
 let placeCache: string[] | null = null;
 
@@ -60,7 +60,17 @@ export function rowIncludesPlace(destination: string, place: string): boolean {
 // hop: from → to on a date. Legs are 2–4, never fewer — a single hop is
 // a one-way search, not a multi-city one.
 export type FlightTripType = 'roundtrip' | 'oneway' | 'multicity';
-export type FlightLeg = { from: string; to: string; depart: string };
+export type FlightLeg = {
+  from: string;
+  to: string;
+  depart: string;
+  // The picker's IATA codes when captured (PlaceField onPick) —
+  // preferred by the fare APIs over name resolution, never guessed.
+  // Absent for typed names, deep links and saved searches: those
+  // resolve server-side through the expanded city map.
+  fromIata?: string;
+  toIata?: string;
+};
 
 // Stays tiers (Nov 15, 2026 — the Stays section, same standard as
 // the Flights section): the three planner tiers, priced from the
@@ -551,7 +561,15 @@ export function cleanFlightLeg(raw: unknown): FlightLeg | null {
   const to = cleanPlace(r.to);
   const depart = cleanDate(r.depart);
   if (!from || !to || !depart) return null;
-  return { from, to, depart };
+  const fromIata = cleanIataCode(r.fromIata);
+  const toIata = cleanIataCode(r.toIata);
+  return {
+    from,
+    to,
+    depart,
+    ...(fromIata ? { fromIata } : {}),
+    ...(toIata ? { toIata } : {}),
+  };
 }
 
 // The legs a multi-city search carries: 2–4 clean legs, in order.
@@ -596,6 +614,12 @@ export type SearchQuery = {
   dest: string;
   depart: string;
   ret: string;
+  // Flights only: the picker's IATA codes when captured (PlaceField
+  // onPick) — carried in state to the fare calls, never in the URL:
+  // a shared link re-resolves by name through the expanded server
+  // map, so links stay short and shareable.
+  fromIata?: string;
+  toIata?: string;
   travelers: number;
   cabin: string;
   guests: number;
@@ -903,6 +927,10 @@ export function searchQueryFromParams(
 export function searchQueryToParams(q: SearchQuery): string {
   const p = new URLSearchParams();
   p.set('tab', q.tab);
+  // The picker's IATA codes (fromIata/toIata, per-leg codes) are
+  // deliberately NOT in the URL: they ride in state to the fare
+  // calls, and a shared link re-resolves by name through the
+  // expanded server map — links stay short and shareable.
   if (q.from) p.set('from', q.from);
   if (q.to) p.set('to', q.to);
   if (q.dest) p.set('dest', q.dest);
@@ -951,6 +979,8 @@ export function flightContextFromSearch(q: SearchQuery): {
   depart: string;
   return: string;
   cabin: DuffelCabinClass;
+  originIata?: string;
+  destIata?: string;
 } {
   const destination = q.to || q.dest || 'Central Europe';
   const origin = q.from || 'New York';
@@ -981,7 +1011,18 @@ export function flightContextFromSearch(q: SearchQuery): {
       : isoDate(addDays(parseLocalDate(depart), durationDays - 1));
   // The cabin the traveler picked, in Duffel's vocabulary — the
   // Offer Request is asked for this cabin, never silently economy.
-  return { origin, destination, month, durationDays, depart, return: ret, cabin: cabinClassFor(q.cabin) };
+  // The picker's codes ride along when the search captured them.
+  return {
+    origin,
+    destination,
+    month,
+    durationDays,
+    depart,
+    return: ret,
+    cabin: cabinClassFor(q.cabin),
+    ...(cleanIataCode(q.fromIata) ? { originIata: cleanIataCode(q.fromIata)! } : {}),
+    ...(cleanIataCode(q.toIata) ? { destIata: cleanIataCode(q.toIata)! } : {}),
+  };
 }
 
 // Parse a YYYY-MM-DD string as a local-midnight Date, matching the

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CITY_IATA, cabinClassFor } from '../../../lib/duffel';
+import { resolveAirportCode } from '../../../lib/airportCodes';
+import { cabinClassFor } from '../../../lib/duffel';
 import {
   letsfgConfigured,
   searchLetsfgFares,
@@ -16,8 +17,11 @@ import {
  * - tripType 'roundtrip' (default) / 'oneway'. LetsFG has NO
  *   multi-city endpoint — a multi-city search returns live:false +
  *   reason 'unsupported_trip_type' and never calls LetsFG.
- * - origin/destination carry CITY NAMES (resolved via CITY_IATA,
- *   like /api/price-check) — codes are never guessed.
+ * - origin/destination carry CITY NAMES — plus the picker's IATA
+ *   code when one was captured (originIata / destinationIata). A
+ *   passed code is preferred; otherwise the name resolves through
+ *   the server-side resolver (hand map, then the generated city
+ *   dataset) — codes are never guessed.
  * - depart/return are YYYY-MM-DD; return must be >= depart.
  * Returns { live, configured, source:'letsfg', observedAt, tripType,
  * itineraries, ... } — itineraries carry whole-trip party-total
@@ -94,8 +98,8 @@ export async function POST(req: NextRequest) {
   if (!origin || !destination || !departOk || !returnOk) {
     return NextResponse.json(empty('missing_slots'));
   }
-  const fromIata = CITY_IATA[origin];
-  const toIata = CITY_IATA[destination];
+  const fromIata = resolveAirportCode(origin, typeof raw.originIata === 'string' ? raw.originIata : undefined);
+  const toIata = resolveAirportCode(destination, typeof raw.destinationIata === 'string' ? raw.destinationIata : undefined);
   if (!fromIata || !toIata) {
     return NextResponse.json(empty('no_airport_code'));
   }
