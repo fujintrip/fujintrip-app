@@ -46,6 +46,7 @@
 [data-theme="dark"] button.primary,[data-theme="dark"] a.primary,[data-theme="dark"] .hero-cta a{color:#fff}
 [data-theme="dark"] .pill{color:var(--link)}
 [data-theme="dark"] .leaflet-container{background:#221d15}
+[data-theme="dark"] .map-fullbleed{background:#221d15}
 [data-theme="dark"] .leaflet-bar a{background:#221d15;color:#f2ede4;border-color:#2f2a21}
 [data-theme="dark"] .leaflet-control-attribution{background:rgba(34,29,21,.8);color:#a89f8c}
 [data-theme="dark"] .leaflet-control-attribution a{color:#a89f8c}
@@ -77,13 +78,9 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
    .chat-shell .plan-print) so the tiers don't stretch edge to edge. */
 .chat-shell{padding:0 24px}
 .chat-shell .plan-print{max-width:1080px;margin-left:auto;margin-right:auto}
-/* "Prefer forms?" disclosure (interface round M2): the 8-tab bar is
-   gone — the search forms live behind one quiet text button under the
-   chat input. The toggle reads as a link, not a tab; the panel is a
-   plain bordered box in the chat column. */
-.forms-toggle{background:none;border:none;padding:8px 0;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;text-align:left}
-.forms-toggle:hover{color:var(--ink);text-decoration:underline}
-.forms-panel{border:1px solid var(--line);border-radius:var(--r-lg);padding:12px;margin-top:4px;background:var(--card)}
+/* (Rendered-check fix, Nov 25, 2026: the "Prefer forms?" toggle
+   and panel rules were removed — the disclosure left the chat in
+   the Nov 24 rebuild and nothing renders these classes.) */
 /* The chat panel drops the bordered card — the chatmap itself is the
    frame (chat panel + map). */
 .chat-panel{padding:0;border:0;background:transparent;box-shadow:none;margin-bottom:24px}
@@ -98,18 +95,13 @@ header{border-bottom:1px solid var(--line);background:var(--card)}
    in the display face, like Layla's hero line. Once the traveler
    replies it renders as a normal bubble again. */
 .msg .bubble.greeting{background:transparent;border:none;box-shadow:none;padding:0;max-width:100%;font-family:var(--font-display,'Plus Jakarta Sans'),-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:28px;font-weight:700;line-height:1.2;letter-spacing:-.02em}
-/* First screen (Nov 13): the S0 greeting is a short headline at
-   a restrained scale — two lines, display face, larger than body
-   text but never a billboard — not a paragraph. And on a wide
-   screen the S0 chat column and the messages box drop their card
-   frames, so the headline sits on the bare page and the input card
-   below is the only box. On a phone the column stays a card
-   (bottom sheet). */
-.chatmap-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px);line-height:1.15;font-weight:700}
-@media (min-width:901px){
-  .chatmap-s0 .chatcol{border:0;background:transparent;box-shadow:none}
-  .chatmap-s0 .chat{border:0;background:transparent;box-shadow:none;padding:16px 0}
-}
+/* First screen (Nov 13, rebuilt Nov 24): the S0 greeting is a
+   short headline at a restrained scale — two lines, display face,
+   larger than body text but never a billboard. The rule lives in
+   the .chat-split.chat-s0 block below now; the old .chatmap-s0
+   rules were removed Nov 25, 2026 (rendered-check fix — the bare
+   .chatcol rule below them leaked a 35% width onto the new chat
+   column and shrank it to ~110px at 1919px). */
 /* Chips — quick replies (design #1, NN/g prompt controls): tappable
    answers under the input, 3–4 at a time, so the traveler never faces a
    blank box. They WRAP to two rows — the old one-row scroll hid the 4th
@@ -216,8 +208,11 @@ button.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink
 .card .img-loading{aspect-ratio:4/3;height:auto;width:100%}
 .img-loading.fujin-portrait{width:64px;height:64px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 10px rgba(13,16,35,.15);margin:0 auto 18px;font-size:26px}
 /* Map skeleton (design #9): the shape of the map while the Leaflet chunk
-   loads — a shimmer block with a faint route line, not a blank area. */
-.map-skeleton{height:100%;min-height:320px;display:flex;flex-direction:column;gap:12px}
+   loads — a shimmer block with a faint route line, not a blank area.
+   Rendered-check fix (Nov 25, 2026): the "Loading the map…" line
+   sat flush against the card's left edge — the skeleton had no
+   padding. */
+.map-skeleton{height:100%;min-height:320px;display:flex;flex-direction:column;gap:12px;padding:16px}
 .card .body h3{font-size:20px;font-weight:600;margin:0 0 4px}
 .card .body .plan-muted{font-size:13px}
 .card .body p{font-size:16px;color:var(--muted)}
@@ -356,39 +351,30 @@ html{scroll-padding-bottom:96px}
 @media (max-width:900px){.appbar-total-label{display:none}}
 @media (max-width:600px){.appbar-brand .fujin-portrait{display:none}.appbar{gap:8px}.appbar-actions{gap:8px}}
 
-/* Chat-first split layout (Nov 12 rebuild — the user: "modern layout,
-   wide, use all page space, chat is the main space") + trip panel
-   (app shell, Nov 12) + interface round (state gates, §4/§5). The old
-   map-as-background overlay is gone: the chat floated ON TOP of the map
-   and hid its left half (the map heading clipped mid-word,
-   Prague/Vienna markers under the panel). Now the section is a flex
-   row that fills the first screen below the app bar: a solid chat panel
-   on the left, the editable trip panel in the middle, the map on the
-   right, all full height of the section. The map fits the whole route
-   in its own visible area — no panel covers any of it. Height is
-   100dvh minus the compact chrome above it (app bar ~52 + panel
-   margin ≈ 84px — the site header is gone, first-screen rebuild
-   Nov 13; the 8-tab bar is gone, M2); the chat gets ≥85% of viewport
-   height. At S0 the chat is the only zone, so it centers at max 720px
-   instead of hugging the left edge. Below 1200px the zones switch one
-   at a time (data-zone) instead of squeezing three columns; on a
-   narrow screen the active zone is the bottom sheet below, so the top
-   of the map stays visible. */
-.chatmap{position:relative;height:calc(100dvh - 84px);min-height:560px;display:flex;gap:16px}
-.chatmap-s0{justify-content:center}
-.chatmap-s0 .chatcol{width:min(720px,100%)}
-.chatcol{position:static;width:min(500px,35%);flex:0 0 auto;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 2px 16px rgba(13,16,35,.06);padding:16px}
+/* Chat-first split layout — rebuilt Nov 24, 2026 (Layla-style):
+   .chat-split is a grid (chat column + canvas), in the
+   ".chat-split (chat rebuild)" block below. The old .chatmap rules
+   that lived here were removed Nov 25, 2026 (rendered-check fix):
+   the bare .chatcol rule set width:35% and matched the new chat's
+   column, shrinking it to ~110px at 1919px. What survives below
+   is still used: .trippanel (TripPanel.tsx, plan page), .legcard
+   (TripMapLeaflet.tsx), .map-fullbleed (TripMap, DiscoveryMap),
+   .map-rail (TripMap.tsx). */
+
 .trippanel{position:static;width:360px;flex:0 0 360px;height:100%;z-index:2;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 2px 16px rgba(13,16,35,.06);padding:16px;overflow-y:auto;min-height:0}
-.chatmap .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
-.mapcol{position:relative;flex:1 1 auto;min-width:0;height:100%;z-index:0;display:flex;flex-direction:column}
+
 .legcard{position:absolute;right:16px;top:84px;width:min(340px,calc(100% - 32px));z-index:3;border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 14px;background:var(--card);box-shadow:0 8px 28px rgba(13,16,35,.18)}
 .legcard p{margin:6px 0}
-.maphints{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;flex-direction:column;gap:8px;max-width:340px}
-.maphint{font-size:13px;color:var(--muted);margin:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 12px;box-shadow:0 2px 10px rgba(13,16,35,.08)}
+
 /* Full-bleed map (modern-map build, Nov 13): the map fills its column
    edge-to-edge — the 16px boxed panel is gone. The canvas is
-   absolutely positioned inside; the rail floats above it. */
-.map-fullbleed{position:relative;height:100%;min-height:320px}
+   absolutely positioned inside; the rail floats above it.
+   Rendered-check fix (Nov 25, 2026): 320px → 480px — fitToRoute
+   reserves 210px of top padding for the price-pill stacks, so at
+   320px the route was squeezed into a ~62px band and the pills
+   overlapped over Germany/Denmark. The background is the loading
+   base under the tiles (dark override in the dark block). */
+.map-fullbleed{position:relative;height:100%;min-height:480px;background:#e8e6e1}
 /* Floating itinerary rail over the map (modern-map build, Nov 13):
    a glass card, top-left, listing each stop with its nights and date
    range — the route at a glance, without opening the trip panel.
@@ -404,68 +390,35 @@ html{scroll-padding-bottom:96px}
 .map-rail-num{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--on-ink);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
 .map-rail-city{flex:1 1 auto;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .map-rail-nights{flex:0 0 auto;color:var(--muted);font-size:12px}
-/* Zone switcher (app shell): hidden on wide screens, where all three
-   zones sit side by side. A floating pill over the map, clear of the
-   leg card (top-right) and the map hints (bottom-right). */
-.zonebar{display:none}
-@media (max-width:1200px){
-  .zonebar{display:flex;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:4;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px;box-shadow:0 2px 10px rgba(13,16,35,.12)}
-  .zonebar-btn{border:none;background:transparent;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;min-height:40px}
-  .zonebar-btn.selected{background:var(--ink);color:var(--on-ink)}
-  .chatcol{width:min(500px,45%)}
-  /* The trip panel swaps the map zone — the chat always stays. */
-  .chatmap:not([data-zone="trip"]) .trippanel{display:none}
-  .chatmap[data-zone="trip"] .mapcol{display:none}
-  .chatmap[data-zone="trip"] .trippanel{display:flex}
-  /* The Chat button hides here — the chat is always visible, so the
-     switcher is Map / Trip only. */
-  .zonebar-chat{display:none}
-}
+/* (Rendered-check fix, Nov 25, 2026: the zone switcher is gone —
+   the Nov 24 rebuild has no zones to switch. The .zonebar rules
+   and the ≤1200px block were removed; the block also carried a
+   second .chatcol width leak (45%) that shrank the new chat
+   column on tablets.) */
 @media (max-width:900px){
-  .chatmap{height:calc(100dvh - 104px);min-height:520px}
-  .chatcol{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
+  /* Rendered-check fix (Nov 25, 2026): the old .chatmap zone
+     rules are gone — the .chatcol bottom-sheet rule matched the
+     new chat's column and would have yanked it out of the grid
+     on a phone. What survives is still live: the trip panel as a
+     bottom sheet on the plan page, and the leg card pinned below
+     the top of the map. */
   .trippanel{position:absolute;left:8px;right:8px;top:auto;bottom:8px;width:auto;height:58%;padding:12px}
-  .chatmap .chat{max-height:none}
-  .mapcol{position:absolute;inset:0}
-  /* The leg card drops below the zone switcher pill on a phone, so the
-     two never stack on each other. */
   .legcard{left:8px;right:8px;top:64px;bottom:auto;width:auto;max-height:38%;overflow-y:auto}
-  .maphints{display:none}
-  /* One zone at a time: the active zone is the bottom sheet over the
-     map; Map hides the sheet entirely. The Chat button returns — at
-     this width the chat is not always visible. */
-  .zonebar-chat{display:block}
-  .chatmap[data-zone="trip"] .chatcol{display:none}
-  .chatmap[data-zone="map"] .chatcol{display:none}
 }
 
-/* Hero photo (first-screen rebuild, Nov 13): at S0 on a wide screen
-   the chat shares the first viewport with one tall destination
-   photo, like Layla's cherry blossoms — the chat stays first, the
-   photo is decoration, never interactive. Below 1200px it is gone,
-   so the chat keeps the whole width on a tablet or phone. The chat
-   column narrows to make room; the pair stays centered. */
-.s0-photo{display:none;margin:0}
-@media (min-width:1201px){
-  .chatmap-s0 .chatcol{width:min(700px,56%)}
-  .chatmap-s0 .s0-photo{display:block;flex:0 0 auto;width:min(520px,37%);border-radius:12px;overflow:hidden}
-  .chatmap-s0 .s0-photo img,.chatmap-s0 .s0-photo .img-fallback,.chatmap-s0 .s0-photo .img-loading{width:100%;height:100%;object-fit:cover;border-radius:12px}
-}
+/* Hero photo — rebuilt Nov 24, 2026: the S0 canvas photo is the
+   Kyoto pool photo, styled in the .chat-split block below.
+   Rendered-check fix (Nov 25, 2026): the old bare
+   .s0-photo{display:none} rule is gone — it hid the new chat's
+   S0 photo entirely, at every width. */
 
-/* Below-the-fold tools (first-screen rebuild, Nov 13): "Prefer
-   forms?" and "Start from a link" live below the app, in normal
-   flow after the chatmap — the first screen ends after the chips.
-   Same width as the S0 chat column, centered. */
-.below-fold-tools{max-width:720px;margin:28px auto 0;padding:0 4px}
+/* (Rendered-check fix, Nov 25, 2026: the below-fold tools band
+   is gone — "Prefer forms?" and "Start from a link" left the
+   chat in the Nov 24 rebuild.) */
 
-/* Hero input (first-screen rebuild, Nov 13): at S0 the input is a
-   big soft card, not a pill row — taller field, larger type, a
-   prominent Start action, like Layla's input card. At S1/S2 the
-   chat is a narrow column and the input stays compact. */
-.chatmap-s0 .hero-input{flex-wrap:nowrap;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:8px;box-shadow:0 8px 28px rgba(13,16,35,.08)}
-.chatmap-s0 .hero-input:focus-within{border-color:var(--ink)}
-.chatmap-s0 .hero-input input{flex:1 1 auto;min-width:0;min-height:56px;font-size:17px;border:0;background:transparent}
-.chatmap-s0 .hero-input .primary{min-height:56px;padding:0 28px;font-size:16px;border-radius:var(--r-sm);white-space:nowrap}
+/* (Rendered-check fix, Nov 25, 2026: the old .chatmap-s0 hero
+   input rules are gone — the new chat's input is styled in the
+   .chat-split block below.) */
 
 /* Trip panel (app shell): the live itinerary — header with the running
    total, tier + travelers + month controls, then the timeline. The
@@ -507,10 +460,10 @@ html{scroll-padding-bottom:96px}
 /* --- Portable plan / on-trip "Today" view (community round, design §7) --- */
 /* Offline banner: a slim banner instead of a dead screen. */
 .offline-banner{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:var(--r-sm);padding:8px 12px;font-size:13px;color:var(--warn-ink);margin-bottom:8px;flex:0 0 auto}
-/* On-trip mode: the chat messages and the Today view share the panel —
-   each scrolls inside its own region instead of pushing the other out. */
-.chatcol.tripmode-on .chat{flex:1 1 38%}
-.ontrip-wrap{flex:1 1 auto;min-height:0;overflow-y:auto;border-top:1px solid var(--line-soft);padding-top:12px;margin-top:4px}
+/* (Rendered-check fix, Nov 25, 2026: on-trip mode left the chat
+   in the Nov 24 rebuild — the .tripmode-on / .ontrip-wrap rules
+   are gone. The .today-* rules below stay: TodayView renders
+   them on the plan page.) */
 .today{flex:0 0 auto}
 .today-head{margin-bottom:8px}
 .today-days{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
@@ -829,13 +782,29 @@ html{scroll-padding-bottom:96px}
 .hero-trust{margin:20px 0 0;font-size:13px;color:rgba(255,255,255,.82)}
 /* The search widget on the photo: the tabs and the trip-type
    control sit on the scrim, so they read white / warm-paper
-   instead of ink-on-white. The bar itself is already a white
-   card with a shadow — it floats as-is. */
+   instead of ink-on-white. The bar is a WHITE pill card in both
+   themes — the photo is the same in dark mode, so the bar and its
+   fields use fixed light values, never the theme tokens
+   (rendered-check fix, Nov 25, 2026: the bar went dark-charcoal
+   in dark mode and the trip-type options went white-on-white). */
 .hero-booking .sw-tabs{border-bottom-color:rgba(255,255,255,.35)}
 .hero-booking .sw-tab{color:#fff}
 .hero-booking .sw-tab:hover{background:rgba(255,255,255,.12)}
 .hero-booking .sw-tab.selected{box-shadow:inset 0 -2px 0 #fff}
 .hero-booking .sw-trip-type{background:rgba(255,255,255,.94);border-color:transparent}
+.hero-booking .sw-trip-type button{color:#191e3b}
+.hero-booking .sw-trip-type button:hover{background:rgba(25,30,59,.08)}
+.hero-booking .sw-bar{background:#fff;color:#191e3b;border-color:transparent}
+.hero-booking .sw-bar .sw-field{color:#191e3b;border-left-color:#e5e0d8}
+.hero-booking .sw-bar .sw-field>span:first-child{color:#5a6478}
+.hero-booking .sw-bar .sw-field input,.hero-booking .sw-bar .sw-field select{color:#191e3b}
+.hero-booking .sw-bar .sw-field input::placeholder{color:#5a6478}
+.hero-booking .sw-bar .sw-field-icon{color:#5a6478}
+.hero-booking .sw-bar .sw-stepper button{background:#fff;border-color:#d8d2c4;color:#191e3b}
+.hero-booking .sw-bar .sw-stepper button:hover:not(:disabled){border-color:#191e3b}
+.hero-booking .sw-bar .sw-field:focus-within{background:#e8f0fb}
+.hero-booking .sw-honest{color:rgba(255,255,255,.92);text-shadow:0 1px 8px rgba(0,0,0,.45)}
+.hero-booking .sw-honest a{color:#fff;text-decoration:underline}
 
 /* Search widget (Wind & wander, Nov 24 2026): the tabs are text
    links above ONE white pill bar — the bar is the search. Each
@@ -1196,10 +1165,7 @@ button.continue-card:hover{border-color:var(--ink)}
   .site-header .logo{font-size:22px}
   .site-theme{padding:10px 12px}
   .ai-pill{padding:9px 10px}
-  /* S0 chat input: the Start button goes full-width under the field
-     instead of squeezing the field to ~170px. */
-  .chatmap-s0 .hero-input{flex-wrap:wrap}
-  .chatmap-s0 .hero-input .primary{width:100%}
+
 }
 
 /* Homepage restructure (Nov 15, 2026): icons, type scale, packages
@@ -1239,6 +1205,11 @@ button.continue-card:hover{border-color:var(--ink)}
 .feature-photo .safeimg,.feature-photo img,.feature-photo .img-fallback,.feature-photo .pkg-photo-fallback{height:100%;width:100%;object-fit:cover;display:block}
 .feature-photo .pkg-photo-fallback{aspect-ratio:auto}
 .feature-body{grid-column:span 5;display:flex;flex-direction:column;gap:8px;justify-content:center}
+/* Rendered-check fix (Nov 25, 2026): the feature body's actions
+   had margin-top:auto, which pushed the buttons to the bottom of
+   the 420px-tall photo column and left a large empty gap under
+   the short 3-day preview. The block centers as a unit now. */
+.feature-body .pkg-actions{margin-top:0}
 .feature-body h2{font-size:32px;font-weight:800}
 .feature-body .pkg-price{margin-top:4px}
 /* Hidden gems as a labelled row inside Destinations (round 2,
@@ -1252,6 +1223,18 @@ button.continue-card:hover{border-color:var(--ink)}
    deals shelf renders the same card as a wide row, photo left. */
 .pkg-photo{width:100%;aspect-ratio:4/3;height:auto;object-fit:cover;display:block;transition:transform 200ms ease}
 .pkg-photo-fallback{display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;background:linear-gradient(135deg,#e8eef5,#d3deeb);color:var(--ink);font-family:var(--font-display);font-size:20px;font-weight:800;padding:16px;text-align:center}
+/* Rendered-check fix (Nov 25, 2026): the ready-made cards carry
+   name + price OVERLAID on the photo's bottom scrim, like the
+   Popular destinations cards — the spec was never name + price in
+   a white body below the photo. The overlay mirrors .dest-overlay
+   (same gradient, same white type); the body keeps h3 + price only
+   when there is no photo at all (PackageCard renders them
+   conditionally). */
+.pkg-photo-wrap{position:relative;overflow:hidden}
+.pkg-overlay{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:56px 20px 16px;background:linear-gradient(180deg,rgba(8,12,22,0),rgba(8,12,22,.78));color:#fff}
+.pkg-overlay h3{color:#fff;font-size:20px;font-weight:700;margin:0 0 2px}
+.pkg-overlay .pkg-price{color:#fff;font-size:24px}
+.pkg-overlay .pkg-price span{color:rgba(255,255,255,.85)}
 .pkg-body{padding:20px;display:flex;flex-direction:column;flex:1}
 .pkg-body h3{margin:10px 0 2px;font-size:20px;font-weight:600}
 .pkg-route{margin:0 0 6px;font-size:13px;color:var(--muted)}
@@ -1373,10 +1356,14 @@ button.continue-card:hover{border-color:var(--ink)}
    chat column left, visual canvas right. The chat column is ONLY a
    chat; the canvas carries the trip (summary, then the plan artefact).
    On a phone the canvas stacks below the chat — no zone switcher, no
-   hidden content. The old .chatmap rules above stay for now (dead CSS
-   from the previous layout) and are not referenced by the new chat. */
+   hidden content. Rendered-check fix (Nov 25, 2026): the old
+   .chatmap rules above are gone — the bare .chatcol rule among them
+   set width:35% and shrank this column to ~110px at 1919px. */
 .chat-split{position:relative;display:grid;grid-template-columns:minmax(360px,420px) minmax(0,1fr);gap:16px;height:calc(100dvh - 84px);min-height:560px}
-.chat-split .chatcol{display:flex;flex-direction:column;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
+/* Rendered-check fix (Nov 25, 2026): width:auto + min-width:0 pin
+   the column to its grid track (minmax(360px,420px)) — no outside
+   rule can shrink it again. */
+.chat-split .chatcol{display:flex;flex-direction:column;width:auto;min-width:0;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
 .chat-split .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
 .chat-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px);line-height:1.15;font-weight:700}
 .chat-split .msg{margin-bottom:12px}
@@ -1388,7 +1375,10 @@ button.continue-card:hover{border-color:var(--ink)}
 .chat-split .msg-tips p{font-size:13px;color:var(--muted);margin:4px 0 0}
 .chat-split .thinking-status{font-size:13px;color:var(--muted);margin:0 0 12px}
 .chat-split .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
-.chat-split .chips .chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer}
+/* Rendered-check fix (Nov 25, 2026): the old global .chip rule set
+   flex:0 0 auto, so a chip could never shrink and the row stuck out
+   of the column. Chips now shrink to the column and wrap. */
+.chat-split .chips .chip{flex:0 1 auto;min-width:0;max-width:100%;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer}
 .chat-split .chips .chip:hover{border-color:var(--brand)}
 .chat-split .chips .chip:disabled{opacity:.5;cursor:default}
 .chat-split .hero-input{display:flex;gap:8px;align-items:stretch;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:8px;box-shadow:0 8px 28px rgba(13,16,35,.08)}
@@ -1400,10 +1390,20 @@ button.continue-card:hover{border-color:var(--ink)}
 .chat-split .canvas-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
 .chat-split .canvas-welcome h2{font-family:var(--font-display);font-size:28px;font-weight:700;margin:16px 0 8px}
 .chat-split .canvas-welcome p{color:var(--muted);line-height:1.6;margin:0}
-.chat-split .s0-photo{border-radius:var(--r-lg);overflow:hidden;aspect-ratio:4/3}
+/* Rendered-check fix (Nov 25, 2026): the photo is a 16/9 (or 4/3)
+   box whose <img> lives inside SafeImg's .safeimg wrapper — the
+   wrapper broke the height:100% chain, so object-fit:cover never
+   engaged and the image rendered top-aligned at its intrinsic
+   ratio, its subject cut off at the bottom. The wrapper is now
+   absolutely pinned to the box, so cover engages. The summary
+   photo biases toward the lower subject (Prague spires, Vienna's
+   Gloriette sit low under a sky-heavy top). */
+.chat-split .s0-photo{position:relative;border-radius:var(--r-lg);overflow:hidden;aspect-ratio:4/3}
+.chat-split .s0-photo .safeimg{position:absolute;inset:0}
 .chat-split .s0-photo img,.chat-split .s0-photo .img-fallback,.chat-split .s0-photo .img-loading{width:100%;height:100%;object-fit:cover;border-radius:var(--r-lg)}
-.chat-split .summary-photo{aspect-ratio:16/9;overflow:hidden}
-.chat-split .summary-photo img,.chat-split .summary-photo .img-fallback,.chat-split .summary-photo .img-loading{width:100%;height:100%;object-fit:cover}
+.chat-split .summary-photo{position:relative;aspect-ratio:16/9;overflow:hidden}
+.chat-split .summary-photo .safeimg{position:absolute;inset:0}
+.chat-split .summary-photo img,.chat-split .summary-photo .img-fallback,.chat-split .summary-photo .img-loading{width:100%;height:100%;object-fit:cover;object-position:center 65%}
 .chat-split .summary-card h2,.chat-split .plan-head h2{font-family:var(--font-display);font-size:24px;font-weight:700;margin:16px 16px 8px}
 .chat-split .summary-rows{display:flex;flex-direction:column}
 .chat-split .summary-line{display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line-soft);padding:12px 16px;cursor:pointer;font-size:15px}
@@ -1416,8 +1416,16 @@ button.continue-card:hover{border-color:var(--ink)}
 .chat-split .confirm-card h3{font-size:18px;font-weight:700;margin:0 0 6px}
 .chat-split .confirm-card p{color:var(--muted);margin:0 0 14px;line-height:1.5}
 .chat-split .confirm-actions{display:flex;flex-wrap:wrap;gap:8px}
-.chat-split .map-card{min-height:320px}
-.chat-split .map-card .map-skeleton{height:320px}
+/* Rendered-check fix (Nov 25, 2026): 320px → 480px. fitToRoute
+   reserves 210px of top padding for the price-pill stacks, so at
+   320px the route was squeezed into a ~62px band at the bottom —
+   at that zoom Prague–Vienna sit ~48px apart, so the ~110px pills
+   overlapped and landed over Germany/Denmark. At 480px the fitted
+   zoom is ~6.3 and the cities are ~166px apart, so every pill
+   reads. (The coordinates were verified correct — no lat/lng
+   swap; the geometry was the defect.) */
+.chat-split .map-card{min-height:480px}
+.chat-split .map-card .map-skeleton{height:480px}
 .chat-split .plan-card{padding:16px}
 .chat-split .plan-head h2{margin:0 0 4px}
 .chat-split .plan-route{color:var(--muted);margin:0 0 8px}

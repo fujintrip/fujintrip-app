@@ -125,7 +125,15 @@ export default function TripMapLeaflet({
   // stack of readable pills instead of one overlapping pile.
   const anchors = priceTagAnchorY(legs);
   return (
-    <div style={{ height: '100%', minHeight: 320, overflow: 'hidden' }}>
+    // Rendered-check fix (Nov 25, 2026): the map was 320px tall
+    // while fitToRoute reserves 210px of top padding for the
+    // price-pill stacks, so the route was squeezed into a ~62px
+    // band at the bottom — at that zoom Prague–Vienna sit ~48px
+    // apart, so the ~110px pills overlapped and landed over
+    // Germany/Denmark. At 480px the fitted zoom is ~6.3 and the
+    // cities are ~166px apart, so every pill reads. The CSS
+    // (.map-card, .map-fullbleed) moved to 480px with it.
+    <div style={{ height: '100%', minHeight: 480, overflow: 'hidden' }}>
       <MapContainer center={center} zoom={3} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} zoomControl={false}>
         {/* Zoom buttons (design #8): scroll-wheel zoom is off so the page
             scrolls; the +/- sits top-right, and the leg card docks

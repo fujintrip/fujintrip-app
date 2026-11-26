@@ -88,6 +88,13 @@ export const CITY_PHOTOS: Record<string, string> = {
   // Spain card can show Madrid once Barcelona's Sagrada Familia is
   // claimed by the Barcelona voices card.
   Madrid: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/5/58/Plaza_Mayor_de_Madrid_-_01.jpg/960px-Plaza_Mayor_de_Madrid_-_01.jpg',
+  // Rendered-check fix (Nov 25, 2026): Chefchaouen, the blue city
+  // (File:Chefchaouen (Blue City).jpg) — verified Nov 25 (HTTP 200,
+  // image/jpeg, 960×540, ~158KB, subject viewed: blue-painted
+  // street, no watermark, no brand signage). Morocco's lead photo:
+  // the Marrakech Koutoubia photo carries a large BMCI bank sign in
+  // its center, which reads as advertising on a trip card.
+  Chefchaouen: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/2/29/Chefchaouen_%28Blue_City%29.jpg/960px-Chefchaouen_%28Blue_City%29.jpg',
 };
 
 // A second photo for a city whose first photo is claimed by another
@@ -116,6 +123,9 @@ export const ROUTE_PHOTO_CITY: Record<string, string> = {
   'Central Europe': 'Vienna',
   Japan: 'Tokyo',
   'Southeast Asia': 'Hanoi',
+  // Rendered-check fix (Nov 25, 2026): Morocco shows Chefchaouen,
+  // not Marrakech — see the Chefchaouen note in CITY_PHOTOS above.
+  Morocco: 'Chefchaouen',
 };
 
 // The lead photo for a trip (audit round, Nov 17, 2026): the

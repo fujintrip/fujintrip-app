@@ -27,7 +27,7 @@ import SearchWidget from './SearchWidget';
 import SearchResults from './SearchResults';
 import PackagesSection, { TripOfTheWeekFeature } from './PackagesSection';
 import { ContinueBar, ContinueStrip, HowItWorksSection, LOCAL_VOICES_PLACES, LocalVoicesTeaser } from './HomeSections';
-import { featuredPackages, tripOfTheWeek, type LivePackageFare, type Package } from '../lib/packages';
+import { featuredPackages, readyMadePackages, tripOfTheWeek, type LivePackageFare, type Package } from '../lib/packages';
 import { isSavedDetail, packageSavedKey, savedDetailLine, tripSavedKey, type SavedDetail } from '../lib/savedTrips';
 import { alertIsDrop, evaluatePriceAlert, isPriceAlert, priceAlertLine, PRICE_ALERTS_STORAGE_KEY, type PriceAlert } from '../lib/priceAlerts';
 import { Chat, SafeImg, type PriceCheckData, type PriceWatch, type Trip } from './FujinChat';
@@ -586,7 +586,18 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
   // an empty list and renders the labeled fallback.
   const homepagePhotos = useMemo(() => {
     const cards: Array<{ key: string; destination: string; stopCities?: string[]; ownPhoto?: string | null }> = [];
-    for (const p of featuredPackages()) {
+    // Rendered-check fix (Nov 25, 2026): the ready-made band's
+    // filler (this week: India) is NOT a featured package, so it
+    // never got a photo assignment and rendered the blank fallback
+    // tile. Claim the whole ready-made band — featured first, then
+    // the filler — so every card on the shelf has a photo. The
+    // dedupe by id matters: a card pushed twice would overwrite
+    // its own assignment with an empty list.
+    const shelfPackages = [...featuredPackages()];
+    for (const p of readyMadePackages()) {
+      if (!shelfPackages.some((x) => x.id === p.id)) shelfPackages.push(p);
+    }
+    for (const p of shelfPackages) {
       cards.push({ key: `pkg:${p.id}`, destination: p.destination, stopCities: p.stops });
     }
     for (const g of HIDDEN_GEMS) {

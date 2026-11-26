@@ -48,13 +48,28 @@ export function PackageCard({
   const shownPhoto = photo === undefined ? pkg.photo : photo;
   return (
     <article className="pkg-card">
-      {shownPhoto ? (
-        <SafeImg src={shownPhoto} alt={pkg.destination} label={pkg.destination} className="pkg-photo" />
-      ) : (
-        <div className="pkg-photo-fallback" role="img" aria-label={pkg.destination}>
-          <span>{pkg.destination}</span>
-        </div>
-      )}
+      <div className="pkg-photo-wrap">
+        {shownPhoto ? (
+          <>
+            <SafeImg src={shownPhoto} alt={pkg.destination} label={pkg.destination} className="pkg-photo" />
+            {/* Rendered-check fix (Nov 25, 2026): the name + price
+                ride on the photo's bottom scrim, like the Popular
+                destinations cards — not in a white body below it.
+                The body keeps the name + price only when there is
+                no photo at all (the labeled fallback tile). */}
+            <div className="pkg-overlay">
+              <h3>{pkg.destination}</h3>
+              <p className="pkg-price">
+                from ${price.perTraveler.toLocaleString()} <span>per traveler</span>
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="pkg-photo-fallback" role="img" aria-label={pkg.destination}>
+            <span>{pkg.destination}</span>
+          </div>
+        )}
+      </div>
       <div className="pkg-body">
         {/* Card top row (audit round, Nov 17, 2026): the tag pill and
             share sit together up top, so the action row below holds
@@ -71,15 +86,17 @@ export function PackageCard({
             buttonClassName="linklike"
           />
         </div>
-        <h3>{pkg.destination}</h3>
+        {!shownPhoto && <h3>{pkg.destination}</h3>}
         <p className="pkg-route">{pkg.stops.join(' → ')}</p>
         <p className="pkg-meta">
           <Icon name="calendar" size={15} /> {pkg.nights} nights · {pkg.stops.length}{' '}
           {pkg.stops.length === 1 ? 'city' : 'cities'} · {pkg.experiences} experiences
         </p>
-        <p className="pkg-price">
-          from ${price.perTraveler.toLocaleString()} <span>per traveler</span>
-        </p>
+        {!shownPhoto && (
+          <p className="pkg-price">
+            from ${price.perTraveler.toLocaleString()} <span>per traveler</span>
+          </p>
+        )}
         {/* The estimate label is gone from the card (UX direction,
             Nov 19 2026 — P1-3): one honesty line per page — the
             widget line under the search — covers it. A LIVE fare
