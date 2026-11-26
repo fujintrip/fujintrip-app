@@ -1468,3 +1468,30 @@ button.continue-card:hover{border-color:var(--ink)}
   .chat-s0 .hero-input .primary{width:100%}
   .chat-split .compare{grid-template-columns:1fr}
 }
+
+/* Category landing pages (Nov 25, 2026): one route per section.
+   All colors are theme tokens, so light and dark both read cleanly.
+   Grids collapse to one column on mobile; nothing overflows. */
+.landing-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.landing-live{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px}
+.landing-live-fares{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 12px}
+.landing-live-fare{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:14px}
+.landing-live-fare strong{display:block;font-size:15px;margin-bottom:6px}
+.landing-live-fare p{margin:4px 0 0}
+.landing-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.landing-step{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
+.landing-step strong{display:block;font-size:16px;margin-bottom:6px}
+.landing-step p{margin:0}
+.landing-trust{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.landing-trust-item{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
+.landing-trust-item strong{display:block;font-size:16px;margin-bottom:6px}
+.landing-trust-item p{margin:0}
+.landing-ai{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px}
+.landing-explore{display:flex;flex-wrap:wrap;gap:8px}
+.landing-explore a{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:14px}
+@media(max-width:900px){
+  .landing-live-fares{grid-template-columns:1fr}
+  .landing-steps{grid-template-columns:1fr}
+  .landing-trust{grid-template-columns:1fr}
+  .landing-ai{padding:20px}
+}

@@ -7,6 +7,7 @@ import { buildPlan } from '../lib/planner';
 import { buildTripCard } from '../lib/tripCard';
 import { appendObservation, trendLine } from '../lib/duffel';
 import { HOME_TABS, type HomeTabId } from '../lib/homeTabs';
+import { categoryRouteFor } from '../lib/categoryLanding';
 import {
   type SearchQuery,
   searchQueryToParams,
@@ -1218,7 +1219,11 @@ export default function FujinApp({ variant, initialTab, initialSearch }: { varia
               <ul>
                 {HOME_TABS.map((t) => (
                   <li key={t.id}>
-                    <a href={`/?tab=${t.id}`}>{t.label}</a>
+                    {/* Category landing pages (Nov 25, 2026): the
+                        footer Book column links each category to its
+                        own landing page; the header nav still
+                        switches the hero widget tab in place. */}
+                    <a href={categoryRouteFor(t.id)}>{t.label}</a>
                   </li>
                 ))}
               </ul>

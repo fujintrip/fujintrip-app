@@ -24,6 +24,7 @@ import {
   tabRowsFor,
   type TabRow,
 } from '../lib/homeTabs';
+import { categoryRouteFor } from '../lib/categoryLanding';
 import {
   cheapestMultiCityTotal,
   destinationPhoto,
@@ -3159,7 +3160,8 @@ function CategoryResults({
       )}
       <p className="plan-muted">
         Best value per traveler, {query.travelers} traveler{query.travelers > 1 ? 's' : ''} · planning estimate — not a live quote. Live comparison
-        arrives as suppliers connect.
+        arrives as suppliers connect.{' '}
+        <a href={categoryRouteFor(query.tab)}>See the {label} page →</a>
       </p>
     </div>
   );
