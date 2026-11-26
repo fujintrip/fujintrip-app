@@ -23,11 +23,16 @@ const pkgs = readFileSync(new URL('../components/PackagesSection.tsx', import.me
 const leaflet = readFileSync(new URL('../components/TripMapLeaflet.tsx', import.meta.url), 'utf8');
 const data = readFileSync(new URL('../lib/data.ts', import.meta.url), 'utf8');
 
-test('defect 1: the chat column is the 420px grid track, not a leaked width', () => {
-  // The grid itself is the sizing authority.
-  assert.ok(css.includes('.chat-split{position:relative;display:grid;grid-template-columns:minmax(360px,420px) minmax(0,1fr)'), 'the split grid gives the chat column a 420px track');
-  // The column is pinned to that track — no outside rule can shrink it.
+test('defect 1: the chat column is an equal half of the 50/50 split, not a leaked width', () => {
+  // User feedback Nov 25: the columns were not equal. The grid is
+  // now an exact 50/50 split — 1fr 1fr, no minmax, no px — so both
+  // halves are equal at every desktop width.
+  assert.ok(css.includes('.chat-split{position:relative;display:grid;grid-template-columns:1fr 1fr;'), 'the split grid is an exact 50/50');
+  assert.ok(!css.includes('grid-template-columns:minmax(360px,420px)'), 'no 420px chat track survives');
+  // Both halves are pinned to their tracks — no outside rule can
+  // shrink either one.
   assert.ok(css.includes('.chat-split .chatcol{display:flex;flex-direction:column;width:auto;min-width:0;'), 'the chat column has width:auto + min-width:0');
+  assert.ok(css.includes('.chat-split .canvas{overflow-y:auto;min-height:0;min-width:0;'), 'the canvas has min-width:0');
   // The leak is gone: no bare .chatcol width rule anywhere (the old
   // rule set width:35% and matched the new chat's column).
   assert.ok(!/^\.chatcol\{[^}]*width:/m.test(cssNoComments), 'no bare .chatcol width rule survives');
@@ -43,7 +48,8 @@ test('defect 2: chips fit inside the chat column and wrap', () => {
 
 test('defect 3: the Start button cannot cover the message input', () => {
   // The input takes the remaining width of the row and the button
-  // keeps its own width — with the column at 420px both fit.
+  // keeps its own width — with the half at ~418px (the narrowest
+  // desktop split, at a 901px viewport) both still fit.
   assert.ok(css.includes('.chat-split .hero-input input{flex:1 1 auto;min-width:0;min-height:56px;'), 'the input flexes to the remaining row width');
   assert.ok(css.includes('.chat-split .hero-input .primary{min-height:56px;padding:0 28px;'), 'the Start button keeps its own width');
   // No absolute positioning anywhere in the chat input area.

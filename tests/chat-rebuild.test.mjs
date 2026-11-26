@@ -87,7 +87,7 @@ test('chat rebuild: one next step — confirm before building, one build, one bo
 });
 
 test('chat rebuild: split-screen CSS exists', () => {
-  assert.ok(css.includes('.chat-split{position:relative;display:grid;grid-template-columns:minmax(360px,420px) minmax(0,1fr)'), 'the split layout is a two-column grid');
+  assert.ok(css.includes('.chat-split{position:relative;display:grid;grid-template-columns:1fr 1fr;'), 'the split layout is an exact 50/50 two-column grid');
   assert.ok(css.includes('.chat-split .chatcol{'), 'the chat column has its own card');
   assert.ok(css.includes('.chat-split .canvas{'), 'the canvas has its own column');
   assert.ok(css.includes('.chat-split .summary-line{'), 'the summary rows are tappable');

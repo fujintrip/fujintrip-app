@@ -1353,22 +1353,28 @@ button.continue-card:hover{border-color:var(--ink)}
 @media(max-width:900px){.trip-overview{grid-template-columns:1fr}}
 
 /* Fujin AI chat — rebuilt from scratch (Nov 24, 2026). Split screen:
-   chat column left, visual canvas right. The chat column is ONLY a
-   chat; the canvas carries the trip (summary, then the plan artefact).
-   On a phone the canvas stacks below the chat — no zone switcher, no
-   hidden content. Rendered-check fix (Nov 25, 2026): the old
-   .chatmap rules above are gone — the bare .chatcol rule among them
-   set width:35% and shrank this column to ~110px at 1919px. */
-.chat-split{position:relative;display:grid;grid-template-columns:minmax(360px,420px) minmax(0,1fr);gap:16px;height:calc(100dvh - 84px);min-height:560px}
-/* Rendered-check fix (Nov 25, 2026): width:auto + min-width:0 pin
-   the column to its grid track (minmax(360px,420px)) — no outside
+   chat left, trip program right — an exact 50/50 split (user
+   feedback Nov 25, 2026: the columns were not equal). The chat
+   column is ONLY a chat; the canvas carries the trip (summary, then
+   the plan artefact). On a phone (≤900px) the canvas stacks below
+   the chat — no zone switcher, no hidden content. Rendered-check
+   fix (Nov 25, 2026): the old .chatmap rules above are gone — the
+   bare .chatcol rule among them set width:35% and shrank this
+   column to ~110px at 1919px. */
+.chat-split{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:16px;height:calc(100dvh - 84px);min-height:560px}
+/* Rendered-check fix (Nov 25, 2026) + 50/50 split: width:auto +
+   min-width:0 pin the column to its 1fr grid track — no outside
    rule can shrink it again. */
 .chat-split .chatcol{display:flex;flex-direction:column;width:auto;min-width:0;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}
 .chat-split .chat{flex:1 1 auto;overflow-y:auto;min-height:0;margin:0 0 12px}
 .chat-s0 .msg .bubble.greeting{font-size:clamp(32px,4vw,40px);line-height:1.15;font-weight:700}
 .chat-split .msg{margin-bottom:12px}
-.chat-split .bubble{border-radius:var(--r-md);padding:10px 14px;line-height:1.55}
-.chat-split .bubble.user{background:var(--accent-soft);margin-left:32px}
+/* 50/50 split (Nov 25, 2026): at 1919px the chat half is ~927px
+   wide, so a full-width bubble would be a ~890px line of text.
+   Bubbles cap at 720px instead; own messages are real chat
+   bubbles — sized to content, right-aligned. */
+.chat-split .bubble{border-radius:var(--r-md);padding:10px 14px;line-height:1.55;max-width:720px}
+.chat-split .bubble.user{background:var(--accent-soft);width:fit-content;margin-left:auto}
 .chat-split .bubble.ai{background:var(--surface);border:1px solid var(--line)}
 .chat-split .bubble.greeting{background:transparent;border:0;padding:0}
 .chat-split .bubble.streaming{background:var(--surface);border:1px solid var(--line)}
@@ -1386,7 +1392,7 @@ button.continue-card:hover{border-color:var(--ink)}
 .chat-split .hero-input input{flex:1 1 auto;min-width:0;min-height:56px;font-size:17px;border:0;background:transparent}
 .chat-split .hero-input .primary{min-height:56px;padding:0 28px;font-size:16px;border-radius:var(--r-sm);white-space:nowrap}
 .chat-split .chat-hint{font-size:13px;color:var(--muted);margin:10px 0 0}
-.chat-split .canvas{overflow-y:auto;min-height:0;display:flex;flex-direction:column;gap:16px;padding-right:4px}
+.chat-split .canvas{overflow-y:auto;min-height:0;min-width:0;display:flex;flex-direction:column;gap:16px;padding-right:4px}
 .chat-split .canvas-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
 .chat-split .canvas-welcome h2{font-family:var(--font-display);font-size:28px;font-weight:700;margin:16px 0 8px}
 .chat-split .canvas-welcome p{color:var(--muted);line-height:1.6;margin:0}
