@@ -16,7 +16,7 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Feature, LineString } from 'geojson';
 import type { TripLeg } from '../lib/tripCard';
-import { mapStopsKey, priceTagAnchorY, tagStaggerDelay } from '../lib/tripCard';
+import { mapStopsKey, priceTagAnchorY, tagStaggerDelay, TAG_ANCHOR_X } from '../lib/tripCard';
 import type { MapRail } from '../lib/mapRail';
 import { styleForTheme } from '../lib/mapStyles';
 import LeafletTripMap from './TripMapLeaflet';
@@ -53,10 +53,15 @@ function numberedEl(n: number): HTMLDivElement {
 // where several piled on one city). Kind shows as the border color:
 // dark for flights, warm accent for stays, gray for cars. Selected
 // tags get a thicker dark border; legs already added to the plan get
-// a green border and a check. The pill is a 44px touch target.
-// anchorY is the per-leg stack offset (legs sharing a city stack
-// upward, 46px apart) — the marker's anchor sits that far above the
-// city, so the pill stack reads top-down over its stop. animate is
+// a green border and a check. The pill is 36px tall (second fix
+// round, Nov 25, 2026 — was 44px): a 3-pill stack at 44px needed
+// 46px steps and topped out 154px above its pin, so the stack read
+// as labels for the next country north. At 36px the stack is 40px
+// steps topping out at 136px, and the pill is still ~110px wide, so
+// the tap area stays large. anchorY is the per-leg stack offset
+// (legs sharing a city stack upward, 40px apart) — the marker's
+// anchor sits that far above the city, so the pill stack reads
+// top-down over its stop. animate is
 // mount-only (interface round M5): the tag enters with a 200ms
 // scale-from-0.9 + fade, delayed by its stagger; tags that already
 // existed get animate=false and never re-animate on later renders.
@@ -78,7 +83,7 @@ function priceTagEl(
   const entrance = animate
     ? `animation:tag-in 200ms var(--ease) both;animation-delay:${delayMs}ms;`
     : '';
-  el.innerHTML = `<div style="background:#fff;color:#111;border:${width}px solid ${border};border-radius:22px;padding:10px 14px;min-height:44px;display:flex;align-items:center;font-weight:700;font-size:13px;line-height:1.2;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer;${entrance}">${check}${leg.icon} $${leg.price.toLocaleString()}</div>`;
+  el.innerHTML = `<div style="background:#fff;color:#111;border:${width}px solid ${border};border-radius:22px;padding:7px 10px;min-height:36px;display:flex;align-items:center;font-weight:700;font-size:13px;line-height:1.2;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer;${entrance}">${check}${leg.icon} $${leg.price.toLocaleString()}</div>`;
   el.addEventListener('click', () => onSelect(leg));
   return el;
 }
@@ -327,10 +332,14 @@ export default function TripMap({
           (l) => onSelectLeg?.(l),
         ),
         [leg.lng, leg.lat],
-        // Top-left anchor + offset puts the pill's top-left 40px left
-        // and anchorY above its city — the same stack the Leaflet
-        // iconAnchor [40, anchorY] produced.
-        { anchor: 'top-left', offset: [-40, -anchorY] },
+        // Top-left anchor + offset puts the pill's top-left
+        // TAG_ANCHOR_X left of its pin and anchorY above it, so the
+        // pill is centered horizontally on its pin — the same stack
+        // the Leaflet iconAnchor [TAG_ANCHOR_X, anchorY] produces.
+        // Second fix round (Nov 25, 2026): the offset was a fixed
+        // 40px left, which put the pin a third of the way across
+        // the pill and the stack leaning off its city.
+        { anchor: 'top-left', offset: [-TAG_ANCHOR_X, -anchorY] },
       );
     });
     return () => {

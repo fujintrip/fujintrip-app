@@ -67,8 +67,12 @@ test('defect 4: canvas photos use object-fit:cover and show their subject', () =
   assert.ok(css.includes('.chat-split .summary-photo{position:relative;'), 'the summary photo box is positioned');
   assert.ok(css.includes('.chat-split .summary-photo .safeimg{position:absolute;inset:0}'), 'the summary photo wrapper fills its box');
   // Skyline photos bias toward the lower subject (Prague spires,
-  // Vienna's Gloriette sit low under a sky-heavy top).
-  assert.ok(css.includes('.chat-split .summary-photo img,.chat-split .summary-photo .img-fallback,.chat-split .summary-photo .img-loading{width:100%;height:100%;object-fit:cover;object-position:center 65%}'), 'the summary photo biases toward its lower subject');
+  // Vienna's Gloriette sit low under a sky-heavy top). Second fix
+  // round (Nov 25, 2026): the 16/9 box was nearly the same aspect
+  // as the Prague photo (16/10), so a 65% bias could only ever crop
+  // ~56px of sky away. The header is now a 21/9 strip pinned to
+  // the bottom of the photo.
+  assert.ok(css.includes('.chat-split .summary-photo img,.chat-split .summary-photo .img-fallback,.chat-split .summary-photo .img-loading{width:100%;height:100%;object-fit:cover;object-position:center 100%}'), 'the summary photo crops to the bottom of the photo');
 });
 
 test('defect 5: the map is tall enough for the pill stacks, and the cities are where they belong', () => {

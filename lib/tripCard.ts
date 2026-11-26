@@ -482,16 +482,17 @@ export function buildTripCard(opts: {
     const info = CITY_INFO[name === 'NYC' ? 'New York' : name];
     return info ? { lat: info.lat, lng: info.lng } : null;
   };
-  const mid = (
-    a: { lat: number; lng: number } | null,
-    b: { lat: number; lng: number } | null,
-    fb: { lat: number; lng: number }
-  ): { lat: number; lng: number } =>
-    a && b ? { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 } : fb;
+  // Second fix round (Nov 25, 2026): every leg's pill anchors at its
+  // own CITY's coordinates — never at a midpoint. The old mid()
+  // helper put the flight legs halfway to the origin and the
+  // between-city legs halfway between their two cities, while
+  // priceTagAnchorY stacks by leg.city — so a pill's stack offset
+  // was computed for one city and its position for another point
+  // entirely (the Prague→Vienna train pill landed on Prague's stay
+  // pill and hid its last digit). Midpoints are gone.
   const legs: TripLeg[] = [];
   const firstCoords = coordsFor(cardStops[0].city) ?? { lat: 0, lng: 0 };
   const lastCoords = coordsFor(cardStops[cardStops.length - 1].city) ?? firstCoords;
-  const originCoords = opts.origin ? coordsFor(opts.origin) : null;
   const legMode = LEG_MODE[routeKey] ?? '🚆 Train';
   const fareClass = fareClassLine(tier);
   const fareClassName = fareClassForTier(tier).name;
@@ -529,7 +530,8 @@ export function buildTripCard(opts: {
     ...(airportKnowHow ? { knowHow: airportKnowHow } : {}),
     price: legFlightOut,
     city: cardStops[0].city,
-    ...mid(originCoords, firstCoords, firstCoords),
+    lat: firstCoords.lat,
+    lng: firstCoords.lng,
     startDate,
     endDate: startDate,
   });
@@ -561,7 +563,8 @@ export function buildTripCard(opts: {
       ...(passKnowHow ? { knowHowExtra: passKnowHow } : {}),
       price: legIntercity,
       city: to.city,
-      ...mid(coordsFor(from.city), coordsFor(to.city), coordsFor(to.city) ?? firstCoords),
+      lat: (coordsFor(to.city) ?? firstCoords).lat,
+      lng: (coordsFor(to.city) ?? firstCoords).lng,
       startDate: to.startDate,
       endDate: to.startDate,
     });
@@ -581,7 +584,8 @@ export function buildTripCard(opts: {
     ...(airportKnowHow ? { knowHow: airportKnowHow } : {}),
     price: legFlightBack,
     city: lastStop.city,
-    ...mid(lastCoords, originCoords, lastCoords),
+    lat: lastCoords.lat,
+    lng: lastCoords.lng,
     startDate: endDate,
     endDate,
   });
@@ -732,13 +736,19 @@ export function buildTripCard(opts: {
 // city (Budapest: flight-back + train + stay + car), and tags anchored
 // on the city point stacked into one unreadable pile — fragments of
 // "$6…" overlapping, the city label obscured. Group by city, stack
-// upward in a fixed kind order, 46px apart, so every tag is readable
+// upward in a fixed kind order, 40px apart, so every tag is readable
 // and the numbered city marker stays visible below the stack. The
-// anchor is the Leaflet iconAnchor y: the bottom tag sits 62px above
-// the city point (its bottom edge ~18px clear of the marker), each
-// tag above it 46px higher. Pure function of the legs — unit-tested.
-export const TAG_STACK_STEP = 46;
-export const TAG_STACK_BASE = 62;
+// anchor is the iconAnchor y: the bottom tag sits 56px above the
+// city point (its bottom edge ~20px clear of the marker), each tag
+// above it 40px higher. Pure function of the legs — unit-tested.
+// Second fix round (Nov 25, 2026): the pills shrank 44px → 36px
+// tall (see the map components) so the stack stays compact — the
+// tallest stack (Budapest, 4 legs) tops out at 176px, inside the
+// 210px top padding the maps fit with. TAG_ANCHOR_X centers each
+// pill horizontally on its pin (a typical pill is ~110px wide).
+export const TAG_STACK_STEP = 40;
+export const TAG_STACK_BASE = 56;
+export const TAG_ANCHOR_X = 55;
 // Entrance stagger (interface round M5): when the map first mounts, each
 // price tag enters with a 200ms scale-from-0.9 + fade, staggered 60ms per
 // tag, max 10 tags. The delay is a pure function of the tag's index in

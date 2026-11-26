@@ -125,11 +125,13 @@ test('tripCard: legs sum exactly to the planner totals per kind, for every tier'
   for (const { display } of Object.values(COUNTRY_ROUTES)) check(display, 2, 10);
 });
 
-test('tripCard: price-tag anchors stack per city, 46px apart, clear of the marker', () => {
+test('tripCard: price-tag anchors stack per city, 40px apart, clear of the marker', () => {
   // Nov 12 layout rebuild: Budapest carries 4 legs (flight-back, train,
   // stay, car) and the old single anchor piled them into one unreadable
-  // stack. Anchors must be distinct per city, 46px apart, bottom tag
-  // 62px above the city point (clear of the numbered marker).
+  // stack. Anchors must be distinct per city, 40px apart, bottom tag
+  // 56px above the city point (clear of the numbered marker).
+  // Second fix round (Nov 25, 2026): the pills shrank 44px → 36px,
+  // so the step tightened 46px → 40px and the base 62px → 56px.
   const check = (destination, travelers, days) => {
     const card = buildTripCard({ destination, travelers, days, month: 0, origin: '' });
     const anchors = priceTagAnchorY(card.legs);
@@ -143,9 +145,9 @@ test('tripCard: price-tag anchors stack per city, 46px apart, clear of the marke
     for (const [city, vals] of byCity) {
       const sorted = [...vals].sort((a, b) => b - a);
       assert.equal(new Set(vals).size, vals.length, `${destination} ${city}: no two tags share an anchor`);
-      assert.equal(Math.min(...vals), 62, `${destination} ${city}: bottom tag sits 62px above the city`);
+      assert.equal(Math.min(...vals), 56, `${destination} ${city}: bottom tag sits 56px above the city`);
       for (let i = 1; i < sorted.length; i++) {
-        assert.equal(sorted[i - 1] - sorted[i], 46, `${destination} ${city}: tags are 46px apart`);
+        assert.equal(sorted[i - 1] - sorted[i], 40, `${destination} ${city}: tags are 40px apart`);
       }
     }
     // Budapest is the worst case on the Central Europe route: 4 legs.

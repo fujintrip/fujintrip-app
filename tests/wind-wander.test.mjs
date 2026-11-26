@@ -113,7 +113,7 @@ test('wind photo cards: name + price overlaid on the photo scrim, rows scroll si
   assert.ok(home.includes('className="dest-overlay"'), 'the overlay renders on the voice cards');
   assert.ok(home.includes('className="dest-photo"'), 'the voice photos carry the overlay wrapper');
   assert.ok(css.includes('.feature-overlay{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:64px 28px 24px;background:linear-gradient(180deg,rgba(8,12,22,0),rgba(8,12,22,.78));color:#fff}'), 'the Trip of the week rides on its photo too');
-  assert.ok(css.includes('.feature-photo{grid-column:span 7;position:relative;border-radius:var(--r-lg);overflow:hidden;min-height:420px}'), 'the feature photo is taller');
+  assert.ok(css.includes('.feature-photo{grid-column:span 7;position:relative;border-radius:var(--r-lg);overflow:hidden;min-height:420px;aspect-ratio:16/10}'), 'the feature photo is taller, with a fixed aspect so a portrait photo cannot stretch the row');
   assert.ok(pkgs.includes('className="feature-overlay"'), 'the feature overlay renders');
   assert.ok(pkgs.includes('<p className="feature-eyebrow">Trip of the week</p>'), 'the week label sits on the photo');
 });

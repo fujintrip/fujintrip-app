@@ -11,7 +11,7 @@ import { MapContainer, TileLayer, Marker, Polyline, ZoomControl, useMap } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { TripLeg } from '../lib/tripCard';
-import { mapStopsKey, priceTagAnchorY, tagStaggerDelay } from '../lib/tripCard';
+import { mapStopsKey, priceTagAnchorY, tagStaggerDelay, TAG_ANCHOR_X } from '../lib/tripCard';
 
 export type MapStop = { city: string; lat: number; lng: number };
 
@@ -58,9 +58,12 @@ function numberedIcon(n: number) {
 // overlapping the city label). Kind shows as the border color: dark
 // for flights, warm accent for stays, gray for cars. Selected tags get
 // a thicker dark border; legs already added to the plan get a green
-// border and a check. The pill is a 44px touch target (Apple HIG
-// 44x44pt / Material 48dp) — the map is the product's most-tapped
-// surface and its tags were ~24px tall.
+// border and a check. The pill is 36px tall (second fix round,
+// Nov 25, 2026 — was 44px): a 3-pill stack at 44px needed 46px
+// steps and topped out 154px above its pin, so the stack read as
+// labels for the next country north. At 36px the stack is 40px
+// steps topping out at 136px, and the pill is still ~110px wide,
+// so the tap area stays large.
 const LEG_COLOR: Record<TripLeg['kind'], string> = {
   flight: '#111',
   transport: '#111',
@@ -69,8 +72,11 @@ const LEG_COLOR: Record<TripLeg['kind'], string> = {
 };
 
 // anchorY is the per-leg stack offset from priceTagAnchorY (legs sharing
-// a city stack upward, 46px apart, so none overlap each other or the
-// city marker). iconAnchor [40, anchorY] puts the pill above its city.
+// a city stack upward, 40px apart, so none overlap each other or the
+// city marker). iconAnchor [TAG_ANCHOR_X, anchorY] centers the pill
+// horizontally on its pin and puts it above the city (second fix
+// round, Nov 25, 2026 — was a fixed 40px left, which put the pin a
+// third of the way across the pill and the stack leaning off its city).
 // animate is mount-only (interface round M5): the tag enters with a
 // 200ms scale-from-0.9 + fade, delayed by its stagger; tags that already
 // existed get animate=false and never re-animate on later renders.
@@ -82,9 +88,9 @@ function priceTagIcon(leg: TripLeg, selected: boolean, added: boolean, anchorY: 
   const entrance = animate ? `animation:tag-in 200ms var(--ease) both;animation-delay:${delayMs}ms;` : '';
   return L.divIcon({
     className: 'fujin-price-tag',
-    html: `<div style="background:#fff;color:#111;border:${width}px solid ${border};border-radius:22px;padding:10px 14px;min-height:44px;display:flex;align-items:center;font-weight:700;font-size:13px;line-height:1.2;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer;${entrance}">${check}${leg.icon} $${leg.price.toLocaleString()}</div>`,
+    html: `<div style="background:#fff;color:#111;border:${width}px solid ${border};border-radius:22px;padding:7px 10px;min-height:36px;display:flex;align-items:center;font-weight:700;font-size:13px;line-height:1.2;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);cursor:pointer;${entrance}">${check}${leg.icon} $${leg.price.toLocaleString()}</div>`,
     iconSize: [0, 0],
-    iconAnchor: [40, anchorY],
+    iconAnchor: [TAG_ANCHOR_X, anchorY],
   });
 }
 

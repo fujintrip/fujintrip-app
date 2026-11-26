@@ -1132,9 +1132,16 @@ export function Chat({ onParsed, onSaveTrip, onWatchPrices, bookedDestinations, 
                 {!slotsFilled && missingSlots.length > 0 && <p className="summary-missing">Still need: {missingSlots.join(', ')}.</p>}
               </div>
 
-              {/* Confirm before building — the slots are filled, so the
-                  traveler checks the summary once, then builds. */}
-              {slotsFilled && !plan && !confirmDismissed && (
+              {/* Confirm before building — shown once a destination is
+                  known (second fix round, Nov 25, 2026): the earlier
+                  gate required every slot filled, so the card never
+                  rendered while the chat was still asking for the
+                  departure city and length, and the traveler never
+                  got the confirm step. Building from here uses the
+                  same defaults the summary shows (14 days when no
+                  length was given), so the built plan can never
+                  disagree with its own summary. */}
+              {lastParsed?.destination && !plan && !confirmDismissed && (
                 <div className="canvas-card confirm-card no-print">
                   <h3>Does this look right?</h3>
                   <p>
